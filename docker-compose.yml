@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: orderbook-influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword123
+      - DOCKER_INFLUXDB_INIT_ORG=bitpulse
+      - DOCKER_INFLUXDB_INIT_BUCKET=orderbook
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=your-super-secret-auth-token
+    networks:
+      - orderbook-network
+    restart: unless-stopped
+
+  orderbook-collector:
+    build: .
+    container_name: orderbook-collector
+    depends_on:
+      - influxdb
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=your-super-secret-auth-token
+      - INFLUXDB_ORG=bitpulse
+      - INFLUXDB_BUCKET=orderbook
+    networks:
+      - orderbook-network
+    restart: unless-stopped
+
+networks:
+  orderbook-network:
+    driver: bridge
+
+volumes:
+  influxdb-data:
+  influxdb-config:
