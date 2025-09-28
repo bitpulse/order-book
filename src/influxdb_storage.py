@@ -129,8 +129,6 @@ class InfluxDBStorage:
                 .tag("symbol", whale.symbol)
                 .tag("exchange", whale.exchange)
                 .tag("side", whale.side)
-                .tag("order_type", whale.order_type)
-                .tag("whale_category", whale.whale_category)
                 .field("price", float(whale.price))
                 .field("volume", float(whale.volume))
                 .field("value_usdt", float(whale.value_usdt))
@@ -143,7 +141,7 @@ class InfluxDBStorage:
 
             # Log whale detection for monitoring
             logger.warning(
-                f"🐋 Whale {whale.whale_category.upper()} {whale.side.upper()} order detected: "
+                f"🐋 Whale {whale.side.upper()} order detected: "
                 f"{whale.symbol} @ ${whale.price:,.2f} - "
                 f"Volume: {whale.volume:,.4f} - "
                 f"Value: ${whale.value_usdt:,.0f}"

@@ -98,8 +98,6 @@ class WhaleOrder:
     level: int
     distance_from_mid: float
     distance_from_mid_abs: float
-    whale_category: str  # "large", "huge", "mega"
-    order_type: str  # "new", "increased", "decreased", "removed"
     timestamp: int
 
 
@@ -108,7 +106,6 @@ class OrderBookProcessor:
 
     def __init__(self, whale_thresholds_func):
         self.whale_thresholds_func = whale_thresholds_func
-        self.previous_snapshots: Dict[str, OrderBookSnapshot] = {}
         self.depth_percentages = [0.1, 0.5, 1.0, 2.0, 5.0]
 
     def parse_message(self, message: Dict, symbol: str = None) -> Optional[OrderBookSnapshot]:
@@ -218,13 +215,15 @@ class OrderBookProcessor:
         thresholds = self.whale_thresholds_func(snapshot.symbol)
         mid_price = snapshot.mid_price
 
+        # Use only the "large" threshold as minimum for whale detection
+        whale_min_value = thresholds.get("large", 50000)
+
         if mid_price == 0:
             return whales
 
         # Check bid side
         for level_idx, level in enumerate(snapshot.bids, 1):
-            whale_category = self._categorize_whale(level.total_value, thresholds)
-            if whale_category:
+            if level.total_value >= whale_min_value:
                 whales.append(WhaleOrder(
                     symbol=snapshot.symbol,
                     exchange=snapshot.exchange,
@@ -235,15 +234,12 @@ class OrderBookProcessor:
                     level=level_idx,
                     distance_from_mid=abs((level.price - mid_price) / mid_price * 100),
                     distance_from_mid_abs=abs(level.price - mid_price),
-                    whale_category=whale_category,
-                    order_type=self._determine_order_type(snapshot.symbol, "bid", level),
                     timestamp=snapshot.timestamp
                 ))
 
         # Check ask side
         for level_idx, level in enumerate(snapshot.asks, 1):
-            whale_category = self._categorize_whale(level.total_value, thresholds)
-            if whale_category:
+            if level.total_value >= whale_min_value:
                 whales.append(WhaleOrder(
                     symbol=snapshot.symbol,
                     exchange=snapshot.exchange,
@@ -254,8 +250,6 @@ class OrderBookProcessor:
                     level=level_idx,
                     distance_from_mid=abs((level.price - mid_price) / mid_price * 100),
                     distance_from_mid_abs=abs(level.price - mid_price),
-                    whale_category=whale_category,
-                    order_type=self._determine_order_type(snapshot.symbol, "ask", level),
                     timestamp=snapshot.timestamp
                 ))
 
@@ -264,26 +258,6 @@ class OrderBookProcessor:
 
         return whales
 
-    def _categorize_whale(self, value_usdt: float, thresholds: Dict[str, float]) -> Optional[str]:
-        """Categorize whale order based on value"""
-        if value_usdt >= thresholds["mega"]:
-            return "mega"
-        elif value_usdt >= thresholds["huge"]:
-            return "huge"
-        elif value_usdt >= thresholds["large"]:
-            return "large"
-        return None
-
-    def _determine_order_type(self, symbol: str, side: str, level: OrderLevel) -> str:
-        """Determine if order is new, increased, decreased, or removed"""
-        # For simplicity, marking all as "new" for now
-        # In production, you'd compare with previous snapshot
-        if symbol in self.previous_snapshots:
-            prev_snapshot = self.previous_snapshots[symbol]
-            # Add logic to compare with previous levels
-            # This would require tracking individual price levels
-            pass
-        return "new"
 
     def process(self, message: Dict) -> Tuple[
         Optional[OrderBookSnapshot],
@@ -302,8 +276,5 @@ class OrderBookProcessor:
 
         # Detect whale orders
         whales = self.detect_whale_orders(snapshot)
-
-        # Store snapshot for comparison
-        self.previous_snapshots[snapshot.symbol] = snapshot
 
         return snapshot, depths, whales
