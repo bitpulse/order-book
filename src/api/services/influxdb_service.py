@@ -97,6 +97,96 @@ class InfluxDBService:
             **stats
         }
 
+    async def get_recent_whales(
+        self,
+        symbol: Optional[str] = None,
+        limit: int = 100,
+        min_value: float = 50000
+    ) -> List[Dict[str, Any]]:
+        """Get recent whale orders"""
+        try:
+            query_filter = f'''
+              |> filter(fn: (r) => r._measurement == "whale_orders")'''
+
+            if symbol:
+                query_filter += f'''
+              |> filter(fn: (r) => r.symbol == "{symbol}")'''
+
+            query_filter += f'''
+              |> filter(fn: (r) => r._field == "value_usdt")
+              |> filter(fn: (r) => r._value >= {min_value})'''
+
+            query = f'''
+            from(bucket: "{self.bucket}")
+              |> range(start: -1h){query_filter}
+              |> sort(columns: ["_time"], desc: true)
+              |> limit(n: {limit})
+            '''
+
+            tables = self.query_api.query(query, org=self.org)
+
+            whales = []
+            processed_times = set()  # Track processed timestamps to avoid duplicates
+
+            for table in tables:
+                for record in table.records:
+                    timestamp = record.values.get('_time')
+                    if not timestamp:
+                        continue
+
+                    # Create unique key to avoid duplicates
+                    key = f"{record.values.get('symbol')}_{record.values.get('side')}_{timestamp}"
+                    if key in processed_times:
+                        continue
+                    processed_times.add(key)
+
+                    # Get all tags and fields for this whale order
+                    whale_data = {
+                        "symbol": record.values.get('symbol', 'UNKNOWN'),
+                        "side": record.values.get('side', 'unknown'),
+                        "timestamp": timestamp.isoformat(),
+                        "value_usdt": float(record.values.get('_value', 0)),
+                        "price": 0.0,
+                        "volume": 0.0,
+                        "distance_from_mid": 0.0,
+                        "level": 0
+                    }
+
+                    # Try to get additional fields
+                    try:
+                        detail_query = f'''
+                        from(bucket: "{self.bucket}")
+                          |> range(start: -1h)
+                          |> filter(fn: (r) => r._measurement == "whale_orders")
+                          |> filter(fn: (r) => r.symbol == "{whale_data['symbol']}")
+                          |> filter(fn: (r) => r.side == "{whale_data['side']}")
+                          |> filter(fn: (r) => r._time == {timestamp.timestamp()}s)
+                        '''
+
+                        detail_tables = self.query_api.query(detail_query, org=self.org)
+                        for dt in detail_tables:
+                            for dr in dt.records:
+                                field = dr.values.get('_field')
+                                if field == 'price':
+                                    whale_data['price'] = float(dr.values.get('_value', 0))
+                                elif field == 'volume':
+                                    whale_data['volume'] = float(dr.values.get('_value', 0))
+                                elif field == 'distance_from_mid':
+                                    whale_data['distance_from_mid'] = float(dr.values.get('_value', 0))
+                                elif field == 'level':
+                                    whale_data['level'] = int(dr.values.get('_value', 0))
+                    except Exception:
+                        pass  # Use defaults if detail query fails
+
+                    whales.append(whale_data)
+
+            return whales
+
+        except Exception as e:
+            logger.error(f"Error getting recent whales: {e}")
+            # Return empty list on error
+            return []
+
     async def get_spread_history(
         self,
         symbol: str,

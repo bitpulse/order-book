@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from collections import deque
 import httpx
+import csv
+from pathlib import Path
 
 from rich.console import Console
 from rich.layout import Layout
@@ -80,7 +82,7 @@ class OrderBookAPI:
 class OrderBookUI:
     """Terminal UI for order book visualization"""
 
-    def __init__(self, api_url: str, symbols: List[str], refresh_rate: float = 1.0):
+    def __init__(self, api_url: str, symbols: List[str], refresh_rate: float = 1.0, save_csv: bool = False):
         self.api = OrderBookAPI(api_url)
         self.symbols = symbols
         self.current_symbol_idx = 0
@@ -89,6 +91,7 @@ class OrderBookUI:
         self.running = True
         self.show_whales = True
         self.show_depth = True
+        self.save_csv = save_csv
 
         # Data storage
         self.orderbook_data = {}
@@ -96,6 +99,70 @@ class OrderBookUI:
         self.whale_data = deque(maxlen=20)
         self.depth_data = {}
         self.last_update = datetime.now()
+
+        # CSV logging setup
+        self.csv_file = None
+        self.csv_writer = None
+        if self.save_csv:
+            self.setup_csv_logging()
+
+    def setup_csv_logging(self):
+        """Setup CSV file for logging whale trades"""
+        # Create logs directory if it doesn't exist
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+
+        # Create CSV filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_path = logs_dir / f"whale_trades_{timestamp}.csv"
+
+        # Open CSV file and create writer
+        self.csv_file = open(csv_path, 'w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+
+        # Write header
+        self.csv_writer.writerow([
+            'timestamp', 'symbol', 'side', 'price', 'volume',
+            'value_usdt', 'distance_from_mid', 'level',
+            'best_bid', 'best_ask', 'mid_price', 'spread', 'spread_pct'
+        ])
+        self.csv_file.flush()
+
+        self.console.print(f"[green]CSV logging enabled: {csv_path}[/green]")
+
+    def log_whale_to_csv(self, whale: Dict, stats: Dict):
+        """Log a whale order to CSV file"""
+        if not self.csv_writer:
+            return
+
+        try:
+            # Extract stats for context
+            best_bid = stats.get('best_bid', 0)
+            best_ask = stats.get('best_ask', 0)
+            mid_price = stats.get('mid_price', 0)
+            spread = stats.get('spread', 0)
+            spread_pct = stats.get('spread_percentage', 0)
+
+            # Write whale data row
+            self.csv_writer.writerow([
+                whale.get('timestamp', ''),
+                whale.get('symbol', ''),
+                whale.get('side', ''),
+                whale.get('price', 0),
+                whale.get('volume', 0),
+                whale.get('value_usdt', 0),
+                whale.get('distance_from_mid', 0),
+                whale.get('level', 0),
+                best_bid,
+                best_ask,
+                mid_price,
+                spread,
+                spread_pct
+            ])
+            self.csv_file.flush()  # Ensure data is written immediately
+        except Exception as e:
+            # Silent fail to not disrupt UI
+            pass
 
     @property
     def current_symbol(self) -> str:
@@ -415,6 +482,10 @@ class OrderBookUI:
             for whale in results[2]:
                 if whale not in self.whale_data:
                     self.whale_data.append(whale)
+                    # Log to CSV if enabled
+                    if self.save_csv:
+                        current_stats = self.stats_data.get(symbol, {})
+                        self.log_whale_to_csv(whale, current_stats)
 
         if not isinstance(results[3], Exception):
             self.depth_data[symbol] = results[3]
@@ -494,6 +565,10 @@ class OrderBookUI:
 
         finally:
             await self.api.close()
+            # Close CSV file if open
+            if self.csv_file:
+                self.csv_file.close()
+                self.console.print("[green]CSV file saved to logs/[/green]")
             self.console.clear()
             self.console.print("[bold green]Goodbye![/bold green]")
 
@@ -515,8 +590,16 @@ class OrderBookUI:
     type=float,
     help='Refresh rate in seconds'
 )
-def main(api_url: str, symbols: str, refresh_rate: float):
-    """Real-time Order Book Terminal UI"""
+@click.option(
+    '--save-csv',
+    is_flag=True,
+    help='Save whale trades to CSV file for later analysis'
+)
+def main(api_url: str, symbols: str, refresh_rate: float, save_csv: bool):
+    """Real-time Order Book Terminal UI
+
+    Displays live order book data with optional CSV logging of whale trades.
+    """
 
     # Parse symbols
     symbol_list = [s.strip() for s in symbols.split(',') if s.strip()]
@@ -526,7 +609,7 @@ def main(api_url: str, symbols: str, refresh_rate: float):
         sys.exit(1)
 
     # Create and run UI
-    ui = OrderBookUI(api_url, symbol_list, refresh_rate)
+    ui = OrderBookUI(api_url, symbol_list, refresh_rate, save_csv)
 
     try:
         asyncio.run(ui.run())

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import time
 from loguru import logger
 
-from .routes import orderbook, whales
+from .routes import orderbook, whales, spoofing
 from .models.responses import HealthResponse, ErrorResponse
 from .services.influxdb_service import InfluxDBService
 
@@ -47,6 +47,7 @@ app.add_middleware(
 # Include routers
 app.include_router(orderbook.router, prefix="/api/v1")
 app.include_router(whales.router, prefix="/api/v1")
+app.include_router(spoofing.router, prefix="/api/v1")
 
 
 @app.get("/", tags=["Root"])
