@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 class OrderBookHistory:
     """Order book history tracker with scrolling display"""
 
-    def __init__(self, symbol: str, limit: int = 10, min_volume: float = 0):
+    def __init__(self, symbol: str, limit: int = 10, min_volume: float = 0, min_usd: float = 0):
         """
         Initialize order history tracker
 
@@ -47,11 +47,13 @@ class OrderBookHistory:
             symbol: Trading pair symbol
             limit: Order book depth to monitor
             min_volume: Minimum volume to display (filter noise)
+            min_usd: Minimum USD value to display (filter noise)
         """
         self.ws_url = "wss://contract.mexc.com/edge"
         self.symbol = symbol.upper()
         self.limit = limit if limit in [5, 10, 20] else 10
         self.min_volume = min_volume
+        self.min_usd = min_usd
         self.ws = None
         self.running = False
 
@@ -91,11 +93,10 @@ class OrderBookHistory:
     async def _subscribe(self, ws):
         """Subscribe to order book"""
         subscription = {
-            "method": "sub.depth",
+            "method": "sub.depth.full",
             "param": {
                 "symbol": self.symbol,
-                "limit": self.limit,
-                "compress": False
+                "limit": self.limit
             }
         }
         await ws.send(json.dumps(subscription))
@@ -113,19 +114,19 @@ class OrderBookHistory:
     def _format_volume(self, volume: float) -> str:
         """Format volume with abbreviations"""
         if volume >= 1_000_000:
-            return f"{volume/1_000_000:.2f}M"
+            return f"{volume/1_000_000:.1f}m"
         elif volume >= 1_000:
-            return f"{volume/1_000:.2f}K"
+            return f"{volume/1_000:.1f}k"
         else:
-            return f"{volume:.2f}"
+            return f"{volume:.1f}"
 
     def _format_usd_value(self, price: float, volume: float) -> str:
         """Format USD value"""
         value = price * volume
         if value >= 1_000_000:
-            return f"${value/1_000_000:.2f}M"
+            return f"${value/1_000_000:.1f}m"
         elif value >= 1_000:
-            return f"${value/1_000:.0f}"
+            return f"${value/1_000:.1f}k"
         else:
             return f"${value:.0f}"
 
@@ -138,29 +139,37 @@ class OrderBookHistory:
               f"{GREEN}New Bids: {self.stats['new_bids']}{RESET} | "
               f"{RED}New Asks: {self.stats['new_asks']}{RESET}")
         print(f"{CYAN}{'='*80}{RESET}")
-        print(f"{DIM}{'Time':<12} {'Type':<12} {'Price':<12} {'Volume':<12} {'Value':<12} {'Info'}{RESET}")
-        print(f"{DIM}{'-'*80}{RESET}")
+        print(f"{DIM}{'Time':<12} {'Type':<12} {'Price':<12} {'Volume':<12} {'Value':<12} {'Distance':<10} {'Info'}{RESET}")
+        print(f"{DIM}{'-'*90}{RESET}")
 
     def _process_orderbook(self, data: Dict):
         """Process order book and detect new orders"""
-        timestamp = data.get('timestamp', time.time() * 1000)
+        timestamp = data.get('ts', time.time() * 1000)
         dt = datetime.fromtimestamp(timestamp / 1000)
         time_str = dt.strftime('%H:%M:%S.%f')[:-3]
 
         # Parse current order book
+        # MEXC format: [price, volume, order_count]
         bids = data.get('bids', [])
         asks = data.get('asks', [])
 
-        current_bids = {float(bid[0]): float(bid[1]) for bid in bids}
-        current_asks = {float(ask[0]): float(ask[1]) for ask in asks}
+        current_bids = {float(bid[0]): float(bid[1]) for bid in bids if len(bid) >= 3}
+        current_asks = {float(ask[0]): float(ask[1]) for ask in asks if len(ask) >= 3}
 
         # Track best bid/ask
         best_bid = max(current_bids.keys()) if current_bids else 0
         best_ask = min(current_asks.keys()) if current_asks else 0
 
+        # Calculate mid-price
+        mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0
+
         # Detect new bids
         for price, volume in current_bids.items():
             if volume < self.min_volume:
+                continue
+
+            usd_value = price * volume
+            if usd_value < self.min_usd:
                 continue
 
             if price not in self.previous_bids:
@@ -168,15 +177,22 @@ class OrderBookHistory:
                 self.stats['new_bids'] += 1
                 self.stats['total_bid_volume'] += volume
 
-                # Determine if it's near best price
-                distance = abs(price - best_bid) / best_bid * 100 if best_bid else 0
-                position = "BEST" if price == best_bid else f"{distance:.2f}% below" if distance < 1 else ""
+                # Calculate distance from mid-price
+                if mid_price > 0:
+                    distance_from_mid = ((mid_price - price) / mid_price) * 100
+                    distance_str = f"{distance_from_mid:+.3f}%"
+                else:
+                    distance_str = "N/A"
+
+                # Determine position relative to best bid
+                position = "BEST" if price == best_bid else ""
 
                 print(f"{time_str:<12} "
                       f"{GREEN}{'NEW BID':<12}{RESET} "
                       f"{GREEN}{self._format_price(price):<12}{RESET} "
                       f"{self._format_volume(volume):<12} "
                       f"{self._format_usd_value(price, volume):<12} "
+                      f"{CYAN}{distance_str:<10}{RESET} "
                       f"{DIM}{position}{RESET}")
 
                 self.history.append({
@@ -190,11 +206,19 @@ class OrderBookHistory:
                 # Bid volume increased significantly
                 increase = volume - self.previous_bids[price]
                 if increase >= self.min_volume:
+                    # Calculate distance from mid-price
+                    if mid_price > 0:
+                        distance_from_mid = ((mid_price - price) / mid_price) * 100
+                        distance_str = f"{distance_from_mid:+.3f}%"
+                    else:
+                        distance_str = "N/A"
+
                     print(f"{time_str:<12} "
                           f"{GREEN}{'BID ↑':<12}{RESET} "
                           f"{self._format_price(price):<12} "
                           f"+{self._format_volume(increase):<11} "
                           f"{self._format_usd_value(price, increase):<12} "
+                          f"{CYAN}{distance_str:<10}{RESET} "
                           f"{DIM}(total: {self._format_volume(volume)}){RESET}")
 
         # Detect removed bids
@@ -212,20 +236,31 @@ class OrderBookHistory:
             if volume < self.min_volume:
                 continue
 
+            usd_value = price * volume
+            if usd_value < self.min_usd:
+                continue
+
             if price not in self.previous_asks:
                 # New ask appeared
                 self.stats['new_asks'] += 1
                 self.stats['total_ask_volume'] += volume
 
-                # Determine if it's near best price
-                distance = abs(price - best_ask) / best_ask * 100 if best_ask else 0
-                position = "BEST" if price == best_ask else f"{distance:.2f}% above" if distance < 1 else ""
+                # Calculate distance from mid-price
+                if mid_price > 0:
+                    distance_from_mid = ((price - mid_price) / mid_price) * 100
+                    distance_str = f"{distance_from_mid:+.3f}%"
+                else:
+                    distance_str = "N/A"
+
+                # Determine position relative to best ask
+                position = "BEST" if price == best_ask else ""
 
                 print(f"{time_str:<12} "
                       f"{RED}{'NEW ASK':<12}{RESET} "
                       f"{RED}{self._format_price(price):<12}{RESET} "
                       f"{self._format_volume(volume):<12} "
                       f"{self._format_usd_value(price, volume):<12} "
+                      f"{CYAN}{distance_str:<10}{RESET} "
                       f"{DIM}{position}{RESET}")
 
                 self.history.append({
@@ -239,11 +274,19 @@ class OrderBookHistory:
                 # Ask volume increased significantly
                 increase = volume - self.previous_asks[price]
                 if increase >= self.min_volume:
+                    # Calculate distance from mid-price
+                    if mid_price > 0:
+                        distance_from_mid = ((price - mid_price) / mid_price) * 100
+                        distance_str = f"{distance_from_mid:+.3f}%"
+                    else:
+                        distance_str = "N/A"
+
                     print(f"{time_str:<12} "
                           f"{RED}{'ASK ↑':<12}{RESET} "
                           f"{self._format_price(price):<12} "
                           f"+{self._format_volume(increase):<11} "
                           f"{self._format_usd_value(price, increase):<12} "
+                          f"{CYAN}{distance_str:<10}{RESET} "
                           f"{DIM}(total: {self._format_volume(volume)}){RESET}")
 
         # Detect removed asks
@@ -321,11 +364,13 @@ class OrderBookHistory:
                         try:
                             data = json.loads(message)
 
-                            if data.get('channel') == 'push.depth':
+                            if data.get('channel') == 'push.depth.full':
                                 self._process_orderbook(data.get('data', {}))
                             elif 'code' in data:
                                 if data['code'] != 0:
                                     logger.error(f"Error: {data.get('msg', '')}")
+                                else:
+                                    logger.info(f"Success: {data.get('msg', 'Subscribed')}")
 
                         except json.JSONDecodeError:
                             logger.error("Failed to parse message")
@@ -404,7 +449,8 @@ async def main():
     tracker = OrderBookHistory(
         args.symbol,
         args.limit,
-        min_volume=args.min_volume
+        min_volume=args.min_volume,
+        min_usd=args.min_usd
     )
 
     # Handle shutdown
