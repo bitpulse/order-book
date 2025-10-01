@@ -77,6 +77,11 @@ class OrderBookHistory:
         self.last_best_ask = 0
         self.session_start = time.time()
 
+        # CSV logging
+        self.csv_filename = f"logs/orderbook_{self.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        self.csv_file = None
+        self.csv_writer = None
+
     async def _send_ping(self, ws):
         """Keep connection alive"""
         while self.running:
@@ -137,7 +142,7 @@ class OrderBookHistory:
               f"{GREEN}New Bids: {self.stats['new_bids']}{RESET} | "
               f"{RED}New Asks: {self.stats['new_asks']}{RESET}")
         print(f"{CYAN}{'='*80}{RESET}")
-        print(f"{DIM}{'Time':<12} {'Type':<12} {'Price':<12} {'Volume':<12} {'Value':<12} {'Distance':<10} {'Info'}{RESET}")
+        print(f"{DIM}{'Time':<12} {'Type':<12} {'Price':<12} {'Volume':<12} {'Value':<12} {'Distance':<10} {'Total'}{RESET}")
         print(f"{DIM}{'-'*90}{RESET}")
 
     def _process_orderbook(self, data: Dict):
@@ -171,7 +176,7 @@ class OrderBookHistory:
                 continue
 
             if price not in self.previous_bids:
-                # New bid appeared
+                # New bid level appeared
                 self.stats['new_bids'] += 1
                 self.stats['total_bid_volume'] += volume
 
@@ -186,19 +191,24 @@ class OrderBookHistory:
                 position = "BEST" if price == best_bid else ""
 
                 print(f"{time_str:<12} "
-                      f"{GREEN}{'NEW BID':<12}{RESET} "
+                      f"{GREEN}{'BID':<12}{RESET} "
                       f"{GREEN}{self._format_price(price):<12}{RESET} "
                       f"{self._format_volume(volume):<12} "
                       f"{self._format_usd_value(price, volume):<12} "
                       f"{CYAN}{distance_str:<10}{RESET} "
-                      f"{DIM}{position}{RESET}")
+                      f"{DIM}{self._format_volume(volume)}{RESET}")
 
-            elif self.previous_bids[price] < volume:
-                # Bid volume increased significantly
-                increase = volume - self.previous_bids[price]
-                if increase >= self.min_volume:
-                    increase_usd = price * increase
-                    if increase_usd >= self.min_usd:
+                # Log to CSV
+                distance_pct = distance_from_mid if mid_price > 0 else 0
+                self._log_to_csv('new', 'bid', price, volume, usd_value,
+                                distance_pct, best_bid, best_ask, f"total:{volume}")
+
+            elif self.previous_bids[price] != volume:
+                # Bid volume changed
+                change = volume - self.previous_bids[price]
+                if abs(change) >= self.min_volume:
+                    change_usd = price * abs(change)
+                    if change_usd >= self.min_usd:
                         # Calculate distance from mid-price
                         if mid_price > 0:
                             distance_from_mid = ((mid_price - price) / mid_price) * 100
@@ -206,25 +216,34 @@ class OrderBookHistory:
                         else:
                             distance_str = "N/A"
 
-                        print(f"{time_str:<12} "
-                              f"{GREEN}{'BID ↑':<12}{RESET} "
-                              f"{self._format_price(price):<12} "
-                              f"+{self._format_volume(increase):<11} "
-                              f"{self._format_usd_value(price, increase):<12} "
-                              f"{CYAN}{distance_str:<10}{RESET} "
-                              f"{DIM}(total: {self._format_volume(volume)}){RESET}")
+                        if change > 0:
+                            # Volume increased
+                            print(f"{time_str:<12} "
+                                  f"{GREEN}{'BID ↑':<12}{RESET} "
+                                  f"{self._format_price(price):<12} "
+                                  f"+{self._format_volume(change):<11} "
+                                  f"{self._format_usd_value(price, change):<12} "
+                                  f"{CYAN}{distance_str:<10}{RESET} "
+                                  f"{DIM}{self._format_volume(volume)}{RESET}")
 
-        # Detect removed bids
-        for price, volume in self.previous_bids.items():
-            if price not in current_bids and volume >= self.min_volume:
-                usd_value = price * volume
-                if usd_value >= self.min_usd:
-                    self.stats['removed_bids'] += 1
-                    print(f"{time_str:<12} "
-                          f"{DIM}{'BID REMOVED':<12}{RESET} "
-                          f"{DIM}{self._format_price(price):<12}{RESET} "
-                          f"{DIM}-{self._format_volume(volume):<11}{RESET} "
-                          f"{DIM}{self._format_usd_value(price, volume):<12}{RESET}")
+                            # Log to CSV
+                            distance_pct = distance_from_mid if mid_price > 0 else 0
+                            self._log_to_csv('increase', 'bid', price, change, change_usd,
+                                            distance_pct, best_bid, best_ask, f"total:{volume}")
+                        else:
+                            # Volume decreased
+                            print(f"{time_str:<12} "
+                                  f"{DIM}{'BID ↓':<12}{RESET} "
+                                  f"{DIM}{self._format_price(price):<12}{RESET} "
+                                  f"{DIM}{self._format_volume(change):<11}{RESET} "
+                                  f"{DIM}{self._format_usd_value(price, abs(change)):<12}{RESET} "
+                                  f"{DIM}{distance_str:<10}{RESET} "
+                                  f"{DIM}{self._format_volume(volume)}{RESET}")
+
+                            # Log to CSV
+                            distance_pct = distance_from_mid if mid_price > 0 else 0
+                            self._log_to_csv('decrease', 'bid', price, abs(change), change_usd,
+                                            distance_pct, best_bid, best_ask, f"total:{volume}")
 
         # Detect new asks
         for price, volume in current_asks.items():
@@ -236,7 +255,7 @@ class OrderBookHistory:
                 continue
 
             if price not in self.previous_asks:
-                # New ask appeared
+                # New ask level appeared
                 self.stats['new_asks'] += 1
                 self.stats['total_ask_volume'] += volume
 
@@ -251,19 +270,24 @@ class OrderBookHistory:
                 position = "BEST" if price == best_ask else ""
 
                 print(f"{time_str:<12} "
-                      f"{RED}{'NEW ASK':<12}{RESET} "
+                      f"{RED}{'ASK':<12}{RESET} "
                       f"{RED}{self._format_price(price):<12}{RESET} "
                       f"{self._format_volume(volume):<12} "
                       f"{self._format_usd_value(price, volume):<12} "
                       f"{CYAN}{distance_str:<10}{RESET} "
-                      f"{DIM}{position}{RESET}")
+                      f"{DIM}{self._format_volume(volume)}{RESET}")
 
-            elif self.previous_asks[price] < volume:
-                # Ask volume increased significantly
-                increase = volume - self.previous_asks[price]
-                if increase >= self.min_volume:
-                    increase_usd = price * increase
-                    if increase_usd >= self.min_usd:
+                # Log to CSV
+                distance_pct = distance_from_mid if mid_price > 0 else 0
+                self._log_to_csv('new', 'ask', price, volume, usd_value,
+                                distance_pct, best_bid, best_ask, f"total:{volume}")
+
+            elif self.previous_asks[price] != volume:
+                # Ask volume changed
+                change = volume - self.previous_asks[price]
+                if abs(change) >= self.min_volume:
+                    change_usd = price * abs(change)
+                    if change_usd >= self.min_usd:
                         # Calculate distance from mid-price
                         if mid_price > 0:
                             distance_from_mid = ((price - mid_price) / mid_price) * 100
@@ -271,43 +295,34 @@ class OrderBookHistory:
                         else:
                             distance_str = "N/A"
 
-                        print(f"{time_str:<12} "
-                              f"{RED}{'ASK ↑':<12}{RESET} "
-                              f"{self._format_price(price):<12} "
-                              f"+{self._format_volume(increase):<11} "
-                              f"{self._format_usd_value(price, increase):<12} "
-                              f"{CYAN}{distance_str:<10}{RESET} "
-                              f"{DIM}(total: {self._format_volume(volume)}){RESET}")
+                        if change > 0:
+                            # Volume increased
+                            print(f"{time_str:<12} "
+                                  f"{RED}{'ASK ↑':<12}{RESET} "
+                                  f"{self._format_price(price):<12} "
+                                  f"+{self._format_volume(change):<11} "
+                                  f"{self._format_usd_value(price, change):<12} "
+                                  f"{CYAN}{distance_str:<10}{RESET} "
+                                  f"{DIM}{self._format_volume(volume)}{RESET}")
 
-        # Detect removed asks
-        for price, volume in self.previous_asks.items():
-            if price not in current_asks and volume >= self.min_volume:
-                usd_value = price * volume
-                if usd_value >= self.min_usd:
-                    self.stats['removed_asks'] += 1
-                    print(f"{time_str:<12} "
-                          f"{DIM}{'ASK REMOVED':<12}{RESET} "
-                          f"{DIM}{self._format_price(price):<12}{RESET} "
-                          f"{DIM}-{self._format_volume(volume):<11}{RESET} "
-                          f"{DIM}{self._format_usd_value(price, volume):<12}{RESET}")
+                            # Log to CSV
+                            distance_pct = distance_from_mid if mid_price > 0 else 0
+                            self._log_to_csv('increase', 'ask', price, change, change_usd,
+                                            distance_pct, best_bid, best_ask, f"total:{volume}")
+                        else:
+                            # Volume decreased
+                            print(f"{time_str:<12} "
+                                  f"{DIM}{'ASK ↓':<12}{RESET} "
+                                  f"{DIM}{self._format_price(price):<12}{RESET} "
+                                  f"{DIM}{self._format_volume(change):<11}{RESET} "
+                                  f"{DIM}{self._format_usd_value(price, abs(change)):<12}{RESET} "
+                                  f"{DIM}{distance_str:<10}{RESET} "
+                                  f"{DIM}{self._format_volume(volume)}{RESET}")
 
-        # Check for spread changes
-        if best_bid != self.last_best_bid or best_ask != self.last_best_ask:
-            if best_bid and best_ask:
-                spread = best_ask - best_bid
-                spread_pct = (spread / best_ask) * 100
-
-                # Only show significant spread changes
-                if self.last_best_bid and self.last_best_ask:
-                    old_spread = self.last_best_ask - self.last_best_bid
-                    spread_change = spread - old_spread
-                    if abs(spread_change) > 0.00001:
-                        color = GREEN if spread_change < 0 else RED if spread_change > 0 else WHITE
-                        print(f"{time_str:<12} "
-                              f"{YELLOW}{'SPREAD':<12}{RESET} "
-                              f"{self._format_price(spread):<12} "
-                              f"{spread_pct:.3f}%".ljust(12) + " "
-                              f"{color}{'↓' if spread_change < 0 else '↑'} {abs(spread_change):.6f}{RESET}")
+                            # Log to CSV
+                            distance_pct = distance_from_mid if mid_price > 0 else 0
+                            self._log_to_csv('decrease', 'ask', price, abs(change), change_usd,
+                                            distance_pct, best_bid, best_ask, f"total:{volume}")
 
         # Update state
         self.previous_bids = current_bids.copy()
@@ -331,9 +346,44 @@ class OrderBookHistory:
         print(f"  Removed: {self.stats['removed_bids']} bids, {self.stats['removed_asks']} asks")
         print(f"{CYAN}{'─'*80}{RESET}\n")
 
+    def _init_csv(self):
+        """Initialize CSV file for logging"""
+        import os
+        os.makedirs('logs', exist_ok=True)
+        self.csv_file = open(self.csv_filename, 'w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+        # Write header
+        self.csv_writer.writerow([
+            'timestamp', 'type', 'side', 'price', 'volume', 'usd_value',
+            'distance_from_mid_pct', 'best_bid', 'best_ask', 'spread', 'info'
+        ])
+        self.csv_file.flush()
+
+    def _log_to_csv(self, event_type: str, side: str, price: float, volume: float,
+                    usd_value: float, distance_pct: float, best_bid: float,
+                    best_ask: float, info: str = ""):
+        """Log event to CSV"""
+        if self.csv_writer:
+            spread = best_ask - best_bid if (best_bid and best_ask) else 0
+            self.csv_writer.writerow([
+                datetime.now().isoformat(),
+                event_type,
+                side,
+                price,
+                volume,
+                usd_value,
+                distance_pct,
+                best_bid,
+                best_ask,
+                spread,
+                info
+            ])
+            self.csv_file.flush()
+
     async def connect(self):
         """Connect and start tracking"""
         self.running = True
+        self._init_csv()
         self._print_header()
 
         while self.running:
@@ -386,6 +436,10 @@ class OrderBookHistory:
         if self.ws:
             await self.ws.close()
 
+        # Close CSV file
+        if self.csv_file:
+            self.csv_file.close()
+
         runtime = time.time() - self.session_start
         print(f"\n{BOLD}{CYAN}{'='*80}{RESET}")
         print(f"{BOLD}{WHITE}Final Statistics - Runtime: {runtime:.0f}s{RESET}")
@@ -396,6 +450,7 @@ class OrderBookHistory:
         print(f"{RED}Total New Asks: {self.stats['new_asks']} "
               f"(Volume: {self._format_volume(self.stats['total_ask_volume'])}){RESET}")
         print(f"Removed Orders - Bids: {self.stats['removed_bids']} | Asks: {self.stats['removed_asks']}")
+        print(f"\n{CYAN}Data saved to: {self.csv_filename}{RESET}")
 
 
 async def main():
@@ -448,9 +503,8 @@ async def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     print(f"\n{BOLD}{CYAN}Starting Order Book History for {args.symbol}{RESET}")
-    print(f"{GREEN}Green = New Bids/Buy Orders{RESET}")
-    print(f"{RED}Red = New Asks/Sell Orders{RESET}")
-    print(f"{DIM}Dim = Removed Orders{RESET}")
+    print(f"{GREEN}BID = Large buy order appeared or increased{RESET}")
+    print(f"{RED}ASK = Large sell order appeared or increased{RESET}")
     print(f"\nPress Ctrl+C to exit")
 
     try:
