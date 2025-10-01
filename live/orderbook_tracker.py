@@ -15,6 +15,7 @@ import signal
 import sys
 from collections import deque
 import time
+import csv
 
 # ANSI color codes
 GREEN = '\033[92m'
@@ -60,9 +61,6 @@ class OrderBookHistory:
         # Track order book state
         self.previous_bids = {}
         self.previous_asks = {}
-
-        # History tracking
-        self.history = deque(maxlen=1000)  # Keep last 1000 events
 
         # Statistics
         self.stats = {
@@ -195,13 +193,6 @@ class OrderBookHistory:
                       f"{CYAN}{distance_str:<10}{RESET} "
                       f"{DIM}{position}{RESET}")
 
-                self.history.append({
-                    'time': time_str,
-                    'type': 'new_bid',
-                    'price': price,
-                    'volume': volume
-                })
-
             elif self.previous_bids[price] < volume:
                 # Bid volume increased significantly
                 increase = volume - self.previous_bids[price]
@@ -266,13 +257,6 @@ class OrderBookHistory:
                       f"{self._format_usd_value(price, volume):<12} "
                       f"{CYAN}{distance_str:<10}{RESET} "
                       f"{DIM}{position}{RESET}")
-
-                self.history.append({
-                    'time': time_str,
-                    'type': 'new_ask',
-                    'price': price,
-                    'volume': volume
-                })
 
             elif self.previous_asks[price] < volume:
                 # Ask volume increased significantly
@@ -412,13 +396,6 @@ class OrderBookHistory:
         print(f"{RED}Total New Asks: {self.stats['new_asks']} "
               f"(Volume: {self._format_volume(self.stats['total_ask_volume'])}){RESET}")
         print(f"Removed Orders - Bids: {self.stats['removed_bids']} | Asks: {self.stats['removed_asks']}")
-
-        # Save history to file
-        if len(self.history) > 0:
-            filename = f"order_history_{self.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            with open(filename, 'w') as f:
-                json.dump(list(self.history), f, indent=2)
-            print(f"\nHistory saved to {filename}")
 
 
 async def main():
