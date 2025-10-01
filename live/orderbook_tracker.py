@@ -206,30 +206,34 @@ class OrderBookHistory:
                 # Bid volume increased significantly
                 increase = volume - self.previous_bids[price]
                 if increase >= self.min_volume:
-                    # Calculate distance from mid-price
-                    if mid_price > 0:
-                        distance_from_mid = ((mid_price - price) / mid_price) * 100
-                        distance_str = f"{distance_from_mid:+.3f}%"
-                    else:
-                        distance_str = "N/A"
+                    increase_usd = price * increase
+                    if increase_usd >= self.min_usd:
+                        # Calculate distance from mid-price
+                        if mid_price > 0:
+                            distance_from_mid = ((mid_price - price) / mid_price) * 100
+                            distance_str = f"{distance_from_mid:+.3f}%"
+                        else:
+                            distance_str = "N/A"
 
-                    print(f"{time_str:<12} "
-                          f"{GREEN}{'BID ↑':<12}{RESET} "
-                          f"{self._format_price(price):<12} "
-                          f"+{self._format_volume(increase):<11} "
-                          f"{self._format_usd_value(price, increase):<12} "
-                          f"{CYAN}{distance_str:<10}{RESET} "
-                          f"{DIM}(total: {self._format_volume(volume)}){RESET}")
+                        print(f"{time_str:<12} "
+                              f"{GREEN}{'BID ↑':<12}{RESET} "
+                              f"{self._format_price(price):<12} "
+                              f"+{self._format_volume(increase):<11} "
+                              f"{self._format_usd_value(price, increase):<12} "
+                              f"{CYAN}{distance_str:<10}{RESET} "
+                              f"{DIM}(total: {self._format_volume(volume)}){RESET}")
 
         # Detect removed bids
         for price, volume in self.previous_bids.items():
             if price not in current_bids and volume >= self.min_volume:
-                self.stats['removed_bids'] += 1
-                print(f"{time_str:<12} "
-                      f"{DIM}{'BID REMOVED':<12}{RESET} "
-                      f"{DIM}{self._format_price(price):<12}{RESET} "
-                      f"{DIM}-{self._format_volume(volume):<11}{RESET} "
-                      f"{DIM}{self._format_usd_value(price, volume):<12}{RESET}")
+                usd_value = price * volume
+                if usd_value >= self.min_usd:
+                    self.stats['removed_bids'] += 1
+                    print(f"{time_str:<12} "
+                          f"{DIM}{'BID REMOVED':<12}{RESET} "
+                          f"{DIM}{self._format_price(price):<12}{RESET} "
+                          f"{DIM}-{self._format_volume(volume):<11}{RESET} "
+                          f"{DIM}{self._format_usd_value(price, volume):<12}{RESET}")
 
         # Detect new asks
         for price, volume in current_asks.items():
@@ -274,30 +278,34 @@ class OrderBookHistory:
                 # Ask volume increased significantly
                 increase = volume - self.previous_asks[price]
                 if increase >= self.min_volume:
-                    # Calculate distance from mid-price
-                    if mid_price > 0:
-                        distance_from_mid = ((price - mid_price) / mid_price) * 100
-                        distance_str = f"{distance_from_mid:+.3f}%"
-                    else:
-                        distance_str = "N/A"
+                    increase_usd = price * increase
+                    if increase_usd >= self.min_usd:
+                        # Calculate distance from mid-price
+                        if mid_price > 0:
+                            distance_from_mid = ((price - mid_price) / mid_price) * 100
+                            distance_str = f"{distance_from_mid:+.3f}%"
+                        else:
+                            distance_str = "N/A"
 
-                    print(f"{time_str:<12} "
-                          f"{RED}{'ASK ↑':<12}{RESET} "
-                          f"{self._format_price(price):<12} "
-                          f"+{self._format_volume(increase):<11} "
-                          f"{self._format_usd_value(price, increase):<12} "
-                          f"{CYAN}{distance_str:<10}{RESET} "
-                          f"{DIM}(total: {self._format_volume(volume)}){RESET}")
+                        print(f"{time_str:<12} "
+                              f"{RED}{'ASK ↑':<12}{RESET} "
+                              f"{self._format_price(price):<12} "
+                              f"+{self._format_volume(increase):<11} "
+                              f"{self._format_usd_value(price, increase):<12} "
+                              f"{CYAN}{distance_str:<10}{RESET} "
+                              f"{DIM}(total: {self._format_volume(volume)}){RESET}")
 
         # Detect removed asks
         for price, volume in self.previous_asks.items():
             if price not in current_asks and volume >= self.min_volume:
-                self.stats['removed_asks'] += 1
-                print(f"{time_str:<12} "
-                      f"{DIM}{'ASK REMOVED':<12}{RESET} "
-                      f"{DIM}{self._format_price(price):<12}{RESET} "
-                      f"{DIM}-{self._format_volume(volume):<11}{RESET} "
-                      f"{DIM}{self._format_usd_value(price, volume):<12}{RESET}")
+                usd_value = price * volume
+                if usd_value >= self.min_usd:
+                    self.stats['removed_asks'] += 1
+                    print(f"{time_str:<12} "
+                          f"{DIM}{'ASK REMOVED':<12}{RESET} "
+                          f"{DIM}{self._format_price(price):<12}{RESET} "
+                          f"{DIM}-{self._format_volume(volume):<11}{RESET} "
+                          f"{DIM}{self._format_usd_value(price, volume):<12}{RESET}")
 
         # Check for spread changes
         if best_bid != self.last_best_bid or best_ask != self.last_best_ask:

@@ -120,40 +120,193 @@ So there are **2 orders** totaling **30,150 contracts** at **$0.7505**.
 ❌ **Why an order was removed** - Could be filled, canceled, or just moved out of view
 ❌ **Orders inside a price level** - If 3 orders exist at $0.75, you can't track when 1 of them gets canceled (you'd just see the total drop)
 
-## How Order Removal Detection Works
+## How The Tracker Works (Simple Explanation)
 
-The tracker compares **snapshots** of the order book:
+Think of the order book like a **constantly updating restaurant menu** where prices and portions keep changing. Our tracker takes **photos** of this menu every split second and compares them to see what changed.
 
-### Step 1: First Snapshot
-```
-Bids at 21:30:00:
-  $0.7510 → 61,640 contracts
-  $0.7509 → 50,000 contracts
-  $0.7508 → 30,000 contracts
-```
+### The Snapshot Method
 
-### Step 2: Second Snapshot (0.5 seconds later)
+Every time MEXC sends us new data (30-50 times per second!), we:
+
+**1. Take a Photo (Snapshot)**
 ```
-Bids at 21:30:00.5:
-  $0.7510 → 61,640 contracts
-  $0.7509 → 50,000 contracts
-  (no $0.7508!)
+Current Menu:
+  Buy $0.7510 → 61,640 burgers available
+  Buy $0.7509 → 50,000 burgers available
+  Buy $0.7508 → 30,000 burgers available
 ```
 
-### Step 3: Detection
-The tracker sees that **$0.7508** existed before but is now gone, so it reports:
+**2. Compare with Previous Photo**
 ```
-BID REMOVED  0.750800  -30.00K  $23
+Old Menu (0.5 seconds ago):
+  Buy $0.7510 → 61,640 burgers available
+  Buy $0.7509 → 50,000 burgers available
+  Buy $0.7507 → 20,000 burgers available  ← different price!
 ```
 
-### Why Did It Disappear?
+**3. Spot the Differences**
 
-Could be any of these reasons:
-1. **Filled:** Market sellers executed against all buy orders at $0.7508
-2. **Canceled:** The buyer(s) manually canceled their orders
-3. **Out of range:** New orders pushed $0.7508 out of the top 10 visible levels
+We check 4 things:
 
-**You cannot tell which!** The tracker only knows the price level is gone.
+### ✅ NEW ORDERS (New Price Level Appears)
+```python
+# In the code (line 175-176):
+if price not in self.previous_bids:
+    # This is a NEW order at a new price!
+```
+
+**Example:**
+- Previous: No one wanted to buy at $0.7508
+- Current: Someone placed 30,000 contracts at $0.7508
+- **Display:** `NEW BID  $0.7508  30.0k  $23k`
+
+### ⬆️ VOLUME INCREASED (More Orders at Same Price)
+```python
+# In the code (line 205-207):
+elif self.previous_bids[price] < volume:
+    increase = volume - self.previous_bids[price]
+    # More orders added at this price!
+```
+
+**Example:**
+- Previous: 61,640 contracts at $0.7510
+- Current: 91,650 contracts at $0.7510 (30,010 more!)
+- **Display:** `BID ↑  $0.7510  +30.0k  $23k  (total: 91.7k)`
+
+### ❌ ORDERS REMOVED (Price Level Disappears)
+```python
+# In the code (line 225-226):
+for price, volume in self.previous_bids.items():
+    if price not in current_bids:
+        # Price level is gone!
+```
+
+**Example:**
+- Previous: 30,000 contracts at $0.7508
+- Current: $0.7508 doesn't exist anymore
+- **Display:** `BID REMOVED  $0.7508  -30.0k  $23k`
+
+### 🤷 Why Did Orders Get Removed?
+
+The tracker **cannot tell** why they're gone. Could be:
+
+1. **Someone bought them all** (market order ate the limit orders)
+2. **Trader canceled** (changed their mind)
+3. **Pushed out of view** (we only see top 10/20 levels, might have dropped to #21)
+
+**Important:** We don't know which! We just know the price level vanished.
+
+### 📊 What About Volume Decreases?
+
+**We DON'T show volume decreases!** Here's why:
+
+```python
+# The code ONLY shows increases (line 205):
+elif self.previous_bids[price] < volume:  # Only if NEW volume > OLD volume
+```
+
+If volume goes from 30,000 → 20,000, we **stay silent** because:
+- Could be partial fills (good to know, but noisy)
+- Could be someone canceled part of their order
+- Creates too much spam in the output
+
+We only care about:
+- ✅ NEW levels appearing (big news!)
+- ✅ Volume INCREASING (more interest!)
+- ✅ Levels completely DISAPPEARING (support/resistance gone!)
+
+### Real Example Walkthrough
+
+**Snapshot #1 (21:30:00.000)**
+```
+Bids: $0.7510 → 50,000 | $0.7509 → 30,000 | $0.7508 → 20,000
+Asks: $0.7511 → 40,000 | $0.7512 → 25,000 | $0.7513 → 15,000
+```
+*Tracker saves this and waits...*
+
+**Snapshot #2 (21:30:00.327) - 327ms later**
+```
+Bids: $0.7510 → 80,000 | $0.7509 → 30,000 | $0.7507 → 10,000
+Asks: $0.7511 → 40,000 | $0.7512 → 35,000 | $0.7513 → 15,000
+```
+
+**Tracker thinks:**
+1. ✅ "Bid at $0.7510 increased from 50k → 80k (+30k)" → Show `BID ↑`
+2. ✅ "Bid at $0.7509 stayed same (30k)" → Ignore
+3. ❌ "Bid at $0.7508 is gone!" → Show `BID REMOVED`
+4. ✅ "Bid at $0.7507 is new (wasn't here before)" → Show `NEW BID`
+5. ✅ "Ask at $0.7512 increased from 25k → 35k (+10k)" → Show `ASK ↑`
+
+**Output to screen:**
+```
+21:30:00.327 BID ↑        0.751000     +30.0k       $23k         (total: 80.0k)
+21:30:00.327 BID REMOVED  0.750800     -20.0k       $15k
+21:30:00.327 NEW BID      0.750700     10.0k        $8k
+21:30:00.327 ASK ↑        0.751200     +10.0k       $8k          (total: 35.0k)
+```
+
+### How We Store Data
+
+```python
+# Current state (what we just received)
+current_bids = {
+    0.7510: 80000,
+    0.7509: 30000,
+    0.7507: 10000
+}
+
+# Previous state (from last snapshot)
+self.previous_bids = {
+    0.7510: 50000,
+    0.7509: 30000,
+    0.7508: 20000
+}
+
+# After comparison, current becomes previous
+self.previous_bids = current_bids.copy()  # Line 321
+```
+
+This is like saying: "What I'm seeing NOW becomes what I saw BEFORE for the next comparison."
+
+### Filters: Reducing Noise
+
+Without filters, you'd see EVERY tiny change (even 1 contract). That's too noisy!
+
+```python
+# Line 168-173: Volume filter
+if volume < self.min_volume:
+    continue  # Skip if too small
+
+# Line 171-173: USD value filter
+usd_value = price * volume
+if usd_value < self.min_usd:
+    continue  # Skip if dollar value too low
+```
+
+**Example with `--min-volume 10000`:**
+- ❌ Skip: 500 contract order ($375)
+- ❌ Skip: 5,000 contract order ($3,750)
+- ✅ Show: 15,000 contract order ($11,250)
+- ✅ Show: 100,000 contract order ($75,000)
+
+### Summary: The Simple Algorithm
+
+```
+Every 0.02 to 1 second:
+  1. Receive new data from MEXC
+  2. Convert to simple format: {price: volume}
+  3. Compare with previous snapshot:
+     - New price? → "NEW BID/ASK"
+     - Price gone? → "REMOVED"
+     - Volume up? → "BID/ASK ↑"
+     - Volume same/down? → Stay quiet
+  4. Apply filters (skip if too small)
+  5. Print colored output to screen
+  6. Save current as previous
+  7. Wait for next update...
+```
+
+That's it! No complex math, no AI, just **comparing two lists** over and over very quickly.
 
 ## Technical Details (For Developers)
 
