@@ -43,6 +43,12 @@ CONTAINER_NAME="tracker-${SYMBOL,,}"  # Convert to lowercase
 # Image name
 IMAGE_NAME="orderbook-tracker"
 
+# Create network if it doesn't exist
+if ! docker network ls | grep -q orderbook-network; then
+    echo -e "${GREEN}Creating Docker network: orderbook-network${NC}"
+    docker network create orderbook-network
+fi
+
 # Check if InfluxDB container is running
 if ! docker ps | grep -q orderbook-influxdb; then
     echo -e "${YELLOW}Warning: InfluxDB container (orderbook-influxdb) is not running${NC}"
