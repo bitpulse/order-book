@@ -16,10 +16,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY live/ ./live/
-COPY .env .env
 
 # Create logs directory
 RUN mkdir -p logs
+
+# Note: .env is NOT copied - environment variables are passed at runtime via docker run -e
 
 # Default command (can be overridden in docker-compose.yml)
 CMD ["python", "live/orderbook_tracker.py", "--help"]
