@@ -81,7 +81,7 @@ docker run -d \
     --name $CONTAINER_NAME \
     --network orderbook-network \
     -v $(pwd)/logs:/app/logs \
-    -e INFLUXDB_URL=http://influxdb:8086 \
+    -e INFLUXDB_URL=http://localhost:8086 \
     -e INFLUXDB_TOKEN=$INFLUXDB_TOKEN \
     -e INFLUXDB_ORG=$INFLUXDB_ORG \
     -e INFLUXDB_BUCKET=$INFLUXDB_BUCKET \
