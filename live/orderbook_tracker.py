@@ -41,19 +41,19 @@ logger = logging.getLogger(__name__)
 
 
 class OrderBookHistory:
-    """Order book history tracker with scrolling display"""
+    """Order book history tracker with scrolling display - tracks individual orders"""
 
-    def __init__(self, symbol: str, limit: int = 10, min_volume: float = 0,
+    def __init__(self, symbol: str, limit: int = 20, min_volume: float = 0,
                  min_usd: float = 0, max_usd: float = None,
                  min_distance_pct: float = None, max_distance_pct: float = None,
                  telegram_enabled: bool = False, telegram_bot_token: str = None,
-                 telegram_chat_id: str = None):
+                 telegram_chat_id: str = None, track_trades: bool = True):
         """
         Initialize order history tracker
 
         Args:
             symbol: Trading pair symbol
-            limit: Order book depth to monitor
+            limit: Order book depth to monitor (5, 10, or 20) - default 20 (maximum)
             min_volume: Minimum volume to display (filter noise)
             min_usd: Minimum USD value to display
             max_usd: Maximum USD value to display
@@ -62,10 +62,12 @@ class OrderBookHistory:
             telegram_enabled: Enable Telegram notifications
             telegram_bot_token: Telegram bot token
             telegram_chat_id: Telegram chat ID
+            track_trades: Track trade executions (market orders)
         """
         self.ws_url = "wss://contract.mexc.com/edge"
+        self.rest_url = "https://contract.mexc.com"
         self.symbol = symbol.upper()
-        self.limit = limit if limit in [5, 10, 20] else 10
+        self.limit = limit if limit in [5, 10, 20] else 20
         self.min_volume = min_volume
         self.min_usd = min_usd
         self.max_usd = max_usd
@@ -73,6 +75,7 @@ class OrderBookHistory:
         self.max_distance_pct = max_distance_pct
         self.ws = None
         self.running = False
+        self.track_trades = track_trades
 
         # Telegram settings
         self.telegram_enabled = telegram_enabled
@@ -80,9 +83,21 @@ class OrderBookHistory:
         self.telegram_chat_id = telegram_chat_id
         self.telegram_session = None
 
-        # Track order book state
+        # Full order book state - track ALL price levels
+        self.full_bids = {}  # {price: (volume, order_count)}
+        self.full_asks = {}
+
+        # Previous visible window state (for comparison)
         self.previous_bids = {}
         self.previous_asks = {}
+
+        # Version tracking for packet loss detection
+        self.current_version = None
+        self.version_errors = 0
+        self.initialized = False
+
+        # Trade tracking
+        self.recent_trades = deque(maxlen=100)
 
         # Statistics
         self.stats = {
@@ -92,7 +107,10 @@ class OrderBookHistory:
             'removed_bids': 0,
             'removed_asks': 0,
             'total_bid_volume': 0,
-            'total_ask_volume': 0
+            'total_ask_volume': 0,
+            'trades': 0,
+            'buy_volume': 0,
+            'sell_volume': 0
         }
 
         self.last_best_bid = 0
@@ -104,28 +122,89 @@ class OrderBookHistory:
         self.csv_file = None
         self.csv_writer = None
 
+    async def _fetch_initial_snapshot(self):
+        """Fetch initial order book snapshot from REST API"""
+        try:
+            url = f"{self.rest_url}/api/v1/contract/depth/{self.symbol}"
+
+            if not self.telegram_session:
+                self.telegram_session = aiohttp.ClientSession()
+
+            async with self.telegram_session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+
+                    if data.get('success') and data.get('data'):
+                        snapshot = data['data']
+
+                        # Parse bids and asks
+                        bids = snapshot.get('bids', [])
+                        asks = snapshot.get('asks', [])
+
+                        # Initialize full order book
+                        for bid in bids:
+                            if len(bid) >= 2:
+                                price = float(bid[0])
+                                volume = float(bid[1])
+                                order_count = int(bid[2]) if len(bid) >= 3 else 1
+                                if volume > 0:
+                                    self.full_bids[price] = (volume, order_count)
+
+                        for ask in asks:
+                            if len(ask) >= 2:
+                                price = float(ask[0])
+                                volume = float(ask[1])
+                                order_count = int(ask[2]) if len(ask) >= 3 else 1
+                                if volume > 0:
+                                    self.full_asks[price] = (volume, order_count)
+
+                        self.initialized = True
+                        logger.info(f"Initialized order book: {len(self.full_bids)} bids, {len(self.full_asks)} asks")
+                        print(f"{GREEN}✓ Loaded initial snapshot: {len(self.full_bids)} bid levels, {len(self.full_asks)} ask levels{RESET}")
+                        return True
+                else:
+                    logger.error(f"Failed to fetch snapshot: HTTP {response.status}")
+                    return False
+        except Exception as e:
+            logger.error(f"Error fetching snapshot: {e}")
+            return False
+
     async def _send_ping(self, ws):
-        """Keep connection alive"""
+        """Keep connection alive with MEXC-specific ping"""
         while self.running:
             try:
                 await asyncio.sleep(15)
                 if ws and ws.open:
-                    await ws.ping()
+                    # Use MEXC's explicit ping format
+                    await ws.send(json.dumps({"method": "ping"}))
             except Exception as e:
                 logger.error(f"Ping error: {e}")
                 break
 
     async def _subscribe(self, ws):
-        """Subscribe to order book"""
-        subscription = {
+        """Subscribe to order book and trades"""
+        # Subscribe to full depth updates
+        depth_subscription = {
             "method": "sub.depth.full",
             "param": {
                 "symbol": self.symbol,
                 "limit": self.limit
             }
         }
-        await ws.send(json.dumps(subscription))
-        logger.info(f"Subscribed to {self.symbol} order book")
+        await ws.send(json.dumps(depth_subscription))
+        logger.info(f"Subscribed to {self.symbol} order book depth")
+
+        # Subscribe to trade executions if enabled
+        if self.track_trades:
+            await asyncio.sleep(0.1)  # Small delay between subscriptions
+            trade_subscription = {
+                "method": "sub.deal",
+                "param": {
+                    "symbol": self.symbol
+                }
+            }
+            await ws.send(json.dumps(trade_subscription))
+            logger.info(f"Subscribed to {self.symbol} trade executions")
 
     def _format_price(self, price: float) -> str:
         """Format price based on magnitude"""
@@ -178,23 +257,132 @@ class OrderBookHistory:
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
 
+    async def _process_trade(self, data: Dict):
+        """Process trade execution data"""
+        timestamp = data.get('t', time.time() * 1000)
+        dt = datetime.fromtimestamp(timestamp / 1000)
+        time_str = dt.strftime('%H:%M:%S.%f')[:-3]
+
+        price = float(data.get('p', 0))
+        volume = float(data.get('v', 0))
+        trade_type = int(data.get('T', 0))  # 1=Buy, 2=Sell
+
+        if volume < self.min_volume:
+            return
+
+        usd_value = price * volume
+        if usd_value < self.min_usd:
+            return
+        if self.max_usd is not None and usd_value > self.max_usd:
+            return
+
+        # Calculate distance from mid-price
+        mid_price = (self.last_best_bid + self.last_best_ask) / 2 if (self.last_best_bid and self.last_best_ask) else 0
+        if mid_price > 0:
+            distance_from_mid = ((price - mid_price) / mid_price) * 100
+            distance_str = f"{distance_from_mid:+.3f}%"
+        else:
+            distance_from_mid = 0
+            distance_str = "N/A"
+
+        # Filter by distance
+        if self.min_distance_pct is not None and abs(distance_from_mid) < self.min_distance_pct:
+            return
+        if self.max_distance_pct is not None and abs(distance_from_mid) > self.max_distance_pct:
+            return
+
+        # Update stats
+        self.stats['trades'] += 1
+        if trade_type == 1:
+            self.stats['buy_volume'] += volume
+        else:
+            self.stats['sell_volume'] += volume
+
+        # Store trade
+        self.recent_trades.append({
+            'time': timestamp,
+            'price': price,
+            'volume': volume,
+            'type': trade_type
+        })
+
+        # Display trade
+        if trade_type == 1:
+            # Market BUY (aggressive buyer)
+            print(f"{time_str:<12} "
+                  f"{GREEN}{BOLD}{'MARKET BUY':<12}{RESET} "
+                  f"{GREEN}{self._format_price(price):<12}{RESET} "
+                  f"{self._format_volume(volume):<12} "
+                  f"{BOLD}{self._format_usd_value(price, volume):<12}{RESET} "
+                  f"{CYAN}{distance_str:<10}{RESET} "
+                  f"{'---':<7} "
+                  f"{'---':<7} "
+                  f"{DIM}Aggressive{RESET}")
+        else:
+            # Market SELL (aggressive seller)
+            print(f"{time_str:<12} "
+                  f"{RED}{BOLD}{'MARKET SELL':<12}{RESET} "
+                  f"{RED}{self._format_price(price):<12}{RESET} "
+                  f"{self._format_volume(volume):<12} "
+                  f"{BOLD}{self._format_usd_value(price, volume):<12}{RESET} "
+                  f"{CYAN}{distance_str:<10}{RESET} "
+                  f"{'---':<7} "
+                  f"{'---':<7} "
+                  f"{DIM}Aggressive{RESET}")
+
+        # Log to CSV
+        self._log_to_csv(
+            'market_buy' if trade_type == 1 else 'market_sell',
+            'buy' if trade_type == 1 else 'sell',
+            price, volume, usd_value, distance_from_mid,
+            self.last_best_bid, self.last_best_ask,
+            f"aggressive_trade", 0, 0
+        )
+
+        # Send Telegram notification
+        if self.telegram_enabled:
+            emoji = "🟢💥" if trade_type == 1 else "🔴💥"
+            side_text = "MARKET BUY" if trade_type == 1 else "MARKET SELL"
+            telegram_msg = (
+                f"{emoji} <b>{side_text}</b> {self.symbol}\n"
+                f"Time: <code>{time_str}</code>\n"
+                f"Price: <code>{self._format_price(price)}</code>\n"
+                f"Volume: <code>{self._format_volume(volume)}</code>\n"
+                f"Value: <b>{self._format_usd_value(price, volume)}</b>\n"
+                f"Distance: <code>{distance_str}</code>\n"
+                f"Type: <i>Aggressive {('Buyer' if trade_type == 1 else 'Seller')}</i>"
+            )
+            asyncio.create_task(self._send_telegram_message(telegram_msg))
+
     def _print_header(self):
         """Print session header"""
         runtime = time.time() - self.session_start
         print(f"\n{BOLD}{CYAN}{'='*80}{RESET}")
-        print(f"{BOLD}{WHITE}MEXC Order Book History - {self.symbol}{RESET}")
+        print(f"{BOLD}{WHITE}MEXC Order Book & Trade Tracker - {self.symbol}{RESET}")
         print(f"Runtime: {runtime:.0f}s | Updates: {self.stats['updates']} | "
               f"{GREEN}New Bids: {self.stats['new_bids']}{RESET} | "
-              f"{RED}New Asks: {self.stats['new_asks']}{RESET}")
-        print(f"{CYAN}{'='*100}{RESET}")
-        print(f"{DIM}{'Time':<12} {'Type':<12} {'Price':<12} {'Volume':<12} {'Value':<12} {'Distance':<10} {'Level':<7} {'Orders':<7} {'Total'}{RESET}")
-        print(f"{DIM}{'-'*110}{RESET}")
+              f"{RED}New Asks: {self.stats['new_asks']}{RESET} | "
+              f"{YELLOW}Trades: {self.stats['trades']}{RESET}")
+        print(f"{CYAN}{'='*120}{RESET}")
+        print(f"{DIM}{'Time':<12} {'Type':<12} {'Price':<12} {'Volume':<12} {'Value':<12} {'Distance':<10} {'Level':<7} {'Orders':<7} {'Info'}{RESET}")
+        print(f"{DIM}{'-'*120}{RESET}")
 
     def _process_orderbook(self, data: Dict):
-        """Process order book and detect new orders"""
+        """Process order book and detect individual order changes with version tracking"""
         timestamp = data.get('ts', time.time() * 1000)
         dt = datetime.fromtimestamp(timestamp / 1000)
         time_str = dt.strftime('%H:%M:%S.%f')[:-3]
+
+        # Version tracking for packet loss detection
+        version = data.get('version')
+        if version is not None:
+            if self.current_version is not None:
+                expected_version = self.current_version + 1
+                if version != expected_version:
+                    self.version_errors += 1
+                    logger.debug(f"Version gap: Expected {expected_version}, got {version}")
+                    # Version gaps are normal on high-volume pairs, just count them
+            self.current_version = version
 
         # Parse current order book
         # MEXC format: [price, volume, order_count]
@@ -204,23 +392,39 @@ class OrderBookHistory:
         bids = data.get('bids', [])
         asks = data.get('asks', [])
 
-        # Store volume, order_count, and level
+        # Parse incoming data into current visible window
         # Bids are sorted high to low (best first), asks are sorted low to high (best first)
         current_bids = {}
         for level, bid in enumerate(bids, start=1):
-            if len(bid) >= 3:
+            if len(bid) >= 2:
                 price = float(bid[0])
                 volume = float(bid[1])
-                order_count = int(bid[2])
-                current_bids[price] = (volume, order_count, level)
+                order_count = int(bid[2]) if len(bid) >= 3 else 1
+
+                # Update full order book state
+                if volume == 0:
+                    # Order removed - delete from full book
+                    self.full_bids.pop(price, None)
+                else:
+                    # Update or add to full book
+                    self.full_bids[price] = (volume, order_count)
+                    current_bids[price] = (volume, order_count, level)
 
         current_asks = {}
         for level, ask in enumerate(asks, start=1):
-            if len(ask) >= 3:
+            if len(ask) >= 2:
                 price = float(ask[0])
                 volume = float(ask[1])
-                order_count = int(ask[2])
-                current_asks[price] = (volume, order_count, level)
+                order_count = int(ask[2]) if len(ask) >= 3 else 1
+
+                # Update full order book state
+                if volume == 0:
+                    # Order removed - delete from full book
+                    self.full_asks.pop(price, None)
+                else:
+                    # Update or add to full book
+                    self.full_asks[price] = (volume, order_count)
+                    current_asks[price] = (volume, order_count, level)
 
         # Track best bid/ask
         best_bid = max(current_bids.keys()) if current_bids else 0
@@ -229,7 +433,16 @@ class OrderBookHistory:
         # Calculate mid-price
         mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0
 
-        # Detect new bids
+        # Skip processing if not yet initialized (first snapshot)
+        if not self.initialized:
+            self.previous_bids = current_bids.copy()
+            self.previous_asks = current_asks.copy()
+            self.last_best_bid = best_bid
+            self.last_best_ask = best_ask
+            self.initialized = True
+            return
+
+        # Detect changes in BIDS (visible window)
         for price, (volume, order_count, level) in current_bids.items():
             if volume < self.min_volume:
                 continue
@@ -241,9 +454,8 @@ class OrderBookHistory:
                 continue
 
             if price not in self.previous_bids:
-                # New bid level appeared
-                self.stats['new_bids'] += 1
-                self.stats['total_bid_volume'] += volume
+                # Bid level appeared in visible window - check if truly new or just moved into view
+                was_in_full_book = price in self.full_bids and self.stats['updates'] > 0
 
                 # Calculate distance from mid-price
                 if mid_price > 0:
@@ -259,35 +471,44 @@ class OrderBookHistory:
                 if self.max_distance_pct is not None and abs(distance_from_mid) > self.max_distance_pct:
                     continue
 
-                # Determine position relative to best bid
-                position = "BEST" if price == best_bid else ""
+                if was_in_full_book:
+                    # Order moved into visible window from below
+                    event_type = "ENTERED TOP"
+                    event_label = f"BID→TOP{self.limit}"
+                    emoji = "🟢⬆️"
+                    info_text = f"entered_top_{self.limit}"
+                else:
+                    # Truly new order placed
+                    self.stats['new_bids'] += 1
+                    self.stats['total_bid_volume'] += volume
+                    event_type = "NEW BID"
+                    event_label = "BID WALL"
+                    emoji = "🟢"
+                    info_text = f"new_order"
 
                 level_str = "BEST" if level == 1 else f"#{level}"
                 print(f"{time_str:<12} "
-                      f"{GREEN}{'BID':<12}{RESET} "
+                      f"{GREEN}{event_label:<12}{RESET} "
                       f"{GREEN}{self._format_price(price):<12}{RESET} "
                       f"{self._format_volume(volume):<12} "
-                      f"{self._format_usd_value(price, volume):<12} "
+                      f"{BOLD}{self._format_usd_value(price, volume):<12}{RESET} "
                       f"{CYAN}{distance_str:<10}{RESET} "
                       f"{level_str:<7} "
                       f"{order_count:<7} "
-                      f"{DIM}{self._format_volume(volume)}{RESET}")
+                      f"{DIM}{info_text}{RESET}")
 
                 # Log to CSV
                 distance_pct = distance_from_mid if mid_price > 0 else 0
-                self._log_to_csv('new', 'bid', price, volume, usd_value,
-                                distance_pct, best_bid, best_ask, f"total:{volume}", level, order_count)
+                self._log_to_csv(event_type.lower().replace(' ', '_'), 'bid', price, volume, usd_value,
+                                distance_pct, best_bid, best_ask, info_text, level, order_count)
 
                 # Send Telegram notification
                 if self.telegram_enabled:
-                    emoji = "🟢"
-                    side_text = "BID"
-                    level_text = "BEST" if level == 1 else f"#{level}"
                     telegram_msg = (
-                        f"{emoji} <b>{side_text}</b> {self.symbol}\n"
+                        f"{emoji} <b>{event_type}</b> {self.symbol}\n"
                         f"Time: <code>{time_str}</code>\n"
                         f"Price: <code>{self._format_price(price)}</code>\n"
-                        f"Level: <b>{level_text}</b>\n"
+                        f"Level: <b>{level_str}</b>\n"
                         f"Orders: <code>{order_count}</code>\n"
                         f"Volume: <code>{self._format_volume(volume)}</code>\n"
                         f"Value: <b>{self._format_usd_value(price, volume)}</b>\n"
@@ -403,9 +624,8 @@ class OrderBookHistory:
                 continue
 
             if price not in self.previous_asks:
-                # New ask level appeared
-                self.stats['new_asks'] += 1
-                self.stats['total_ask_volume'] += volume
+                # Ask level appeared in visible window - check if truly new or just moved into view
+                was_in_full_book = price in self.full_asks and self.stats['updates'] > 0
 
                 # Calculate distance from mid-price
                 if mid_price > 0:
@@ -421,35 +641,44 @@ class OrderBookHistory:
                 if self.max_distance_pct is not None and abs(distance_from_mid) > self.max_distance_pct:
                     continue
 
-                # Determine position relative to best ask
-                position = "BEST" if price == best_ask else ""
+                if was_in_full_book:
+                    # Order moved into visible window from above
+                    event_type = "ENTERED TOP"
+                    event_label = f"ASK→TOP{self.limit}"
+                    emoji = "🔴⬆️"
+                    info_text = f"entered_top_{self.limit}"
+                else:
+                    # Truly new order placed
+                    self.stats['new_asks'] += 1
+                    self.stats['total_ask_volume'] += volume
+                    event_type = "NEW ASK"
+                    event_label = "ASK WALL"
+                    emoji = "🔴"
+                    info_text = f"new_order"
 
                 level_str = "BEST" if level == 1 else f"#{level}"
                 print(f"{time_str:<12} "
-                      f"{RED}{'ASK':<12}{RESET} "
+                      f"{RED}{event_label:<12}{RESET} "
                       f"{RED}{self._format_price(price):<12}{RESET} "
                       f"{self._format_volume(volume):<12} "
-                      f"{self._format_usd_value(price, volume):<12} "
+                      f"{BOLD}{self._format_usd_value(price, volume):<12}{RESET} "
                       f"{CYAN}{distance_str:<10}{RESET} "
                       f"{level_str:<7} "
                       f"{order_count:<7} "
-                      f"{DIM}{self._format_volume(volume)}{RESET}")
+                      f"{DIM}{info_text}{RESET}")
 
                 # Log to CSV
                 distance_pct = distance_from_mid if mid_price > 0 else 0
-                self._log_to_csv('new', 'ask', price, volume, usd_value,
-                                distance_pct, best_bid, best_ask, f"total:{volume}", level, order_count)
+                self._log_to_csv(event_type.lower().replace(' ', '_'), 'ask', price, volume, usd_value,
+                                distance_pct, best_bid, best_ask, info_text, level, order_count)
 
                 # Send Telegram notification
                 if self.telegram_enabled:
-                    emoji = "🔴"
-                    side_text = "ASK"
-                    level_text = "BEST" if level == 1 else f"#{level}"
                     telegram_msg = (
-                        f"{emoji} <b>{side_text}</b> {self.symbol}\n"
+                        f"{emoji} <b>{event_type}</b> {self.symbol}\n"
                         f"Time: <code>{time_str}</code>\n"
                         f"Price: <code>{self._format_price(price)}</code>\n"
-                        f"Level: <b>{level_text}</b>\n"
+                        f"Level: <b>{level_str}</b>\n"
                         f"Orders: <code>{order_count}</code>\n"
                         f"Volume: <code>{self._format_volume(volume)}</code>\n"
                         f"Value: <b>{self._format_usd_value(price, volume)}</b>\n"
@@ -553,6 +782,39 @@ class OrderBookHistory:
                             )
                             asyncio.create_task(self._send_telegram_message(telegram_msg))
 
+        # Detect orders that left the visible window (were in previous but not in current)
+        for price, (prev_volume, prev_order_count, prev_level) in self.previous_bids.items():
+            if price not in current_bids:
+                # Bid left the visible window
+                usd_value = price * prev_volume
+                if prev_volume >= self.min_volume and usd_value >= self.min_usd:
+                    self.stats['removed_bids'] += 1
+                    print(f"{time_str:<12} "
+                          f"{DIM}{'BID←OUT':<12}{RESET} "
+                          f"{DIM}{self._format_price(price):<12}{RESET} "
+                          f"{DIM}{self._format_volume(prev_volume):<12}{RESET} "
+                          f"{DIM}{self._format_usd_value(price, prev_volume):<12}{RESET} "
+                          f"{DIM}{'---':<10}{RESET} "
+                          f"{DIM}{'---':<7}{RESET} "
+                          f"{DIM}{prev_order_count:<7}{RESET} "
+                          f"{DIM}left_top_{self.limit}{RESET}")
+
+        for price, (prev_volume, prev_order_count, prev_level) in self.previous_asks.items():
+            if price not in current_asks:
+                # Ask left the visible window
+                usd_value = price * prev_volume
+                if prev_volume >= self.min_volume and usd_value >= self.min_usd:
+                    self.stats['removed_asks'] += 1
+                    print(f"{time_str:<12} "
+                          f"{DIM}{'ASK←OUT':<12}{RESET} "
+                          f"{DIM}{self._format_price(price):<12}{RESET} "
+                          f"{DIM}{self._format_volume(prev_volume):<12}{RESET} "
+                          f"{DIM}{self._format_usd_value(price, prev_volume):<12}{RESET} "
+                          f"{DIM}{'---':<10}{RESET} "
+                          f"{DIM}{'---':<7}{RESET} "
+                          f"{DIM}{prev_order_count:<7}{RESET} "
+                          f"{DIM}left_top_{self.limit}{RESET}")
+
         # Update state
         self.previous_bids = current_bids.copy()
         self.previous_asks = current_asks.copy()
@@ -573,6 +835,12 @@ class OrderBookHistory:
         print(f"  {RED}New Asks: {self.stats['new_asks']} "
               f"(Volume: {self._format_volume(self.stats['total_ask_volume'])}){RESET}")
         print(f"  Removed: {self.stats['removed_bids']} bids, {self.stats['removed_asks']} asks")
+        if self.track_trades:
+            print(f"  {YELLOW}Trades: {self.stats['trades']}{RESET} | "
+                  f"Buy: {self._format_volume(self.stats['buy_volume'])} | "
+                  f"Sell: {self._format_volume(self.stats['sell_volume'])}")
+        if self.version_errors > 0:
+            print(f"  {DIM}Version gaps: {self.version_errors}{RESET}")
         print(f"{CYAN}{'─'*80}{RESET}\n")
 
     def _init_csv(self):
@@ -615,6 +883,13 @@ class OrderBookHistory:
         """Connect and start tracking"""
         self.running = True
         self._init_csv()
+
+        # Fetch initial snapshot from REST API
+        print(f"{CYAN}Fetching initial order book snapshot...{RESET}")
+        snapshot_success = await self._fetch_initial_snapshot()
+        if not snapshot_success:
+            print(f"{YELLOW}⚠ Warning: Failed to fetch initial snapshot, starting with empty state{RESET}")
+
         self._print_header()
 
         while self.running:
@@ -626,6 +901,7 @@ class OrderBookHistory:
                 ) as ws:
                     self.ws = ws
                     logger.info("Connected to MEXC WebSocket")
+                    print(f"{GREEN}✓ Connected to MEXC WebSocket{RESET}")
 
                     await self._subscribe(ws)
 
@@ -637,8 +913,21 @@ class OrderBookHistory:
                         try:
                             data = json.loads(message)
 
+                            # Handle order book depth updates
                             if data.get('channel') == 'push.depth.full':
                                 self._process_orderbook(data.get('data', {}))
+
+                            # Handle trade executions
+                            elif data.get('channel') == 'push.deal':
+                                deals = data.get('data', [])
+                                for deal in deals:
+                                    await self._process_trade(deal)
+
+                            # Handle pong responses
+                            elif data.get('channel') == 'pong':
+                                logger.debug("Received pong")
+
+                            # Handle subscription responses
                             elif 'code' in data:
                                 if data['code'] != 0:
                                     logger.error(f"Error: {data.get('msg', '')}")
@@ -676,15 +965,21 @@ class OrderBookHistory:
             self.csv_file.close()
 
         runtime = time.time() - self.session_start
-        print(f"\n{BOLD}{CYAN}{'='*80}{RESET}")
+        print(f"\n{BOLD}{CYAN}{'='*100}{RESET}")
         print(f"{BOLD}{WHITE}Final Statistics - Runtime: {runtime:.0f}s{RESET}")
-        print(f"{CYAN}{'='*80}{RESET}")
-        print(f"Total Updates: {self.stats['updates']}")
+        print(f"{CYAN}{'='*100}{RESET}")
+        print(f"Order Book Updates: {self.stats['updates']}")
         print(f"{GREEN}Total New Bids: {self.stats['new_bids']} "
               f"(Volume: {self._format_volume(self.stats['total_bid_volume'])}){RESET}")
         print(f"{RED}Total New Asks: {self.stats['new_asks']} "
               f"(Volume: {self._format_volume(self.stats['total_ask_volume'])}){RESET}")
-        print(f"Removed Orders - Bids: {self.stats['removed_bids']} | Asks: {self.stats['removed_asks']}")
+        print(f"Removed from view - Bids: {self.stats['removed_bids']} | Asks: {self.stats['removed_asks']}")
+        if self.track_trades:
+            print(f"\n{YELLOW}Trade Executions: {self.stats['trades']}{RESET}")
+            print(f"{GREEN}Buy Volume: {self._format_volume(self.stats['buy_volume'])}{RESET} | "
+                  f"{RED}Sell Volume: {self._format_volume(self.stats['sell_volume'])}{RESET}")
+        if self.version_errors > 0:
+            print(f"\n{YELLOW}⚠ Version Errors (packet loss): {self.version_errors}{RESET}")
         print(f"\n{CYAN}Data saved to: {self.csv_filename}{RESET}")
 
 
@@ -694,7 +989,8 @@ async def main():
     load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description='MEXC order book history tracker - shows new orders as they appear'
+        description='MEXC Order Book & Trade Tracker - Track individual orders and whale activity in real-time',
+        epilog='Example: python orderbook_tracker.py BTC_USDT --min-usd 50000 --limit 20'
     )
     parser.add_argument(
         'symbol',
@@ -705,8 +1001,8 @@ async def main():
         '--limit',
         type=int,
         choices=[5, 10, 20],
-        default=10,
-        help='Order book depth to monitor (default: 10)'
+        default=20,
+        help='Order book depth to monitor (default: 20 - maximum allowed by MEXC API)'
     )
     parser.add_argument(
         '--min-volume',
@@ -743,6 +1039,11 @@ async def main():
         action='store_true',
         help='Enable Telegram notifications'
     )
+    parser.add_argument(
+        '--no-trades',
+        action='store_true',
+        help='Disable trade execution tracking (only show order book changes)'
+    )
 
     args = parser.parse_args()
 
@@ -768,7 +1069,8 @@ async def main():
         max_distance_pct=args.max_distance,
         telegram_enabled=args.telegram,
         telegram_bot_token=telegram_bot_token,
-        telegram_chat_id=telegram_chat_id
+        telegram_chat_id=telegram_chat_id,
+        track_trades=not args.no_trades
     )
 
     # Handle shutdown
@@ -780,10 +1082,29 @@ async def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    print(f"\n{BOLD}{CYAN}Starting Order Book History for {args.symbol}{RESET}")
-    print(f"{GREEN}BID = Large buy order appeared or increased{RESET}")
-    print(f"{RED}ASK = Large sell order appeared or increased{RESET}")
-    print(f"\nPress Ctrl+C to exit")
+    print(f"\n{BOLD}{CYAN}═══════════════════════════════════════════════════════════════{RESET}")
+    print(f"{BOLD}{WHITE}MEXC Order Book & Trade Tracker{RESET}")
+    print(f"{CYAN}═══════════════════════════════════════════════════════════════{RESET}")
+    print(f"Symbol: {BOLD}{args.symbol}{RESET}")
+    print(f"Depth: Top {args.limit} levels")
+    if args.min_volume > 0:
+        print(f"Min Volume Filter: {args.min_volume}")
+    if args.min_usd > 0:
+        print(f"Min USD Filter: ${args.min_usd:,.0f}")
+    if args.max_usd:
+        print(f"Max USD Filter: ${args.max_usd:,.0f}")
+    if args.min_distance or args.max_distance:
+        print(f"Distance Filter: {args.min_distance or 0}% - {args.max_distance or '∞'}%")
+    print(f"Trade Tracking: {GREEN}Enabled{RESET}" if not args.no_trades else f"Trade Tracking: {DIM}Disabled{RESET}")
+    if args.telegram:
+        print(f"Telegram: {GREEN}Enabled{RESET}")
+    print(f"\n{GREEN}🟢 BID WALL{RESET} = New buy order placed")
+    print(f"{RED}🔴 ASK WALL{RESET} = New sell order placed")
+    if not args.no_trades:
+        print(f"{GREEN}{BOLD}💥 MARKET BUY{RESET} = Aggressive buyer (market order)")
+        print(f"{RED}{BOLD}💥 MARKET SELL{RESET} = Aggressive seller (market order)")
+    print(f"{DIM}↑/↓{RESET} = Volume changes | {DIM}→TOP/←OUT{RESET} = Moves in/out of visible window")
+    print(f"\n{YELLOW}Press Ctrl+C to exit{RESET}\n")
 
     try:
         await tracker.connect()
