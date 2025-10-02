@@ -14,29 +14,41 @@ services:
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
       - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword123
       - DOCKER_INFLUXDB_INIT_ORG=bitpulse
-      - DOCKER_INFLUXDB_INIT_BUCKET=orderbook
+      - DOCKER_INFLUXDB_INIT_BUCKET=trading_data
       - DOCKER_INFLUXDB_INIT_RETENTION=30d
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=your-super-secret-auth-token
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=LGn5Dxqu8wMdic_jTyplFkaGFEmJ_29ZpFElgFatzG0KOIabrMESuFKB0D43ZiDfzoZxJLeRGJKbuwNib8IbKw==
     networks:
       - orderbook-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  orderbook-collector:
-    build: .
-    container_name: orderbook-collector
-    depends_on:
-      - influxdb
-    volumes:
-      - ./logs:/app/logs
-      - ./.env:/app/.env
-    environment:
-      - INFLUXDB_URL=http://influxdb:8086
-      - INFLUXDB_TOKEN=your-super-secret-auth-token
-      - INFLUXDB_ORG=bitpulse
-      - INFLUXDB_BUCKET=orderbook
-    networks:
-      - orderbook-network
-    restart: unless-stopped
+  # Example tracker - disabled by default
+  # Uncomment and modify to run trackers via docker-compose
+  # Or use: ./run-tracker.sh SYMBOL --min-usd 20000 --telegram
+
+  # tracker-example:
+  #   build: .
+  #   container_name: tracker-example
+  #   depends_on:
+  #     influxdb:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./logs:/app/logs
+  #   environment:
+  #     - INFLUXDB_URL=http://influxdb:8086
+  #     - INFLUXDB_TOKEN=LGn5Dxqu8wMdic_jTyplFkaGFEmJ_29ZpFElgFatzG0KOIabrMESuFKB0D43ZiDfzoZxJLeRGJKbuwNib8IbKw==
+  #     - INFLUXDB_ORG=bitpulse
+  #     - INFLUXDB_BUCKET=trading_data
+  #     - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+  #     - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+  #   command: python live/orderbook_tracker.py BTC_USDT --influx --min-usd 100000 --telegram
+  #   networks:
+  #     - orderbook-network
+  #   restart: unless-stopped
 
 networks:
   orderbook-network:
