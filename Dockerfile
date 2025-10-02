@@ -15,11 +15,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ ./src/
-COPY run.py .
+COPY live/ ./live/
+COPY .env .env
 
 # Create logs directory
 RUN mkdir -p logs
 
-# Run the application
-CMD ["python", "run.py"]
+# Default command (can be overridden in docker-compose.yml)
+CMD ["python", "live/orderbook_tracker.py", "--help"]

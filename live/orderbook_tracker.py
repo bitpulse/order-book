@@ -15,10 +15,11 @@ import signal
 import sys
 from collections import deque
 import time
-import csv
 import os
 import aiohttp
 from dotenv import load_dotenv
+from influxdb_client import InfluxDBClient, Point
+from influxdb_client.client.write_api import ASYNCHRONOUS
 
 # ANSI color codes
 GREEN = '\033[92m'
@@ -47,7 +48,9 @@ class OrderBookHistory:
                  min_usd: float = 0, max_usd: float = None,
                  min_distance_pct: float = None, max_distance_pct: float = None,
                  telegram_enabled: bool = False, telegram_bot_token: str = None,
-                 telegram_chat_id: str = None, track_trades: bool = True):
+                 telegram_chat_id: str = None, track_trades: bool = True,
+                 influx_enabled: bool = False, influx_url: str = None,
+                 influx_token: str = None, influx_org: str = None, influx_bucket: str = None):
         """
         Initialize order history tracker
 
@@ -63,6 +66,11 @@ class OrderBookHistory:
             telegram_bot_token: Telegram bot token
             telegram_chat_id: Telegram chat ID
             track_trades: Track trade executions (market orders)
+            influx_enabled: Enable InfluxDB logging of all events
+            influx_url: InfluxDB URL
+            influx_token: InfluxDB token
+            influx_org: InfluxDB organization
+            influx_bucket: InfluxDB bucket
         """
         self.ws_url = "wss://contract.mexc.com/edge"
         self.rest_url = "https://contract.mexc.com"
@@ -82,6 +90,20 @@ class OrderBookHistory:
         self.telegram_bot_token = telegram_bot_token
         self.telegram_chat_id = telegram_chat_id
         self.telegram_session = None
+
+        # InfluxDB settings
+        self.influx_enabled = influx_enabled
+        self.influx_client = None
+        self.influx_write_api = None
+        self.influx_bucket = influx_bucket
+        if self.influx_enabled and influx_url and influx_token and influx_org:
+            try:
+                self.influx_client = InfluxDBClient(url=influx_url, token=influx_token, org=influx_org)
+                self.influx_write_api = self.influx_client.write_api(write_options=ASYNCHRONOUS)
+                logger.info(f"InfluxDB client initialized: {influx_url}")
+            except Exception as e:
+                logger.error(f"Failed to initialize InfluxDB client: {e}")
+                self.influx_enabled = False
 
         # Full order book state - track ALL price levels
         self.full_bids = {}  # {price: (volume, order_count)}
@@ -116,11 +138,6 @@ class OrderBookHistory:
         self.last_best_bid = 0
         self.last_best_ask = 0
         self.session_start = time.time()
-
-        # CSV logging
-        self.csv_filename = f"logs/orderbook_{self.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        self.csv_file = None
-        self.csv_writer = None
 
     async def _fetch_initial_snapshot(self):
         """Fetch initial order book snapshot from REST API"""
@@ -331,7 +348,7 @@ class OrderBookHistory:
                   f"{DIM}Aggressive{RESET}")
 
         # Log to CSV
-        self._log_to_csv(
+        self._log_whale_event_to_influx(
             'market_buy' if trade_type == 1 else 'market_sell',
             'buy' if trade_type == 1 else 'sell',
             price, volume, usd_value, distance_from_mid,
@@ -433,6 +450,10 @@ class OrderBookHistory:
         # Calculate mid-price
         mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0
 
+        # Log price data to InfluxDB (separate measurement)
+        if best_bid and best_ask:
+            self._log_price_to_influx(best_bid, best_ask)
+
         # Skip processing if not yet initialized (first snapshot)
         if not self.initialized:
             self.previous_bids = current_bids.copy()
@@ -499,7 +520,7 @@ class OrderBookHistory:
 
                 # Log to CSV
                 distance_pct = distance_from_mid if mid_price > 0 else 0
-                self._log_to_csv(event_type.lower().replace(' ', '_'), 'bid', price, volume, usd_value,
+                self._log_whale_event_to_influx(event_type.lower().replace(' ', '_'), 'bid', price, volume, usd_value,
                                 distance_pct, best_bid, best_ask, info_text, level, order_count)
 
                 # Send Telegram notification
@@ -556,7 +577,7 @@ class OrderBookHistory:
 
                         # Log to CSV
                         distance_pct = distance_from_mid if mid_price > 0 else 0
-                        self._log_to_csv('increase', 'bid', price, change, change_usd,
+                        self._log_whale_event_to_influx('increase', 'bid', price, change, change_usd,
                                         distance_pct, best_bid, best_ask, f"total:{volume}", level, order_count)
 
                         # Send Telegram notification
@@ -591,7 +612,7 @@ class OrderBookHistory:
 
                         # Log to CSV
                         distance_pct = distance_from_mid if mid_price > 0 else 0
-                        self._log_to_csv('decrease', 'bid', price, abs(change), change_usd,
+                        self._log_whale_event_to_influx('decrease', 'bid', price, abs(change), change_usd,
                                         distance_pct, best_bid, best_ask, f"total:{volume}", level, order_count)
 
                         # Send Telegram notification
@@ -669,7 +690,7 @@ class OrderBookHistory:
 
                 # Log to CSV
                 distance_pct = distance_from_mid if mid_price > 0 else 0
-                self._log_to_csv(event_type.lower().replace(' ', '_'), 'ask', price, volume, usd_value,
+                self._log_whale_event_to_influx(event_type.lower().replace(' ', '_'), 'ask', price, volume, usd_value,
                                 distance_pct, best_bid, best_ask, info_text, level, order_count)
 
                 # Send Telegram notification
@@ -726,7 +747,7 @@ class OrderBookHistory:
 
                         # Log to CSV
                         distance_pct = distance_from_mid if mid_price > 0 else 0
-                        self._log_to_csv('increase', 'ask', price, change, change_usd,
+                        self._log_whale_event_to_influx('increase', 'ask', price, change, change_usd,
                                         distance_pct, best_bid, best_ask, f"total:{volume}", level, order_count)
 
                         # Send Telegram notification
@@ -761,7 +782,7 @@ class OrderBookHistory:
 
                         # Log to CSV
                         distance_pct = distance_from_mid if mid_price > 0 else 0
-                        self._log_to_csv('decrease', 'ask', price, abs(change), change_usd,
+                        self._log_whale_event_to_influx('decrease', 'ask', price, abs(change), change_usd,
                                         distance_pct, best_bid, best_ask, f"total:{volume}", level, order_count)
 
                         # Send Telegram notification
@@ -789,6 +810,15 @@ class OrderBookHistory:
                 usd_value = price * prev_volume
                 if prev_volume >= self.min_volume and usd_value >= self.min_usd:
                     self.stats['removed_bids'] += 1
+
+                    # Calculate distance from mid-price
+                    if mid_price > 0:
+                        distance_from_mid = ((mid_price - price) / mid_price) * 100
+                        distance_str = f"{distance_from_mid:+.3f}%"
+                    else:
+                        distance_from_mid = 0
+                        distance_str = "N/A"
+
                     print(f"{time_str:<12} "
                           f"{DIM}{'BID←OUT':<12}{RESET} "
                           f"{DIM}{self._format_price(price):<12}{RESET} "
@@ -799,12 +829,35 @@ class OrderBookHistory:
                           f"{DIM}{prev_order_count:<7}{RESET} "
                           f"{DIM}left_top_{self.limit}{RESET}")
 
+                    # Send Telegram notification
+                    if self.telegram_enabled:
+                        telegram_msg = (
+                            f"⬇️ <b>BID LEFT TOP {self.limit}</b> {self.symbol}\n"
+                            f"Time: <code>{time_str}</code>\n"
+                            f"Price: <code>{self._format_price(price)}</code>\n"
+                            f"Level: Was <b>#{prev_level}</b>\n"
+                            f"Orders: <code>{prev_order_count}</code>\n"
+                            f"Volume: <code>{self._format_volume(prev_volume)}</code>\n"
+                            f"Value: <b>{self._format_usd_value(price, prev_volume)}</b>\n"
+                            f"Distance: <code>{distance_str}</code>"
+                        )
+                        asyncio.create_task(self._send_telegram_message(telegram_msg))
+
         for price, (prev_volume, prev_order_count, prev_level) in self.previous_asks.items():
             if price not in current_asks:
                 # Ask left the visible window
                 usd_value = price * prev_volume
                 if prev_volume >= self.min_volume and usd_value >= self.min_usd:
                     self.stats['removed_asks'] += 1
+
+                    # Calculate distance from mid-price
+                    if mid_price > 0:
+                        distance_from_mid = ((price - mid_price) / mid_price) * 100
+                        distance_str = f"{distance_from_mid:+.3f}%"
+                    else:
+                        distance_from_mid = 0
+                        distance_str = "N/A"
+
                     print(f"{time_str:<12} "
                           f"{DIM}{'ASK←OUT':<12}{RESET} "
                           f"{DIM}{self._format_price(price):<12}{RESET} "
@@ -814,6 +867,20 @@ class OrderBookHistory:
                           f"{DIM}{'---':<7}{RESET} "
                           f"{DIM}{prev_order_count:<7}{RESET} "
                           f"{DIM}left_top_{self.limit}{RESET}")
+
+                    # Send Telegram notification
+                    if self.telegram_enabled:
+                        telegram_msg = (
+                            f"⬇️ <b>ASK LEFT TOP {self.limit}</b> {self.symbol}\n"
+                            f"Time: <code>{time_str}</code>\n"
+                            f"Price: <code>{self._format_price(price)}</code>\n"
+                            f"Level: Was <b>#{prev_level}</b>\n"
+                            f"Orders: <code>{prev_order_count}</code>\n"
+                            f"Volume: <code>{self._format_volume(prev_volume)}</code>\n"
+                            f"Value: <b>{self._format_usd_value(price, prev_volume)}</b>\n"
+                            f"Distance: <code>{distance_str}</code>"
+                        )
+                        asyncio.create_task(self._send_telegram_message(telegram_msg))
 
         # Update state
         self.previous_bids = current_bids.copy()
@@ -843,46 +910,60 @@ class OrderBookHistory:
             print(f"  {DIM}Version gaps: {self.version_errors}{RESET}")
         print(f"{CYAN}{'─'*80}{RESET}\n")
 
-    def _init_csv(self):
-        """Initialize CSV file for logging"""
-        import os
-        os.makedirs('logs', exist_ok=True)
-        self.csv_file = open(self.csv_filename, 'w', newline='')
-        self.csv_writer = csv.writer(self.csv_file)
-        # Write header
-        self.csv_writer.writerow([
-            'timestamp', 'type', 'side', 'price', 'volume', 'usd_value',
-            'distance_from_mid_pct', 'best_bid', 'best_ask', 'spread', 'level', 'order_count', 'info'
-        ])
-        self.csv_file.flush()
+    def _log_price_to_influx(self, best_bid: float, best_ask: float):
+        """Log price data to InfluxDB (separate measurement for price tracking)"""
+        if not self.influx_enabled or not self.influx_write_api:
+            return
 
-    def _log_to_csv(self, event_type: str, side: str, price: float, volume: float,
-                    usd_value: float, distance_pct: float, best_bid: float,
-                    best_ask: float, info: str = "", level: int = 0, order_count: int = 0):
-        """Log event to CSV"""
-        if self.csv_writer:
+        try:
+            mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0
             spread = best_ask - best_bid if (best_bid and best_ask) else 0
-            self.csv_writer.writerow([
-                datetime.now().isoformat(),
-                event_type,
-                side,
-                price,
-                volume,
-                usd_value,
-                distance_pct,
-                best_bid,
-                best_ask,
-                spread,
-                level,
-                order_count,
-                info
-            ])
-            self.csv_file.flush()
+
+            point = Point("orderbook_price") \
+                .tag("symbol", self.symbol) \
+                .field("best_bid", float(best_bid)) \
+                .field("best_ask", float(best_ask)) \
+                .field("mid_price", float(mid_price)) \
+                .field("spread", float(spread))
+
+            self.influx_write_api.write(bucket=self.influx_bucket, record=point)
+        except Exception as e:
+            logger.error(f"Failed to write price to InfluxDB: {e}")
+
+    def _log_whale_event_to_influx(self, event_type: str, side: str, price: float, volume: float,
+                                    usd_value: float, distance_pct: float, best_bid: float,
+                                    best_ask: float, info: str = "", level: int = 0, order_count: int = 0):
+        """Log whale event to InfluxDB (separate measurement for whale events)"""
+        if not self.influx_enabled or not self.influx_write_api:
+            return
+
+        try:
+            mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0
+            spread = best_ask - best_bid if (best_bid and best_ask) else 0
+
+            point = Point("orderbook_whale_events") \
+                .tag("symbol", self.symbol) \
+                .tag("event_type", event_type) \
+                .tag("side", side) \
+                .field("price", float(price)) \
+                .field("volume", float(volume)) \
+                .field("usd_value", float(usd_value)) \
+                .field("distance_from_mid_pct", float(distance_pct)) \
+                .field("mid_price", float(mid_price)) \
+                .field("best_bid", float(best_bid)) \
+                .field("best_ask", float(best_ask)) \
+                .field("spread", float(spread)) \
+                .field("level", int(level)) \
+                .field("order_count", int(order_count)) \
+                .field("info", str(info))
+
+            self.influx_write_api.write(bucket=self.influx_bucket, record=point)
+        except Exception as e:
+            logger.error(f"Failed to write whale event to InfluxDB: {e}")
 
     async def connect(self):
         """Connect and start tracking"""
         self.running = True
-        self._init_csv()
 
         # Fetch initial snapshot from REST API
         print(f"{CYAN}Fetching initial order book snapshot...{RESET}")
@@ -960,9 +1041,10 @@ class OrderBookHistory:
         if self.telegram_session:
             await self.telegram_session.close()
 
-        # Close CSV file
-        if self.csv_file:
-            self.csv_file.close()
+        # Close InfluxDB client
+        if self.influx_client:
+            self.influx_client.close()
+            logger.info("InfluxDB client closed")
 
         runtime = time.time() - self.session_start
         print(f"\n{BOLD}{CYAN}{'='*100}{RESET}")
@@ -980,7 +1062,8 @@ class OrderBookHistory:
                   f"{RED}Sell Volume: {self._format_volume(self.stats['sell_volume'])}{RESET}")
         if self.version_errors > 0:
             print(f"\n{YELLOW}⚠ Version Errors (packet loss): {self.version_errors}{RESET}")
-        print(f"\n{CYAN}Data saved to: {self.csv_filename}{RESET}")
+        if self.influx_enabled:
+            print(f"\n{CYAN}✓ Data logged to InfluxDB: {self.influx_bucket}{RESET}")
 
 
 async def main():
@@ -1044,6 +1127,11 @@ async def main():
         action='store_true',
         help='Disable trade execution tracking (only show order book changes)'
     )
+    parser.add_argument(
+        '--influx',
+        action='store_true',
+        help='Enable InfluxDB logging of all events (reads credentials from .env)'
+    )
 
     args = parser.parse_args()
 
@@ -1058,6 +1146,21 @@ async def main():
             print(f"{RED}Error: --telegram requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables{RESET}")
             sys.exit(1)
 
+    # Get InfluxDB credentials from environment if enabled
+    influx_url = None
+    influx_token = None
+    influx_org = None
+    influx_bucket = None
+    if args.influx:
+        influx_url = os.getenv('INFLUXDB_URL')
+        influx_token = os.getenv('INFLUXDB_TOKEN')
+        influx_org = os.getenv('INFLUXDB_ORG')
+        influx_bucket = os.getenv('INFLUXDB_BUCKET')
+
+        if not all([influx_url, influx_token, influx_org, influx_bucket]):
+            print(f"{RED}Error: --influx requires INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, and INFLUXDB_BUCKET in .env{RESET}")
+            sys.exit(1)
+
     # Create history tracker
     tracker = OrderBookHistory(
         args.symbol,
@@ -1070,7 +1173,12 @@ async def main():
         telegram_enabled=args.telegram,
         telegram_bot_token=telegram_bot_token,
         telegram_chat_id=telegram_chat_id,
-        track_trades=not args.no_trades
+        track_trades=not args.no_trades,
+        influx_enabled=args.influx,
+        influx_url=influx_url,
+        influx_token=influx_token,
+        influx_org=influx_org,
+        influx_bucket=influx_bucket
     )
 
     # Handle shutdown
@@ -1098,6 +1206,8 @@ async def main():
     print(f"Trade Tracking: {GREEN}Enabled{RESET}" if not args.no_trades else f"Trade Tracking: {DIM}Disabled{RESET}")
     if args.telegram:
         print(f"Telegram: {GREEN}Enabled{RESET}")
+    if args.influx:
+        print(f"InfluxDB: {GREEN}Enabled{RESET} → {influx_bucket}")
     print(f"\n{GREEN}🟢 BID WALL{RESET} = New buy order placed")
     print(f"{RED}🔴 ASK WALL{RESET} = New sell order placed")
     if not args.no_trades:
