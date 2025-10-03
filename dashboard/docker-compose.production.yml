@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile.production
+    container_name: orderbook-dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount data directory from parent directory (read-only)
+      - ../data:/app/data:ro
+      # Mount live scripts for run-analysis feature (read-only)
+      - ../live:/app/live:ro
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
