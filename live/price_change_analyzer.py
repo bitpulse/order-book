@@ -98,6 +98,43 @@ class PriceChangeAnalyzer:
         else:
             raise ValueError(f"Invalid lookback unit: {unit}. Use s, m, h, or d")
 
+    def _deduplicate_intervals(self, intervals: List[Dict]) -> List[Dict]:
+        """
+        Remove overlapping intervals to show unique price spikes.
+
+        For each interval, check if it overlaps with any already-selected interval.
+        If it overlaps, skip it (it's capturing the same spike).
+        If it doesn't overlap, it's a unique spike - keep it.
+
+        Args:
+            intervals: List of interval dicts sorted by change_abs (largest first)
+
+        Returns:
+            List of non-overlapping intervals (unique spikes only)
+        """
+        if not intervals:
+            return []
+
+        unique_intervals = []
+
+        for interval in intervals:
+            # Check if this interval overlaps with any already-selected interval
+            is_duplicate = False
+
+            for existing in unique_intervals:
+                # Two intervals overlap if:
+                # interval.end >= existing.start AND interval.start <= existing.end
+                if (interval['end_time'] >= existing['start_time'] and
+                    interval['start_time'] <= existing['end_time']):
+                    is_duplicate = True
+                    break
+
+            # Only keep non-overlapping (unique) intervals
+            if not is_duplicate:
+                unique_intervals.append(interval)
+
+        return unique_intervals
+
     def find_price_changes(self) -> List[Dict]:
         """
         Find intervals with largest price changes
@@ -162,9 +199,14 @@ class PriceChangeAnalyzer:
                 if (all_price_data[k]['time'] - start_time).total_seconds() >= slide_seconds:
                     break
 
-        # Sort by absolute change and return top N
+        # Sort by absolute change
         price_changes.sort(key=lambda x: x['change_abs'], reverse=True)
-        return price_changes[:self.top_n]
+
+        # De-duplicate overlapping intervals
+        deduplicated = self._deduplicate_intervals(price_changes)
+
+        # Return top N unique intervals
+        return deduplicated[:self.top_n]
 
     def get_price_data(self, start_time: datetime, end_time: datetime) -> List[Dict]:
         """
