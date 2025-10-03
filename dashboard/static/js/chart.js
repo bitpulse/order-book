@@ -186,6 +186,105 @@ function initializeChart() {
         lineWidth: 2,
     });
 
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.id = 'chart-tooltip';
+    tooltip.style.cssText = `
+        position: absolute;
+        display: none;
+        padding: 8px;
+        box-sizing: border-box;
+        font-size: 12px;
+        text-align: left;
+        z-index: 1000;
+        top: 12px;
+        left: 12px;
+        pointer-events: none;
+        background: rgba(45, 45, 45, 0.95);
+        border: 1px solid #404040;
+        border-radius: 4px;
+        color: #e0e0e0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    `;
+    container.appendChild(tooltip);
+
+    // Subscribe to crosshair move
+    chart.subscribeCrosshairMove((param) => {
+        if (!param.time || !param.point || !currentInterval) {
+            tooltip.style.display = 'none';
+            return;
+        }
+
+        const price = param.seriesData.get(lineSeries);
+        if (!price) {
+            tooltip.style.display = 'none';
+            return;
+        }
+
+        const timeStr = new Date(param.time * 1000).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        // Calculate change from start
+        const changeFromStart = ((price.value - currentInterval.start_price) / currentInterval.start_price) * 100;
+        const changeColor = changeFromStart >= 0 ? '#00ff88' : '#ff4444';
+
+        // Calculate dynamic time window based on interval size
+        const intervalDuration = (new Date(currentInterval.end_time) - new Date(currentInterval.start_time));
+        // Use 10% of interval duration or minimum 1 second
+        const timeWindow = Math.max(1000, intervalDuration * 0.1);
+
+        // Find whale events near this time
+        const currentTime = new Date(param.time * 1000);
+
+        let nearbyEvents = [];
+        if (currentInterval.whale_events) {
+            nearbyEvents = currentInterval.whale_events.filter(event => {
+                const eventTime = new Date(event.time);
+                return Math.abs(eventTime - currentTime) <= timeWindow;
+            });
+        }
+
+        // Count event types and calculate volumes
+        const bidEvents = nearbyEvents.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
+        const askEvents = nearbyEvents.filter(e => e.side === 'ask' || e.event_type.includes('ask'));
+        const marketEvents = nearbyEvents.filter(e => e.event_type.includes('market'));
+
+        const bidVolume = bidEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+        const askVolume = askEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+        const marketVolume = marketEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+        const totalVolume = bidVolume + askVolume + marketVolume;
+
+        // Build whale events section
+        let whaleSection = '';
+        if (nearbyEvents.length > 0) {
+            const windowSec = (timeWindow / 1000).toFixed(0);
+            whaleSection = `
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #404040;">
+                    <div style="font-size: 11px; margin-bottom: 3px; color: #b0b0b0;">Whale Events (±${windowSec}s):</div>
+                    ${bidEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #00ff88;">▲</span> ${bidEvents.length} Bid${bidEvents.length > 1 ? 's' : ''} ($${formatNumber(bidVolume)})</div>` : ''}
+                    ${askEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #ff4444;">▼</span> ${askEvents.length} Ask${askEvents.length > 1 ? 's' : ''} ($${formatNumber(askVolume)})</div>` : ''}
+                    ${marketEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #ffaa00;">●</span> ${marketEvents.length} Trade${marketEvents.length > 1 ? 's' : ''} ($${formatNumber(marketVolume)})</div>` : ''}
+                    <div style="font-size: 11px; margin-top: 2px; font-weight: 600;">Total: <span style="color: #2962ff;">$${formatNumber(totalVolume)}</span></div>
+                </div>
+            `;
+        }
+
+        tooltip.style.display = 'block';
+        tooltip.innerHTML = `
+            <div style="margin-bottom: 4px; font-weight: 600;">${timeStr}</div>
+            <div>Price: <span style="color: #2962ff;">$${price.value.toFixed(6)}</span></div>
+            <div>Change: <span style="color: ${changeColor};">${changeFromStart >= 0 ? '+' : ''}${changeFromStart.toFixed(3)}%</span></div>
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #404040; color: #b0b0b0;">
+                <div style="font-size: 11px;">Interval: ${currentInterval.start_price.toFixed(6)} → ${currentInterval.end_price.toFixed(6)}</div>
+                <div style="font-size: 11px;">Total: <span style="color: ${currentInterval.change_pct >= 0 ? '#00ff88' : '#ff4444'};">${currentInterval.change_pct >= 0 ? '+' : ''}${currentInterval.change_pct.toFixed(3)}%</span></div>
+            </div>
+            ${whaleSection}
+        `;
+    });
+
     // Handle window resize
     window.addEventListener('resize', () => {
         chart.applyOptions({
