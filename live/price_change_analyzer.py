@@ -144,6 +144,45 @@ class PriceChangeAnalyzer:
         price_changes.sort(key=lambda x: x['change_abs'], reverse=True)
         return price_changes[:self.top_n]
 
+    def get_price_data(self, start_time: datetime, end_time: datetime) -> List[Dict]:
+        """
+        Get all price points for a specific time interval
+
+        Args:
+            start_time: Start of interval
+            end_time: End of interval
+
+        Returns:
+            List of price point dicts with time, mid_price, best_bid, best_ask, spread
+        """
+        start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        end_str = end_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+
+        query = f'''
+        from(bucket: "{self.influx_bucket}")
+          |> range(start: {start_str}, stop: {end_str})
+          |> filter(fn: (r) => r._measurement == "orderbook_price")
+          |> filter(fn: (r) => r.symbol == "{self.symbol}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+
+        result = self.query_api.query(query)
+
+        price_points = []
+        for table in result:
+            for record in table.records:
+                price_points.append({
+                    'time': record.get_time(),
+                    'mid_price': record.values.get('mid_price', 0),
+                    'best_bid': record.values.get('best_bid', 0),
+                    'best_ask': record.values.get('best_ask', 0),
+                    'spread': record.values.get('spread', 0),
+                })
+
+        # Sort by time
+        price_points.sort(key=lambda x: x['time'])
+        return price_points
+
     def get_whale_events(self, start_time: datetime, end_time: datetime) -> List[Dict]:
         """
         Get whale events for a specific time interval
@@ -190,7 +229,7 @@ class PriceChangeAnalyzer:
         Run full analysis: find price changes and correlate with whale events
 
         Returns:
-            List of dicts with price change info and whale events
+            List of dicts with price change info, price data, and whale events
         """
         print(f"{CYAN}Analyzing price changes for {self.symbol}...{RESET}")
         print(f"{DIM}Lookback: {self.lookback}, Interval: {self.interval}, Min change: {self.min_change}%{RESET}\n")
@@ -205,6 +244,10 @@ class PriceChangeAnalyzer:
 
         results = []
         for i, change in enumerate(price_changes, 1):
+            # Get price data for the interval
+            price_data = self.get_price_data(change['start_time'], change['end_time'])
+
+            # Get whale events for the interval
             whale_events = self.get_whale_events(change['start_time'], change['end_time'])
 
             # Aggregate events by type
@@ -221,6 +264,7 @@ class PriceChangeAnalyzer:
                 'start_price': change['start_price'],
                 'end_price': change['end_price'],
                 'change_pct': change['change_pct'],
+                'price_data': price_data,
                 'whale_events': whale_events,
                 'event_summary': dict(event_summary)
             })
@@ -237,6 +281,7 @@ class PriceChangeAnalyzer:
             print(f"{BOLD}Rank #{result['rank']}: {color}{change_pct:+.3f}%{RESET} price change{RESET}")
             print(f"{DIM}Time: {result['start_time']} → {result['end_time']}{RESET}")
             print(f"{DIM}Price: ${result['start_price']:.2f} → ${result['end_price']:.2f}{RESET}")
+            print(f"{DIM}Price data points: {len(result['price_data'])}{RESET}")
 
             # Event summary
             if result['event_summary']:
@@ -284,6 +329,12 @@ class PriceChangeAnalyzer:
             export_result = result.copy()
             export_result['start_time'] = result['start_time'].isoformat()
             export_result['end_time'] = result['end_time'].isoformat()
+
+            # Convert price data times
+            export_result['price_data'] = [
+                {**point, 'time': point['time'].isoformat()}
+                for point in result['price_data']
+            ]
 
             # Convert whale event times
             export_result['whale_events'] = [
