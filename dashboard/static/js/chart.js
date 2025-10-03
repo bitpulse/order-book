@@ -195,10 +195,77 @@ function loadPriceData(priceData) {
 
     lineSeries.setData(chartData);
 
-    // Create markers for whale events
-    if (currentInterval && currentInterval.whale_events) {
-        createWhaleMarkers(currentInterval.whale_events);
+    // Get interval boundaries first
+    const startTime = currentInterval ? new Date(currentInterval.start_time).getTime() / 1000 : 0;
+    const endTime = currentInterval ? new Date(currentInterval.end_time).getTime() / 1000 : 0;
+
+    // Find the spike point ONLY within the interval (between START and END)
+    let maxChangeIdx = -1;
+    let maxChange = 0;
+    for (let i = 1; i < chartData.length; i++) {
+        const currentTime = chartData[i].time;
+
+        // Only consider points within the analyzed interval
+        if (currentTime >= startTime && currentTime <= endTime) {
+            const change = Math.abs(chartData[i].value - chartData[i - 1].value);
+            if (change > maxChange) {
+                maxChange = change;
+                maxChangeIdx = i;
+            }
+        }
     }
+
+    // Create markers for whale events and spike
+    const allMarkers = [];
+
+    // Add whale event markers
+    if (currentInterval && currentInterval.whale_events) {
+        const whaleMarkers = createWhaleMarkers(currentInterval.whale_events);
+        allMarkers.push(...whaleMarkers);
+    }
+
+    // Add interval boundary markers
+    if (currentInterval) {
+
+        // Start of interval marker
+        allMarkers.push({
+            time: startTime,
+            position: 'aboveBar',
+            color: '#ffaa00',
+            shape: 'square',
+            text: '▼START',
+            size: 2
+        });
+
+        // End of interval marker
+        allMarkers.push({
+            time: endTime,
+            position: 'aboveBar',
+            color: '#ffaa00',
+            shape: 'square',
+            text: '▲END',
+            size: 2
+        });
+    }
+
+    // Add spike marker
+    if (maxChangeIdx > 0) {
+        const spikeTime = chartData[maxChangeIdx].time;
+        const spikeValue = chartData[maxChangeIdx].value;
+        const prevValue = chartData[maxChangeIdx - 1].value;
+        const isUp = spikeValue > prevValue;
+
+        allMarkers.push({
+            time: spikeTime,
+            position: isUp ? 'belowBar' : 'aboveBar',
+            color: isUp ? '#00ff88' : '#ff4444',
+            shape: 'circle',
+            text: '★ SPIKE',
+            size: 3
+        });
+    }
+
+    lineSeries.setMarkers(allMarkers);
 
     // Fit content
     chart.timeScale().fitContent();
@@ -206,7 +273,7 @@ function loadPriceData(priceData) {
 
 // Create markers for whale events
 function createWhaleMarkers(events) {
-    if (!lineSeries || !events || events.length === 0) return;
+    if (!events || events.length === 0) return [];
 
     const markers = events.map(event => {
         const isBid = event.side === 'bid' || event.event_type.includes('bid');
@@ -239,12 +306,13 @@ function createWhaleMarkers(events) {
             color: color,
             shape: shape,
             text: text,
+            size: 1,
             // Store full event data for tooltip (custom implementation needed)
             _eventData: event
         };
     });
 
-    lineSeries.setMarkers(markers);
+    return markers;
 }
 
 // Load whale events into the events panel
