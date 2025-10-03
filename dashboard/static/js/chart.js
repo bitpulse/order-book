@@ -236,16 +236,20 @@ function initializeChart() {
         // Use 10% of interval duration or minimum 1 second
         const timeWindow = Math.max(1000, intervalDuration * 0.1);
 
-        // Find whale events near this time
+        // Find whale events near this time (from all periods: before, during, after)
         const currentTime = new Date(param.time * 1000);
 
-        let nearbyEvents = [];
-        if (currentInterval.whale_events) {
-            nearbyEvents = currentInterval.whale_events.filter(event => {
-                const eventTime = new Date(event.time);
-                return Math.abs(eventTime - currentTime) <= timeWindow;
-            });
-        }
+        // Collect events from all three periods
+        const allEvents = [
+            ...(currentInterval.whale_events_before || []),
+            ...(currentInterval.whale_events || []),
+            ...(currentInterval.whale_events_after || [])
+        ];
+
+        let nearbyEvents = allEvents.filter(event => {
+            const eventTime = new Date(event.time);
+            return Math.abs(eventTime - currentTime) <= timeWindow;
+        });
 
         // Count event types and calculate volumes
         const bidEvents = nearbyEvents.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
@@ -257,13 +261,29 @@ function initializeChart() {
         const marketVolume = marketEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
         const totalVolume = bidVolume + askVolume + marketVolume;
 
+        // Determine which period we're in
+        const startTime = new Date(currentInterval.start_time).getTime();
+        const endTime = new Date(currentInterval.end_time).getTime();
+        const currentTimeMs = currentTime.getTime();
+
+        let periodLabel = '';
+        if (currentTimeMs < startTime) {
+            periodLabel = '<span style="color: #2962ff;">⬅ BEFORE</span>';
+        } else if (currentTimeMs >= startTime && currentTimeMs <= endTime) {
+            periodLabel = '<span style="color: #ffaa00;">◆ DURING</span>';
+        } else {
+            periodLabel = '<span style="color: #ff6b6b;">➡ AFTER</span>';
+        }
+
         // Build whale events section
         let whaleSection = '';
         if (nearbyEvents.length > 0) {
             const windowSec = (timeWindow / 1000).toFixed(0);
             whaleSection = `
                 <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #404040;">
-                    <div style="font-size: 11px; margin-bottom: 3px; color: #b0b0b0;">Whale Events (±${windowSec}s):</div>
+                    <div style="font-size: 11px; margin-bottom: 3px; color: #b0b0b0;">
+                        ${periodLabel} | Whale Events (±${windowSec}s):
+                    </div>
                     ${bidEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #00ff88;">▲</span> ${bidEvents.length} Bid${bidEvents.length > 1 ? 's' : ''} ($${formatNumber(bidVolume)})</div>` : ''}
                     ${askEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #ff4444;">▼</span> ${askEvents.length} Ask${askEvents.length > 1 ? 's' : ''} ($${formatNumber(askVolume)})</div>` : ''}
                     ${marketEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #ffaa00;">●</span> ${marketEvents.length} Trade${marketEvents.length > 1 ? 's' : ''} ($${formatNumber(marketVolume)})</div>` : ''}
@@ -332,10 +352,22 @@ function loadPriceData(priceData) {
     // Create markers for whale events and spike
     const allMarkers = [];
 
-    // Add whale event markers
+    // Add whale event markers - BEFORE interval (semi-transparent)
+    if (currentInterval && currentInterval.whale_events_before) {
+        const beforeMarkers = createWhaleMarkers(currentInterval.whale_events_before, 0.3);
+        allMarkers.push(...beforeMarkers);
+    }
+
+    // Add whale event markers - DURING interval (full opacity)
     if (currentInterval && currentInterval.whale_events) {
-        const whaleMarkers = createWhaleMarkers(currentInterval.whale_events);
-        allMarkers.push(...whaleMarkers);
+        const duringMarkers = createWhaleMarkers(currentInterval.whale_events, 1.0);
+        allMarkers.push(...duringMarkers);
+    }
+
+    // Add whale event markers - AFTER interval (semi-transparent)
+    if (currentInterval && currentInterval.whale_events_after) {
+        const afterMarkers = createWhaleMarkers(currentInterval.whale_events_after, 0.3);
+        allMarkers.push(...afterMarkers);
     }
 
     // Add interval boundary markers
@@ -381,12 +413,16 @@ function loadPriceData(priceData) {
 
     lineSeries.setMarkers(allMarkers);
 
+    // Add visual boundary lines for context periods
+    // Note: TradingView doesn't support vertical lines directly, but markers already show START/END
+    // We could add shaded regions using additional series if needed
+
     // Fit content
     chart.timeScale().fitContent();
 }
 
 // Create markers for whale events
-function createWhaleMarkers(events) {
+function createWhaleMarkers(events, opacity = 1.0) {
     if (!events || events.length === 0) return [];
 
     const markers = events.map(event => {
@@ -411,6 +447,11 @@ function createWhaleMarkers(events) {
             position = event.side === 'buy' ? 'belowBar' : 'aboveBar';
         }
 
+        // Apply opacity to color
+        if (opacity < 1.0) {
+            color = applyOpacity(color, opacity);
+        }
+
         const usdValue = event.usd_value / 1000; // Convert to K
         const text = usdValue >= 1 ? `${usdValue.toFixed(1)}K` : '';
 
@@ -419,8 +460,8 @@ function createWhaleMarkers(events) {
             position: position,
             color: color,
             shape: shape,
-            text: text,
-            size: 1,
+            text: opacity === 1.0 ? text : '', // Hide text for semi-transparent markers
+            size: opacity === 1.0 ? 1 : 0.5, // Smaller size for context events
             // Store full event data for tooltip (custom implementation needed)
             _eventData: event
         };
@@ -429,30 +470,197 @@ function createWhaleMarkers(events) {
     return markers;
 }
 
+// Apply opacity to hex color
+function applyOpacity(hexColor, opacity) {
+    // Convert hex to RGB
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    // Return as rgba with opacity
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 // Load whale events into the events panel
 function loadWhaleEvents(data) {
-    // Update event statistics
-    const totalEvents = data.whale_events.length;
-    const totalVolume = data.whale_events.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+    // Calculate statistics for all three periods
+    const beforeEvents = data.whale_events_before || [];
+    const duringEvents = data.whale_events || [];
+    const afterEvents = data.whale_events_after || [];
 
-    document.getElementById('event-stat-total').textContent = totalEvents;
+    const beforeCount = beforeEvents.length;
+    const duringCount = duringEvents.length;
+    const afterCount = afterEvents.length;
+
+    const beforeVolume = beforeEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+    const duringVolume = duringEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+    const afterVolume = afterEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+
+    const totalEvents = beforeCount + duringCount + afterCount;
+    const totalVolume = beforeVolume + duringVolume + afterVolume;
+
+    // Update event statistics with comparison
+    const avgCount = (beforeCount + afterCount) / 2;
+    const countChange = avgCount > 0 ? ((duringCount - avgCount) / avgCount * 100) : 0;
+    const changeSign = countChange >= 0 ? '+' : '';
+    const changeColor = countChange >= 0 ? '#00ff88' : '#ff4444';
+
+    document.getElementById('event-stat-total').innerHTML = `
+        <span style="color: #b0b0b0; font-size: 0.8rem;">${beforeCount}</span>
+        <span style="color: white; font-weight: 600;"> ${duringCount} </span>
+        <span style="color: #b0b0b0; font-size: 0.8rem;">${afterCount}</span>
+        <span style="color: ${changeColor}; font-size: 0.75rem; margin-left: 4px;">${changeSign}${countChange.toFixed(0)}%</span>
+    `;
+
     document.getElementById('event-stat-volume').textContent = `$${formatNumber(totalVolume)}`;
 
-    // Load events into timeline
-    loadEventsList('during', data.whale_events);
+    // Update section titles with counts
+    const beforeSection = document.getElementById('events-before');
+    const duringSection = document.getElementById('events-during');
+    const afterSection = document.getElementById('events-after');
 
-    if (data.whale_events_before && data.whale_events_before.length > 0) {
-        document.getElementById('events-before').style.display = 'block';
-        loadEventsList('before', data.whale_events_before);
+    // Update section titles
+    beforeSection.querySelector('.section-title').innerHTML = `
+        <span style="color: #2962ff;">⬅ Before Interval</span>
+        <span style="color: #b0b0b0; font-size: 0.8rem; margin-left: 0.5rem;">(${beforeCount})</span>
+    `;
+
+    duringSection.querySelector('.section-title').innerHTML = `
+        <span style="color: #ffaa00;">◆ During Interval</span>
+        <span style="color: white; font-size: 0.8rem; margin-left: 0.5rem; font-weight: 600;">(${duringCount})</span>
+    `;
+
+    afterSection.querySelector('.section-title').innerHTML = `
+        <span style="color: #ff6b6b;">➡ After Interval</span>
+        <span style="color: #b0b0b0; font-size: 0.8rem; margin-left: 0.5rem;">(${afterCount})</span>
+    `;
+
+    // Load events into timeline
+    loadEventsList('during', duringEvents);
+
+    if (beforeEvents.length > 0) {
+        beforeSection.style.display = 'block';
+        loadEventsList('before', beforeEvents);
     } else {
-        document.getElementById('events-before').style.display = 'none';
+        beforeSection.style.display = 'none';
     }
 
-    if (data.whale_events_after && data.whale_events_after.length > 0) {
-        document.getElementById('events-after').style.display = 'block';
-        loadEventsList('after', data.whale_events_after);
+    if (afterEvents.length > 0) {
+        afterSection.style.display = 'block';
+        loadEventsList('after', afterEvents);
     } else {
-        document.getElementById('events-after').style.display = 'none';
+        afterSection.style.display = 'none';
+    }
+
+    // Generate analytical insights
+    generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeVolume, duringVolume, afterVolume);
+}
+
+// Generate analytical insights from whale activity patterns
+function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeVolume, duringVolume, afterVolume) {
+    const insights = [];
+    const insightsPanel = document.getElementById('insights-panel');
+    const insightsContent = document.getElementById('insights-content');
+
+    if (duringEvents.length === 0) {
+        insightsPanel.style.display = 'none';
+        return;
+    }
+
+    // Insight 1: Activity density change
+    const avgCount = (beforeEvents.length + afterEvents.length) / 2;
+    const countChange = avgCount > 0 ? ((duringEvents.length - avgCount) / avgCount * 100) : 0;
+
+    if (Math.abs(countChange) > 20) {
+        const type = countChange > 0 ? 'positive' : 'negative';
+        const verb = countChange > 0 ? 'increased' : 'decreased';
+        insights.push({
+            type: type,
+            icon: countChange > 0 ? '📈' : '📉',
+            text: `Activity ${verb} by ${Math.abs(countChange).toFixed(0)}% during spike`
+        });
+    }
+
+    // Insight 2: Timing - find first significant whale event before spike
+    if (beforeEvents.length > 0) {
+        const startTime = new Date(data.start_time).getTime();
+        const firstSignificantEvent = beforeEvents
+            .filter(e => e.usd_value > 1000)
+            .sort((a, b) => new Date(b.time) - new Date(a.time))[0];
+
+        if (firstSignificantEvent) {
+            const eventTime = new Date(firstSignificantEvent.time).getTime();
+            const timeDiff = (startTime - eventTime) / 1000;
+
+            if (timeDiff < 10) {
+                insights.push({
+                    type: 'warning',
+                    icon: '⏱️',
+                    text: `Large ${firstSignificantEvent.side} order ${timeDiff.toFixed(1)}s before spike`,
+                    value: `$${formatNumber(firstSignificantEvent.usd_value)}`
+                });
+            }
+        }
+    }
+
+    // Insight 3: Volume concentration
+    const totalVolume = beforeVolume + duringVolume + afterVolume;
+    const duringPct = totalVolume > 0 ? (duringVolume / totalVolume * 100) : 0;
+
+    if (duringPct > 40) {
+        insights.push({
+            type: 'positive',
+            icon: '💰',
+            text: `${duringPct.toFixed(0)}% of total volume occurred during spike`
+        });
+    }
+
+    // Insight 4: Bid vs Ask dominance
+    const duringBids = duringEvents.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
+    const duringAsks = duringEvents.filter(e => e.side === 'ask' || e.event_type.includes('ask'));
+    const bidVolume = duringBids.reduce((sum, e) => sum + e.usd_value, 0);
+    const askVolume = duringAsks.reduce((sum, e) => sum + e.usd_value, 0);
+
+    const priceChange = data.change_pct;
+    if (priceChange > 0 && bidVolume > askVolume * 1.5) {
+        insights.push({
+            type: 'positive',
+            icon: '🟢',
+            text: 'Strong buying pressure drove price up',
+            value: `${(bidVolume / askVolume).toFixed(1)}x bids`
+        });
+    } else if (priceChange < 0 && askVolume > bidVolume * 1.5) {
+        insights.push({
+            type: 'negative',
+            icon: '🔴',
+            text: 'Heavy selling pressure pushed price down',
+            value: `${(askVolume / bidVolume).toFixed(1)}x asks`
+        });
+    }
+
+    // Insight 5: Market reaction (after events)
+    if (afterEvents.length > duringEvents.length * 1.3) {
+        insights.push({
+            type: 'warning',
+            icon: '⚡',
+            text: 'Strong market reaction following spike',
+            value: `${afterEvents.length} events after`
+        });
+    }
+
+    // Render insights
+    if (insights.length > 0) {
+        insightsContent.innerHTML = insights.map(insight => `
+            <div class="insight-item ${insight.type}">
+                <span class="insight-icon">${insight.icon}</span>
+                <span class="insight-text">${insight.text}</span>
+                ${insight.value ? `<span class="insight-value">${insight.value}</span>` : ''}
+            </div>
+        `).join('');
+        insightsPanel.style.display = 'block';
+    } else {
+        insightsPanel.style.display = 'none';
     }
 }
 

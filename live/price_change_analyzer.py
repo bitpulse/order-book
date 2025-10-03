@@ -270,9 +270,10 @@ class PriceChangeAnalyzer:
             interval_duration = change['end_time'] - change['start_time']
 
             # Get price data: before, during, and after the interval
-            # Show equal time before and after for context
-            extended_start = change['start_time'] - interval_duration
-            extended_end = change['end_time'] + interval_duration
+            # Show 3x interval time before and after for better context analysis
+            context_multiplier = 3
+            extended_start = change['start_time'] - interval_duration * context_multiplier
+            extended_end = change['end_time'] + interval_duration * context_multiplier
             price_data = self.get_price_data(extended_start, extended_end)
 
             # Get whale events for the interval only (not the extended period)
