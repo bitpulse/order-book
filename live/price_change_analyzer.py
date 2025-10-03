@@ -244,13 +244,23 @@ class PriceChangeAnalyzer:
 
         results = []
         for i, change in enumerate(price_changes, 1):
-            # Get price data for the interval
-            price_data = self.get_price_data(change['start_time'], change['end_time'])
+            # Calculate extended time window for context (before and after)
+            interval_duration = change['end_time'] - change['start_time']
 
-            # Get whale events for the interval
+            # Get price data: before, during, and after the interval
+            # Show equal time before and after for context
+            extended_start = change['start_time'] - interval_duration
+            extended_end = change['end_time'] + interval_duration
+            price_data = self.get_price_data(extended_start, extended_end)
+
+            # Get whale events for the interval only (not the extended period)
             whale_events = self.get_whale_events(change['start_time'], change['end_time'])
 
-            # Aggregate events by type
+            # Also get whale events from before and after for context
+            whale_events_before = self.get_whale_events(extended_start, change['start_time'])
+            whale_events_after = self.get_whale_events(change['end_time'], extended_end)
+
+            # Aggregate events by type (only for the main interval)
             event_summary = defaultdict(lambda: {'count': 0, 'total_usd': 0})
             for event in whale_events:
                 etype = event['event_type']
@@ -266,10 +276,168 @@ class PriceChangeAnalyzer:
                 'change_pct': change['change_pct'],
                 'price_data': price_data,
                 'whale_events': whale_events,
-                'event_summary': dict(event_summary)
+                'whale_events_before': whale_events_before,
+                'whale_events_after': whale_events_after,
+                'event_summary': dict(event_summary),
+                'extended_start': extended_start,
+                'extended_end': extended_end
             })
 
         return results
+
+    def _draw_mini_chart(self, price_data: List[Dict], interval_start: datetime, interval_end: datetime,
+                         width: int = 70, height: int = 15) -> List[str]:
+        """Draw ASCII line chart from price data with interval highlighting"""
+        if len(price_data) < 2:
+            return [f"{YELLOW}Insufficient data for chart{RESET}"]
+
+        # Extract prices and times
+        prices = [p['mid_price'] for p in price_data]
+        times = [p['time'] for p in price_data]
+
+        # Calculate price range with padding
+        min_price = min(prices)
+        max_price = max(prices)
+        price_range = max_price - min_price
+
+        # Avoid division by zero and add padding
+        if price_range == 0:
+            price_range = max_price * 0.001 if max_price > 0 else 1.0
+
+        # Add 2% padding to top and bottom
+        padding = price_range * 0.02
+        min_price -= padding
+        max_price += padding
+        price_range = max_price - min_price
+
+        # Resample data to fit chart width
+        step = max(1, len(prices) // width)
+        sampled_prices = []
+        sampled_times = []
+        for i in range(0, len(prices), step):
+            chunk = prices[i:i+step]
+            sampled_prices.append(sum(chunk) / len(chunk))  # Average
+            sampled_times.append(times[i])
+
+        # Ensure we don't exceed chart width
+        sampled_prices = sampled_prices[:width]
+        sampled_times = sampled_times[:width]
+
+        # Determine which columns are in the interval (for highlighting)
+        interval_cols = set()
+        for col, t in enumerate(sampled_times):
+            if interval_start <= t <= interval_end:
+                interval_cols.add(col)
+
+        # Convert prices to row positions
+        price_rows = []
+        for price in sampled_prices:
+            normalized = (price - min_price) / price_range
+            row = int((1 - normalized) * (height - 1))
+            price_rows.append(row)
+
+        # Create chart grid
+        chart = []
+
+        # Draw chart rows (top to bottom = high to low price)
+        for row in range(height):
+            # Build line
+            line_parts = []
+
+            # Add price scale on the left
+            if row == 0:
+                label = f"{max_price:>9.4f} "
+            elif row == height - 1:
+                label = f"{min_price:>9.4f} "
+            elif row == height // 2:
+                label = f"{(max_price + min_price) / 2:>9.4f} "
+            else:
+                label = " " * 10
+
+            line_parts.append(f"{DIM}{label}{RESET}")
+            line_parts.append(f"{DIM}┃{RESET}")
+
+            # Draw chart line
+            for col in range(len(price_rows)):
+                current_row = price_rows[col]
+
+                # Determine color based on position and trend
+                in_interval = col in interval_cols
+
+                if col > 0:
+                    prev_price = sampled_prices[col - 1]
+                    curr_price = sampled_prices[col]
+                    if curr_price > prev_price:
+                        color = GREEN if in_interval else f"{BOLD}{GREEN}"
+                    elif curr_price < prev_price:
+                        color = RED if in_interval else f"{BOLD}{RED}"
+                    else:
+                        color = YELLOW if in_interval else f"{BOLD}{YELLOW}"
+                else:
+                    color = CYAN if not in_interval else f"{BOLD}{CYAN}"
+
+                # Make interval portion brighter/bolder
+                if not in_interval:
+                    color = f"{DIM}{color}"
+
+                # Check if we should draw on this row
+                if current_row == row:
+                    # Draw the main line point
+                    if col < len(price_rows) - 1:
+                        next_row = price_rows[col + 1]
+                        if next_row < current_row:  # Going up
+                            line_parts.append(f"{color}╱{RESET}")
+                        elif next_row > current_row:  # Going down
+                            line_parts.append(f"{color}╲{RESET}")
+                        else:  # Flat
+                            line_parts.append(f"{color}━{RESET}")
+                    else:
+                        line_parts.append(f"{color}●{RESET}")
+
+                # Draw connecting lines between points
+                elif col > 0:
+                    prev_row = price_rows[col - 1]
+                    next_row = price_rows[col]
+
+                    # Check if line passes through this row
+                    if prev_row < next_row:  # Line going down
+                        if row > prev_row and row <= next_row:
+                            line_parts.append(f"{color}│{RESET}")
+                        else:
+                            line_parts.append(" ")
+                    elif prev_row > next_row:  # Line going up
+                        if row < prev_row and row >= next_row:
+                            line_parts.append(f"{color}│{RESET}")
+                        else:
+                            line_parts.append(" ")
+                    else:
+                        line_parts.append(" ")
+                else:
+                    line_parts.append(" ")
+
+            chart.append("".join(line_parts))
+
+        # Add time axis
+        time_axis_parts = [" " * 10, f"{DIM}┗{RESET}"]
+
+        # Calculate time labels
+        if len(price_data) > 0:
+            start_time = price_data[0]['time']
+            end_time = price_data[-1]['time']
+
+            # Add horizontal line
+            time_axis_parts.append(f"{DIM}{'━' * len(sampled_prices)}{RESET}")
+            chart.append("".join(time_axis_parts))
+
+            # Add time labels
+            time_label = " " * 11 + f"{DIM}"
+            time_label += f"{start_time.strftime('%H:%M:%S')}"
+            time_label += " " * (len(sampled_prices) - 16)
+            time_label += f"{end_time.strftime('%H:%M:%S')}"
+            time_label += f"{RESET}"
+            chart.append(time_label)
+
+        return chart
 
     def display_terminal(self, results: List[Dict]):
         """Display results in terminal with color coding"""
@@ -282,6 +450,19 @@ class PriceChangeAnalyzer:
             print(f"{DIM}Time: {result['start_time']} → {result['end_time']}{RESET}")
             print(f"{DIM}Price: ${result['start_price']:.2f} → ${result['end_price']:.2f}{RESET}")
             print(f"{DIM}Price data points: {len(result['price_data'])}{RESET}")
+
+            # Draw price chart (only if enough data points for meaningful visualization)
+            if result['price_data'] and len(result['price_data']) >= 10:
+                print(f"\n{BOLD}Price Movement:{RESET} {DIM}(interval highlighted in bold, before/after dimmed){RESET}")
+                chart_lines = self._draw_mini_chart(
+                    result['price_data'],
+                    result['start_time'],
+                    result['end_time']
+                )
+                for line in chart_lines:
+                    print(line)
+            elif result['price_data'] and len(result['price_data']) >= 2:
+                print(f"\n{DIM}Price Movement: {len(result['price_data'])} data points (too few for chart, try larger interval){RESET}")
 
             # Event summary
             if result['event_summary']:
@@ -329,8 +510,10 @@ class PriceChangeAnalyzer:
             export_result = result.copy()
             export_result['start_time'] = result['start_time'].isoformat()
             export_result['end_time'] = result['end_time'].isoformat()
+            export_result['extended_start'] = result['extended_start'].isoformat()
+            export_result['extended_end'] = result['extended_end'].isoformat()
 
-            # Convert price data times
+            # Convert price data times (includes before, during, and after)
             export_result['price_data'] = [
                 {**point, 'time': point['time'].isoformat()}
                 for point in result['price_data']
@@ -340,6 +523,16 @@ class PriceChangeAnalyzer:
             export_result['whale_events'] = [
                 {**event, 'time': event['time'].isoformat()}
                 for event in result['whale_events']
+            ]
+
+            export_result['whale_events_before'] = [
+                {**event, 'time': event['time'].isoformat()}
+                for event in result['whale_events_before']
+            ]
+
+            export_result['whale_events_after'] = [
+                {**event, 'time': event['time'].isoformat()}
+                for event in result['whale_events_after']
             ]
 
             export_data.append(export_result)
