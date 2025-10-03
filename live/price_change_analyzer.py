@@ -323,7 +323,16 @@ class PriceChangeAnalyzer:
         sampled_prices = sampled_prices[:width]
         sampled_times = sampled_times[:width]
 
-        # Determine which columns are in the interval (for highlighting)
+        # Find the exact point where the biggest price change happened
+        max_change_col = -1
+        max_change_amount = 0
+        for col in range(1, len(sampled_prices)):
+            change = abs(sampled_prices[col] - sampled_prices[col - 1])
+            if change > max_change_amount:
+                max_change_amount = change
+                max_change_col = col
+
+        # Determine which columns are in the interval (for reference only)
         interval_cols = set()
         for col, t in enumerate(sampled_times):
             if interval_start <= t <= interval_end:
@@ -361,24 +370,27 @@ class PriceChangeAnalyzer:
             for col in range(len(price_rows)):
                 current_row = price_rows[col]
 
-                # Determine color based on position and trend
-                in_interval = col in interval_cols
+                # Highlight the exact spike point
+                is_spike = (col == max_change_col or col == max_change_col - 1)
 
+                # Determine color based on trend
                 if col > 0:
                     prev_price = sampled_prices[col - 1]
                     curr_price = sampled_prices[col]
                     if curr_price > prev_price:
-                        color = GREEN if in_interval else f"{BOLD}{GREEN}"
+                        base_color = GREEN
                     elif curr_price < prev_price:
-                        color = RED if in_interval else f"{BOLD}{RED}"
+                        base_color = RED
                     else:
-                        color = YELLOW if in_interval else f"{BOLD}{YELLOW}"
+                        base_color = WHITE
                 else:
-                    color = CYAN if not in_interval else f"{BOLD}{CYAN}"
+                    base_color = CYAN
 
-                # Make interval portion brighter/bolder
-                if not in_interval:
-                    color = f"{DIM}{color}"
+                # Make spike point extremely bright, rest dimmed
+                if is_spike:
+                    color = f"{BOLD}{base_color}"
+                else:
+                    color = f"{DIM}{base_color}"
 
                 # Check if we should draw on this row
                 if current_row == row:
@@ -386,9 +398,17 @@ class PriceChangeAnalyzer:
                     if col < len(price_rows) - 1:
                         next_row = price_rows[col + 1]
                         if next_row < current_row:  # Going up
-                            line_parts.append(f"{color}╱{RESET}")
+                            # Use special marker for spike
+                            if is_spike:
+                                line_parts.append(f"{color}▲{RESET}")
+                            else:
+                                line_parts.append(f"{color}╱{RESET}")
                         elif next_row > current_row:  # Going down
-                            line_parts.append(f"{color}╲{RESET}")
+                            # Use special marker for spike
+                            if is_spike:
+                                line_parts.append(f"{color}▼{RESET}")
+                            else:
+                                line_parts.append(f"{color}╲{RESET}")
                         else:  # Flat
                             line_parts.append(f"{color}━{RESET}")
                     else:
@@ -417,7 +437,7 @@ class PriceChangeAnalyzer:
 
             chart.append("".join(line_parts))
 
-        # Add time axis
+        # Add time axis with interval markers
         time_axis_parts = [" " * 10, f"{DIM}┗{RESET}"]
 
         # Calculate time labels
@@ -425,17 +445,49 @@ class PriceChangeAnalyzer:
             start_time = price_data[0]['time']
             end_time = price_data[-1]['time']
 
-            # Add horizontal line
-            time_axis_parts.append(f"{DIM}{'━' * len(sampled_prices)}{RESET}")
+            # Build horizontal line with spike marker
+            axis_line = []
+            for col in range(len(sampled_prices)):
+                if col == max_change_col:
+                    # Mark the exact spike point
+                    if sampled_prices[col] > sampled_prices[col - 1]:
+                        axis_line.append(f"{BOLD}{GREEN}▲{RESET}")
+                    else:
+                        axis_line.append(f"{BOLD}{RED}▼{RESET}")
+                else:
+                    axis_line.append(f"{DIM}━{RESET}")
+
+            time_axis_parts.append("".join(axis_line))
             chart.append("".join(time_axis_parts))
 
-            # Add time labels
-            time_label = " " * 11 + f"{DIM}"
-            time_label += f"{start_time.strftime('%H:%M:%S')}"
-            time_label += " " * (len(sampled_prices) - 16)
-            time_label += f"{end_time.strftime('%H:%M:%S')}"
-            time_label += f"{RESET}"
-            chart.append(time_label)
+            # Add time labels with spike marker
+            time_label_parts = [" " * 11, f"{DIM}{start_time.strftime('%H:%M:%S')}{RESET}"]
+
+            # Add spike marker label
+            if max_change_col >= 0 and max_change_col < len(sampled_times):
+                spike_time = sampled_times[max_change_col]
+
+                # Calculate spacing
+                spaces_before_spike = max(0, max_change_col - 8)
+                if spaces_before_spike > 0:
+                    time_label_parts.append(" " * spaces_before_spike)
+
+                # Determine if price went up or down
+                if sampled_prices[max_change_col] > sampled_prices[max_change_col - 1]:
+                    spike_marker = f"{BOLD}{GREEN}↑SPIKE{RESET}"
+                else:
+                    spike_marker = f"{BOLD}{RED}↓SPIKE{RESET}"
+
+                time_label_parts.append(spike_marker)
+
+                spaces_after = max(0, len(sampled_prices) - max_change_col - 14)
+                if spaces_after > 0:
+                    time_label_parts.append(" " * spaces_after)
+            else:
+                time_label_parts.append(" " * (len(sampled_prices) - 16))
+
+            time_label_parts.append(f"{DIM}{end_time.strftime('%H:%M:%S')}{RESET}")
+            chart.append("".join(time_label_parts))
 
         return chart
 
@@ -453,7 +505,7 @@ class PriceChangeAnalyzer:
 
             # Draw price chart (only if enough data points for meaningful visualization)
             if result['price_data'] and len(result['price_data']) >= 10:
-                print(f"\n{BOLD}Price Movement:{RESET} {DIM}(interval highlighted in bold, before/after dimmed){RESET}")
+                print(f"\n{BOLD}Price Movement:{RESET} {DIM}(spike point highlighted with ▲/▼ marker){RESET}")
                 chart_lines = self._draw_mini_chart(
                     result['price_data'],
                     result['start_time'],
