@@ -412,10 +412,28 @@ def main():
         if args.output == 'terminal':
             analyzer.display_terminal(results)
         elif args.output == 'json':
-            export_path = args.export_path or f"price_changes_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            # Create data directory if it doesn't exist
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+            os.makedirs(data_dir, exist_ok=True)
+
+            if args.export_path:
+                export_path = args.export_path
+            else:
+                filename = f"price_changes_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                export_path = os.path.join(data_dir, filename)
+
             analyzer.export_json(results, export_path)
         elif args.output == 'csv':
-            export_path = args.export_path or f"price_changes_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            # Create data directory if it doesn't exist
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+            os.makedirs(data_dir, exist_ok=True)
+
+            if args.export_path:
+                export_path = args.export_path
+            else:
+                filename = f"price_changes_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                export_path = os.path.join(data_dir, filename)
+
             analyzer.export_csv(results, export_path)
 
         analyzer.close()
