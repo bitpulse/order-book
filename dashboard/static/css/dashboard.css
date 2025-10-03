@@ -331,7 +331,7 @@ body {
 /* Event Stats */
 .event-stats {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     padding: 1rem;
     border-bottom: 1px solid var(--border-color);

@@ -628,6 +628,14 @@ function loadWhaleEvents(data) {
     const totalEvents = beforeCount + duringCount + afterCount;
     const totalVolume = beforeVolume + duringVolume + afterVolume;
 
+    // Find biggest whale events
+    const allEvents = [...beforeEvents, ...duringEvents, ...afterEvents];
+    const biggestWhale = allEvents.length > 0 ?
+        allEvents.reduce((max, e) => e.usd_value > max.usd_value ? e : max, allEvents[0]) : null;
+
+    const biggestDuringWhale = duringEvents.length > 0 ?
+        duringEvents.reduce((max, e) => e.usd_value > max.usd_value ? e : max, duringEvents[0]) : null;
+
     // Update event statistics with comparison
     const avgCount = (beforeCount + afterCount) / 2;
     const countChange = avgCount > 0 ? ((duringCount - avgCount) / avgCount * 100) : 0;
@@ -642,6 +650,27 @@ function loadWhaleEvents(data) {
     `;
 
     document.getElementById('event-stat-volume').textContent = `$${formatNumber(totalVolume)}`;
+
+    // Update biggest whale stats
+    if (biggestWhale) {
+        const whaleColor = biggestWhale.side === 'bid' ? '#00ff88' : biggestWhale.side === 'ask' ? '#ff4444' : '#ffaa00';
+        document.getElementById('event-stat-biggest').innerHTML = `
+            <span style="color: ${whaleColor}; font-weight: 600;">$${formatNumber(biggestWhale.usd_value)}</span>
+            <div style="font-size: 0.7rem; color: #b0b0b0; margin-top: 2px;">${biggestWhale.event_type.replace('_', ' ')}</div>
+        `;
+    } else {
+        document.getElementById('event-stat-biggest').textContent = '$0';
+    }
+
+    if (biggestDuringWhale) {
+        const whaleColor = biggestDuringWhale.side === 'bid' ? '#00ff88' : biggestDuringWhale.side === 'ask' ? '#ff4444' : '#ffaa00';
+        document.getElementById('event-stat-biggest-during').innerHTML = `
+            <span style="color: ${whaleColor}; font-weight: 600;">$${formatNumber(biggestDuringWhale.usd_value)}</span>
+            <div style="font-size: 0.7rem; color: #b0b0b0; margin-top: 2px;">${biggestDuringWhale.event_type.replace('_', ' ')}</div>
+        `;
+    } else {
+        document.getElementById('event-stat-biggest-during').textContent = '$0';
+    }
 
     // Update section titles with counts
     const beforeSection = document.getElementById('events-before');
