@@ -1,7 +1,6 @@
-// Price Change Analyzer Dashboard - Chart and Events Handler
+// Price Change Analyzer Dashboard - Chart and Events Handler (Apache ECharts)
 
 let chart = null;
-let lineSeries = null;
 let currentData = null;
 let currentInterval = null;
 let minUsdFilter = 0; // Global filter for minimum USD value
@@ -29,14 +28,11 @@ async function loadFileList() {
                 option.textContent = `${file.filename} (${date.toLocaleString()})`;
                 selector.appendChild(option);
             });
-
-            // Auto-select the first (newest) file
-            selector.selectedIndex = 1;
-            await loadDataFile(data.files[0].filename);
         } else {
-            showError('No data files found. Please run the price change analyzer first.');
+            selector.innerHTML = '<option value="">No files found</option>';
         }
     } catch (error) {
+        console.error('Error loading file list:', error);
         showError('Failed to load file list: ' + error.message);
     }
 }
@@ -50,6 +46,8 @@ async function loadDataFile(filename) {
     try {
         const response = await fetch(`/api/data/${filename}`);
         let data = await response.json();
+
+        console.log('Loaded data:', data);
 
         if (data.error) {
             throw new Error(data.error);
@@ -67,6 +65,9 @@ async function loadDataFile(filename) {
             metadata = data.metadata;
         }
 
+        console.log('Intervals:', intervals);
+        console.log('Metadata:', metadata);
+
         currentData = intervals;
 
         // Extract and display analysis metadata
@@ -79,34 +80,49 @@ async function loadDataFile(filename) {
             document.getElementById('interval-selector-container').style.display = 'none';
         }
 
-        // Load first interval by default
+        // Load first interval
         if (intervals.length > 0) {
             loadInterval(intervals[0]);
         }
 
         showLoading(false);
     } catch (error) {
-        showLoading(false);
+        console.error('Error loading data file:', error);
         showError('Failed to load data: ' + error.message);
+        showLoading(false);
     }
 }
 
-// Show interval selector if multiple intervals
-function showIntervalSelector(data) {
+// Update analysis metadata display
+function updateAnalysisInfo(filename, intervals, metadata) {
+    const infoElement = document.getElementById('analysis-info');
+
+    if (metadata && metadata.symbol && metadata.interval_duration && metadata.threshold_pct != null) {
+        document.getElementById('info-symbol').textContent = metadata.symbol;
+        document.getElementById('info-interval').textContent = metadata.interval_duration;
+        document.getElementById('info-threshold').textContent = `${metadata.threshold_pct.toFixed(3)}%`;
+        document.getElementById('info-count').textContent = intervals.length;
+        infoElement.style.display = 'grid';
+    } else {
+        infoElement.style.display = 'none';
+    }
+}
+
+// Show interval selector with dropdown
+function showIntervalSelector(intervals) {
     const container = document.getElementById('interval-selector-container');
     const selector = document.getElementById('interval-selector');
 
-    container.style.display = 'flex';
     selector.innerHTML = '';
-
-    data.forEach((interval, index) => {
+    intervals.forEach((interval, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = `#${interval.rank}: ${interval.change_pct.toFixed(3)}% @ ${new Date(interval.start_time).toLocaleTimeString()}`;
+        const startTime = new Date(interval.start_time).toLocaleTimeString();
+        option.textContent = `#${interval.rank} - ${interval.change_pct.toFixed(3)}% @ ${startTime}`;
         selector.appendChild(option);
     });
 
-    selector.selectedIndex = 0;
+    container.style.display = 'block';
 }
 
 // Load specific interval data
@@ -122,7 +138,7 @@ function loadInterval(intervalData) {
     }
 
     // Load price data
-    loadPriceData(intervalData.price_data);
+    loadPriceData(intervalData);
 
     // Load whale events
     loadWhaleEvents(intervalData);
@@ -150,7 +166,7 @@ function updateStats(data) {
     document.getElementById('stat-events').textContent = totalEvents;
 }
 
-// Initialize TradingView chart
+// Initialize ECharts chart
 function initializeChart() {
     const container = document.getElementById('chart-container');
 
@@ -160,101 +176,423 @@ function initializeChart() {
         loading.style.display = 'none';
     }
 
-    chart = LightweightCharts.createChart(container, {
-        width: container.clientWidth,
-        height: container.clientHeight,
-        layout: {
-            background: { color: '#2d2d2d' },
-            textColor: '#e0e0e0',
+    // Initialize ECharts instance
+    chart = echarts.init(container, 'dark');
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        chart.resize();
+    });
+}
+
+// Load price data into chart
+function loadPriceData(data) {
+    if (!chart) return;
+
+    console.log('Loading price data:', data);
+
+    if (!data.price_data || !Array.isArray(data.price_data)) {
+        console.error('Invalid price_data:', data.price_data);
+        showError('Invalid price data format');
+        return;
+    }
+
+    const chartData = data.price_data.map(point => ({
+        time: new Date(point.time),
+        value: point.mid_price || point.price  // Support both field names
+    }));
+
+    console.log('Chart data sample:', chartData.slice(0, 5));
+    console.log('Total price points:', chartData.length);
+
+    // Filter events by USD
+    const filteredBefore = filterWhaleEventsByUsd(data.whale_events_before || []);
+    const filteredDuring = filterWhaleEventsByUsd(data.whale_events || []);
+    const filteredAfter = filterWhaleEventsByUsd(data.whale_events_after || []);
+
+    // Prepare whale event scatter data with artificial offsets for same timestamps
+    const whaleScatterBefore = prepareWhaleScatterData(filteredBefore, 'before');
+    const whaleScatterDuring = prepareWhaleScatterData(filteredDuring, 'during');
+    const whaleScatterAfter = prepareWhaleScatterData(filteredAfter, 'after');
+
+    // Find spike point
+    const startTime = new Date(data.start_time);
+    const endTime = new Date(data.end_time);
+    let maxChange = 0;
+    let spikePoint = null;
+
+    for (let i = 1; i < chartData.length; i++) {
+        const currentTime = chartData[i].time;
+        if (currentTime >= startTime && currentTime <= endTime) {
+            const change = Math.abs(chartData[i].value - chartData[i - 1].value);
+            if (change > maxChange) {
+                maxChange = change;
+                spikePoint = chartData[i];
+            }
+        }
+    }
+
+    // ECharts option
+    const option = {
+        backgroundColor: '#2d2d2d',
+        animation: false,
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'cross'
+            },
+            backgroundColor: 'rgba(45, 45, 45, 0.95)',
+            borderColor: '#404040',
+            textStyle: {
+                color: '#e0e0e0'
+            },
+            formatter: function(params) {
+                return formatTooltip(params, data);
+            }
         },
         grid: {
-            vertLines: { color: '#404040' },
-            horzLines: { color: '#404040' },
+            left: '3%',
+            right: '4%',
+            bottom: '8%',
+            top: '10%',
+            containLabel: true
         },
-        crosshair: {
-            mode: LightweightCharts.CrosshairMode.Normal,
+        dataZoom: [
+            {
+                type: 'inside',
+                start: 0,
+                end: 100
+            },
+            {
+                type: 'slider',
+                start: 0,
+                end: 100,
+                backgroundColor: '#2d2d2d',
+                dataBackground: {
+                    lineStyle: {
+                        color: '#2962ff'
+                    },
+                    areaStyle: {
+                        color: 'rgba(41, 98, 255, 0.2)'
+                    }
+                },
+                selectedDataBackground: {
+                    lineStyle: {
+                        color: '#2962ff'
+                    },
+                    areaStyle: {
+                        color: 'rgba(41, 98, 255, 0.5)'
+                    }
+                },
+                fillerColor: 'rgba(41, 98, 255, 0.15)',
+                borderColor: '#404040',
+                handleStyle: {
+                    color: '#2962ff'
+                },
+                textStyle: {
+                    color: '#e0e0e0'
+                }
+            }
+        ],
+        xAxis: {
+            type: 'time',
+            boundaryGap: false,
+            axisLine: {
+                lineStyle: { color: '#404040' }
+            },
+            axisLabel: {
+                color: '#e0e0e0',
+                formatter: function(value) {
+                    const date = new Date(value);
+                    return date.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                }
+            }
         },
-        rightPriceScale: {
-            borderColor: '#404040',
+        yAxis: {
+            type: 'value',
+            scale: true,
+            axisLine: {
+                lineStyle: { color: '#404040' }
+            },
+            splitLine: {
+                lineStyle: { color: '#404040' }
+            },
+            axisLabel: {
+                color: '#e0e0e0',
+                formatter: function(value) {
+                    if (value == null) return '$0';
+                    return '$' + value.toFixed(6);
+                }
+            }
         },
-        timeScale: {
-            borderColor: '#404040',
-            timeVisible: true,
-            secondsVisible: true,
-        },
+        series: [
+            // Main price line
+            {
+                name: 'Price',
+                type: 'line',
+                data: chartData.map(d => [d.time, d.value]),
+                lineStyle: {
+                    color: '#2962ff',
+                    width: 3
+                },
+                itemStyle: {
+                    color: '#2962ff'
+                },
+                symbol: 'circle',
+                symbolSize: 4,
+                smooth: false,
+                z: 2,
+                emphasis: {
+                    lineStyle: {
+                        width: 4
+                    }
+                }
+            },
+            // START marker
+            {
+                name: 'START',
+                type: 'scatter',
+                data: [[startTime, data.start_price]],
+                symbolSize: 15,
+                itemStyle: {
+                    color: '#ffaa00'
+                },
+                label: {
+                    show: true,
+                    formatter: '▼START',
+                    position: 'top',
+                    color: '#ffaa00',
+                    fontSize: 10
+                },
+                z: 10
+            },
+            // END marker
+            {
+                name: 'END',
+                type: 'scatter',
+                data: [[endTime, data.end_price]],
+                symbolSize: 15,
+                itemStyle: {
+                    color: '#ffaa00'
+                },
+                label: {
+                    show: true,
+                    formatter: '▲END',
+                    position: 'top',
+                    color: '#ffaa00',
+                    fontSize: 10
+                },
+                z: 10
+            },
+            // SPIKE marker
+            spikePoint ? {
+                name: 'SPIKE',
+                type: 'scatter',
+                data: [[spikePoint.time, spikePoint.value]],
+                symbolSize: 20,
+                itemStyle: {
+                    color: spikePoint.value > data.start_price ? '#00ff88' : '#ff4444'
+                },
+                label: {
+                    show: true,
+                    formatter: '★',
+                    position: spikePoint.value > data.start_price ? 'bottom' : 'top',
+                    fontSize: 16
+                },
+                z: 10
+            } : null,
+            // Whale events - BEFORE (semi-transparent blue)
+            {
+                name: 'Whale (Before)',
+                type: 'scatter',
+                data: whaleScatterBefore.map(e => [e.time, e.price, e]),
+                symbolSize: function(data) {
+                    return data[2].size;
+                },
+                itemStyle: {
+                    color: function(params) {
+                        return params.data[2].color;
+                    }
+                },
+                symbol: function(data) {
+                    return data[2].symbol;
+                },
+                label: {
+                    show: false
+                },
+                z: 5
+            },
+            // Whale events - DURING (full opacity)
+            {
+                name: 'Whale (During)',
+                type: 'scatter',
+                data: whaleScatterDuring.map(e => [e.time, e.price, e]),
+                symbolSize: function(data) {
+                    return data[2].size;
+                },
+                itemStyle: {
+                    color: function(params) {
+                        return params.data[2].color;
+                    }
+                },
+                symbol: function(data) {
+                    return data[2].symbol;
+                },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2].label;
+                    },
+                    position: function(params) {
+                        return params.data[2].labelPosition;
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
+                },
+                z: 8
+            },
+            // Whale events - AFTER (semi-transparent red)
+            {
+                name: 'Whale (After)',
+                type: 'scatter',
+                data: whaleScatterAfter.map(e => [e.time, e.price, e]),
+                symbolSize: function(data) {
+                    return data[2].size;
+                },
+                itemStyle: {
+                    color: function(params) {
+                        return params.data[2].color;
+                    }
+                },
+                symbol: function(data) {
+                    return data[2].symbol;
+                },
+                label: {
+                    show: false
+                },
+                z: 5
+            }
+        ].filter(s => s !== null)
+    };
+
+    chart.setOption(option);
+
+    // Add click handler for event details modal
+    chart.on('click', function(params) {
+        if (params.componentType === 'series' && params.seriesName.includes('Whale')) {
+            const eventData = params.data[2];
+            if (eventData && eventData.originalEvent) {
+                showEventDetailsModal(new Date(eventData.time), currentInterval);
+            }
+        }
     });
+}
 
-    lineSeries = chart.addLineSeries({
-        color: '#2962ff',
-        lineWidth: 2,
-    });
+// Prepare whale event scatter data with offset for overlapping timestamps
+function prepareWhaleScatterData(events, period) {
+    if (!events || events.length === 0) return [];
 
-    // Create tooltip element
-    const tooltip = document.createElement('div');
-    tooltip.id = 'chart-tooltip';
-    tooltip.style.cssText = `
-        position: absolute;
-        display: none;
-        padding: 8px;
-        box-sizing: border-box;
-        font-size: 12px;
-        text-align: left;
-        z-index: 1000;
-        top: 12px;
-        left: 12px;
-        pointer-events: none;
-        background: rgba(45, 45, 45, 0.95);
-        border: 1px solid #404040;
-        border-radius: 4px;
-        color: #e0e0e0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    `;
-    container.appendChild(tooltip);
+    // Sort by time
+    const sortedEvents = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
 
-    // Subscribe to crosshair move
-    chart.subscribeCrosshairMove((param) => {
-        if (!param.time || !param.point || !currentInterval) {
-            tooltip.style.display = 'none';
-            return;
+    // Track offsets for same timestamps
+    const timeOffsets = new Map();
+
+    return sortedEvents.map(event => {
+        const isBid = event.side === 'bid' || event.event_type.includes('bid');
+        const isAsk = event.side === 'ask' || event.event_type.includes('ask');
+
+        let color, symbol, labelPosition;
+
+        if (isBid) {
+            color = period === 'during' ? '#00ff88' : 'rgba(0, 255, 136, 0.3)';
+            symbol = 'triangle';
+            labelPosition = 'bottom';
+        } else if (isAsk) {
+            color = period === 'during' ? '#ff4444' : 'rgba(255, 68, 68, 0.3)';
+            symbol = 'triangle';
+            labelPosition = 'top';
+        } else {
+            color = period === 'during' ? '#ffaa00' : 'rgba(255, 170, 0, 0.3)';
+            symbol = 'circle';
+            labelPosition = 'top';
         }
 
-        const price = param.seriesData.get(lineSeries);
-        if (!price) {
-            tooltip.style.display = 'none';
-            return;
+        // Calculate offset for overlapping times
+        let eventTime = new Date(event.time);
+        const timeKey = Math.floor(eventTime.getTime() / 10); // Group by 10ms
+
+        if (timeOffsets.has(timeKey)) {
+            const offset = timeOffsets.get(timeKey);
+            eventTime = new Date(eventTime.getTime() + offset * 10); // Add 10ms per collision
+            timeOffsets.set(timeKey, offset + 1);
+        } else {
+            timeOffsets.set(timeKey, 1);
         }
 
-        const timeStr = new Date(param.time * 1000).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
+        const usdValue = event.usd_value / 1000;
+        const label = usdValue >= 1 ? `${usdValue.toFixed(1)}K` : '';
 
-        // Calculate change from start
-        const changeFromStart = ((price.value - currentInterval.start_price) / currentInterval.start_price) * 100;
-        const changeColor = changeFromStart >= 0 ? '#00ff88' : '#ff4444';
+        return {
+            time: eventTime,
+            price: event.price,
+            color: color,
+            symbol: symbol,
+            size: period === 'during' ? 12 : 6,
+            label: label,
+            labelPosition: labelPosition,
+            originalEvent: event,
+            period: period
+        };
+    });
+}
 
-        // Calculate dynamic time window based on interval size
-        const intervalDuration = (new Date(currentInterval.end_time) - new Date(currentInterval.start_time));
-        // Use 10% of interval duration or minimum 1 second
-        const timeWindow = Math.max(1000, intervalDuration * 0.1);
+// Format tooltip
+function formatTooltip(params, intervalData) {
+    if (!params || params.length === 0) return '';
 
-        // Find whale events near this time (from all periods: before, during, after)
-        const currentTime = new Date(param.time * 1000);
+    let html = '';
 
-        // Collect events from all three periods (apply USD filter)
-        const allEvents = [
-            ...filterWhaleEventsByUsd(currentInterval.whale_events_before || []),
-            ...filterWhaleEventsByUsd(currentInterval.whale_events || []),
-            ...filterWhaleEventsByUsd(currentInterval.whale_events_after || [])
-        ];
+    // Find the time from the first param
+    const time = new Date(params[0].value[0]);
+    const timeStr = time.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        fractionalSecondDigits: 3
+    });
 
-        let nearbyEvents = allEvents.filter(event => {
-            const eventTime = new Date(event.time);
-            return Math.abs(eventTime - currentTime) <= timeWindow;
-        });
+    html += `<strong>${timeStr}</strong><br/>`;
 
-        // Count event types and calculate volumes
+    // Show price
+    params.forEach(param => {
+        if (param.seriesName === 'Price' && param.value && param.value[1] != null) {
+            const price = param.value[1];
+            const changeFromStart = ((price - intervalData.start_price) / intervalData.start_price) * 100;
+            const changeColor = changeFromStart >= 0 ? '#00ff88' : '#ff4444';
+            html += `Price: $${price.toFixed(6)}<br/>`;
+            html += `<span style="color: ${changeColor}">Change: ${changeFromStart.toFixed(3)}%</span><br/>`;
+        }
+    });
+
+    // Find nearby whale events
+    const timeWindow = 1000; // 1 second
+    const allEvents = [
+        ...filterWhaleEventsByUsd(intervalData.whale_events_before || []),
+        ...filterWhaleEventsByUsd(intervalData.whale_events || []),
+        ...filterWhaleEventsByUsd(intervalData.whale_events_after || [])
+    ];
+
+    const nearbyEvents = allEvents.filter(event => {
+        const eventTime = new Date(event.time);
+        return Math.abs(eventTime - time) <= timeWindow;
+    });
+
+    if (nearbyEvents.length > 0) {
         const bidEvents = nearbyEvents.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
         const askEvents = nearbyEvents.filter(e => e.side === 'ask' || e.event_type.includes('ask'));
         const marketEvents = nearbyEvents.filter(e => e.event_type.includes('market'));
@@ -262,238 +600,14 @@ function initializeChart() {
         const bidVolume = bidEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
         const askVolume = askEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
         const marketVolume = marketEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
-        const totalVolume = bidVolume + askVolume + marketVolume;
 
-        // Determine which period we're in
-        const startTime = new Date(currentInterval.start_time).getTime();
-        const endTime = new Date(currentInterval.end_time).getTime();
-        const currentTimeMs = currentTime.getTime();
-
-        let periodLabel = '';
-        if (currentTimeMs < startTime) {
-            periodLabel = '<span style="color: #2962ff;">⬅ BEFORE</span>';
-        } else if (currentTimeMs >= startTime && currentTimeMs <= endTime) {
-            periodLabel = '<span style="color: #ffaa00;">◆ DURING</span>';
-        } else {
-            periodLabel = '<span style="color: #ff6b6b;">➡ AFTER</span>';
-        }
-
-        // Build whale events section
-        let whaleSection = '';
-        if (nearbyEvents.length > 0) {
-            const windowSec = (timeWindow / 1000).toFixed(0);
-            whaleSection = `
-                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #404040;">
-                    <div style="font-size: 11px; margin-bottom: 3px; color: #b0b0b0;">
-                        ${periodLabel} | Whale Events (±${windowSec}s):
-                    </div>
-                    ${bidEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #00ff88;">▲</span> ${bidEvents.length} Bid${bidEvents.length > 1 ? 's' : ''} ($${formatNumber(bidVolume)})</div>` : ''}
-                    ${askEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #ff4444;">▼</span> ${askEvents.length} Ask${askEvents.length > 1 ? 's' : ''} ($${formatNumber(askVolume)})</div>` : ''}
-                    ${marketEvents.length > 0 ? `<div style="font-size: 11px;"><span style="color: #ffaa00;">●</span> ${marketEvents.length} Trade${marketEvents.length > 1 ? 's' : ''} ($${formatNumber(marketVolume)})</div>` : ''}
-                    <div style="font-size: 11px; margin-top: 2px; font-weight: 600;">Total: <span style="color: #2962ff;">$${formatNumber(totalVolume)}</span></div>
-                </div>
-            `;
-        }
-
-        tooltip.style.display = 'block';
-        tooltip.innerHTML = `
-            <div style="margin-bottom: 4px; font-weight: 600;">${timeStr}</div>
-            <div>Price: <span style="color: #2962ff;">$${price.value.toFixed(6)}</span></div>
-            <div>Change: <span style="color: ${changeColor};">${changeFromStart >= 0 ? '+' : ''}${changeFromStart.toFixed(3)}%</span></div>
-            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #404040; color: #b0b0b0;">
-                <div style="font-size: 11px;">Interval: ${currentInterval.start_price.toFixed(6)} → ${currentInterval.end_price.toFixed(6)}</div>
-                <div style="font-size: 11px;">Total: <span style="color: ${currentInterval.change_pct >= 0 ? '#00ff88' : '#ff4444'};">${currentInterval.change_pct >= 0 ? '+' : ''}${currentInterval.change_pct.toFixed(3)}%</span></div>
-            </div>
-            ${whaleSection}
-        `;
-    });
-
-    // Handle chart click to show detailed event information
-    chart.subscribeClick((param) => {
-        if (!param.time || !currentInterval) return;
-
-        const clickedTime = new Date(param.time * 1000);
-        showEventDetailsModal(clickedTime, currentInterval);
-    });
-
-    // Handle window resize
-    window.addEventListener('resize', () => {
-        chart.applyOptions({
-            width: container.clientWidth,
-            height: container.clientHeight
-        });
-    });
-}
-
-// Load price data into chart
-function loadPriceData(priceData) {
-    if (!lineSeries || !priceData) return;
-
-    // Convert price data to chart format
-    const chartData = priceData.map(point => ({
-        time: new Date(point.time).getTime() / 1000, // Convert to Unix timestamp
-        value: point.mid_price
-    }));
-
-    // Sort by time
-    chartData.sort((a, b) => a.time - b.time);
-
-    lineSeries.setData(chartData);
-
-    // Get interval boundaries first
-    const startTime = currentInterval ? new Date(currentInterval.start_time).getTime() / 1000 : 0;
-    const endTime = currentInterval ? new Date(currentInterval.end_time).getTime() / 1000 : 0;
-
-    // Find the spike point ONLY within the interval (between START and END)
-    let maxChangeIdx = -1;
-    let maxChange = 0;
-    for (let i = 1; i < chartData.length; i++) {
-        const currentTime = chartData[i].time;
-
-        // Only consider points within the analyzed interval
-        if (currentTime >= startTime && currentTime <= endTime) {
-            const change = Math.abs(chartData[i].value - chartData[i - 1].value);
-            if (change > maxChange) {
-                maxChange = change;
-                maxChangeIdx = i;
-            }
-        }
+        html += '<br/><strong>Whale Events:</strong><br/>';
+        if (bidEvents.length > 0) html += `<span style="color: #00ff88">Bids: ${bidEvents.length} ($${formatNumber(bidVolume)})</span><br/>`;
+        if (askEvents.length > 0) html += `<span style="color: #ff4444">Asks: ${askEvents.length} ($${formatNumber(askVolume)})</span><br/>`;
+        if (marketEvents.length > 0) html += `<span style="color: #ffaa00">Market: ${marketEvents.length} ($${formatNumber(marketVolume)})</span><br/>`;
     }
 
-    // Create markers for whale events and spike
-    const allMarkers = [];
-
-    // Add whale event markers - BEFORE interval (semi-transparent)
-    if (currentInterval && currentInterval.whale_events_before) {
-        const filteredBefore = filterWhaleEventsByUsd(currentInterval.whale_events_before);
-        const beforeMarkers = createWhaleMarkers(filteredBefore, 0.3);
-        allMarkers.push(...beforeMarkers);
-    }
-
-    // Add whale event markers - DURING interval (full opacity)
-    if (currentInterval && currentInterval.whale_events) {
-        const filteredDuring = filterWhaleEventsByUsd(currentInterval.whale_events);
-        const duringMarkers = createWhaleMarkers(filteredDuring, 1.0);
-        allMarkers.push(...duringMarkers);
-    }
-
-    // Add whale event markers - AFTER interval (semi-transparent)
-    if (currentInterval && currentInterval.whale_events_after) {
-        const filteredAfter = filterWhaleEventsByUsd(currentInterval.whale_events_after);
-        const afterMarkers = createWhaleMarkers(filteredAfter, 0.3);
-        allMarkers.push(...afterMarkers);
-    }
-
-    // Add interval boundary markers
-    if (currentInterval) {
-
-        // Start of interval marker
-        allMarkers.push({
-            time: startTime,
-            position: 'aboveBar',
-            color: '#ffaa00',
-            shape: 'square',
-            text: '▼START',
-            size: 2
-        });
-
-        // End of interval marker
-        allMarkers.push({
-            time: endTime,
-            position: 'aboveBar',
-            color: '#ffaa00',
-            shape: 'square',
-            text: '▲END',
-            size: 2
-        });
-    }
-
-    // Add spike marker
-    if (maxChangeIdx > 0) {
-        const spikeTime = chartData[maxChangeIdx].time;
-        const spikeValue = chartData[maxChangeIdx].value;
-        const prevValue = chartData[maxChangeIdx - 1].value;
-        const isUp = spikeValue > prevValue;
-
-        allMarkers.push({
-            time: spikeTime,
-            position: isUp ? 'belowBar' : 'aboveBar',
-            color: isUp ? '#00ff88' : '#ff4444',
-            shape: 'circle',
-            text: '★ SPIKE',
-            size: 3
-        });
-    }
-
-    lineSeries.setMarkers(allMarkers);
-
-    // Add visual boundary lines for context periods
-    // Note: TradingView doesn't support vertical lines directly, but markers already show START/END
-    // We could add shaded regions using additional series if needed
-
-    // Fit content
-    chart.timeScale().fitContent();
-}
-
-// Create markers for whale events
-function createWhaleMarkers(events, opacity = 1.0) {
-    if (!events || events.length === 0) return [];
-
-    const markers = events.map(event => {
-        const isBid = event.side === 'bid' || event.event_type.includes('bid');
-        const isAsk = event.side === 'ask' || event.event_type.includes('ask');
-        const isMarket = event.event_type.includes('market');
-
-        let color = '#ffaa00'; // Default yellow
-        let position = 'aboveBar';
-        let shape = 'circle';
-
-        if (isBid) {
-            color = '#00ff88'; // Green for bids
-            position = 'belowBar';
-            shape = 'arrowUp';
-        } else if (isAsk) {
-            color = '#ff4444'; // Red for asks
-            position = 'aboveBar';
-            shape = 'arrowDown';
-        } else if (isMarket) {
-            shape = 'circle';
-            position = event.side === 'buy' ? 'belowBar' : 'aboveBar';
-        }
-
-        // Apply opacity to color
-        if (opacity < 1.0) {
-            color = applyOpacity(color, opacity);
-        }
-
-        const usdValue = event.usd_value / 1000; // Convert to K
-        const text = usdValue >= 1 ? `${usdValue.toFixed(1)}K` : '';
-
-        return {
-            time: new Date(event.time).getTime() / 1000,
-            position: position,
-            color: color,
-            shape: shape,
-            text: opacity === 1.0 ? text : '', // Hide text for semi-transparent markers
-            size: opacity === 1.0 ? 1 : 0.5, // Smaller size for context events
-            // Store full event data for tooltip (custom implementation needed)
-            _eventData: event
-        };
-    });
-
-    return markers;
-}
-
-// Apply opacity to hex color
-function applyOpacity(hexColor, opacity) {
-    // Convert hex to RGB
-    const hex = hexColor.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-
-    // Return as rgba with opacity
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    return html;
 }
 
 // Load whale events into the events panel
@@ -637,33 +751,35 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
     const askVolume = duringAsks.reduce((sum, e) => sum + e.usd_value, 0);
 
     const priceChange = data.change_pct;
-    if (priceChange > 0 && bidVolume > askVolume * 1.5) {
+    if (bidVolume > askVolume * 1.5 && priceChange > 0) {
+        const ratio = (bidVolume / askVolume).toFixed(1);
         insights.push({
             type: 'positive',
-            icon: '🟢',
-            text: 'Strong buying pressure drove price up',
-            value: `${(bidVolume / askVolume).toFixed(1)}x bids`
+            icon: '🐂',
+            text: `Strong buying pressure (${ratio}x more bids) aligned with price rise`
         });
-    } else if (priceChange < 0 && askVolume > bidVolume * 1.5) {
+    } else if (askVolume > bidVolume * 1.5 && priceChange < 0) {
+        const ratio = (askVolume / bidVolume).toFixed(1);
         insights.push({
             type: 'negative',
-            icon: '🔴',
-            text: 'Heavy selling pressure pushed price down',
-            value: `${(askVolume / bidVolume).toFixed(1)}x asks`
+            icon: '🐻',
+            text: `Strong selling pressure (${ratio}x more asks) aligned with price drop`
         });
-    }
-
-    // Insight 5: Market reaction (after events)
-    if (afterEvents.length > duringEvents.length * 1.3) {
+    } else if (bidVolume > askVolume * 1.5 && priceChange < 0) {
         insights.push({
             type: 'warning',
-            icon: '⚡',
-            text: 'Strong market reaction following spike',
-            value: `${afterEvents.length} events after`
+            icon: '⚠️',
+            text: 'Buying pressure during price drop - possible support level'
+        });
+    } else if (askVolume > bidVolume * 1.5 && priceChange > 0) {
+        insights.push({
+            type: 'warning',
+            icon: '⚠️',
+            text: 'Selling pressure during price rise - possible resistance level'
         });
     }
 
-    // Render insights
+    // Display insights
     if (insights.length > 0) {
         insightsContent.innerHTML = insights.map(insight => `
             <div class="insight-item ${insight.type}">
@@ -731,27 +847,15 @@ function createEventItem(event) {
         </div>
     `;
 
-    // Add click handler to highlight on chart
+    // Add click handler to show modal
     div.addEventListener('click', () => {
-        const timestamp = new Date(event.time).getTime() / 1000;
-        chart.timeScale().scrollToPosition(timestamp, true);
+        showEventDetailsModal(new Date(event.time), currentInterval);
     });
 
     return div;
 }
 
-// Format number with K/M suffixes
-function formatNumber(num) {
-    if (num >= 1000000) {
-        return (num / 1000000).toFixed(2) + 'M';
-    } else if (num >= 1000) {
-        return (num / 1000).toFixed(2) + 'K';
-    } else {
-        return num.toFixed(2);
-    }
-}
-
-// Show detailed event information modal when clicking on chart
+// Show event details modal
 function showEventDetailsModal(clickedTime, intervalData) {
     const modal = document.getElementById('event-details-modal');
     const modalTitle = document.getElementById('modal-title');
@@ -800,83 +904,74 @@ function showEventDetailsModal(clickedTime, intervalData) {
         periodColor = '#ff6b6b';
     }
 
-    modalTitle.innerHTML = `
-        <span style="color: ${periodColor};">${periodLabel}</span>
-        Whale Events at ${timeStr}
-    `;
+    modalTitle.innerHTML = `Whale Events at ${timeStr} <span style="color: ${periodColor}; margin-left: 8px;">${periodLabel}</span>`;
 
+    // Build modal content
     if (eventsAtTime.length === 0) {
-        modalBody.innerHTML = `
-            <div style="text-align: center; padding: 3rem; color: #707070;">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🐋</div>
-                <div style="font-size: 1.1rem;">No whale events found within ±2s of this time</div>
-            </div>
-        `;
+        modalBody.innerHTML = '<p style="text-align: center; color: #888; padding: 2rem;">No whale events found within ±2s of this time</p>';
     } else {
         // Calculate summary statistics
         const bidEvents = eventsAtTime.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
         const askEvents = eventsAtTime.filter(e => e.side === 'ask' || e.event_type.includes('ask'));
-        const marketEvents = eventsAtTime.filter(e => e.event_type.includes('market'));
+        const tradeEvents = eventsAtTime.filter(e => e.event_type.includes('market'));
 
-        const totalVolume = eventsAtTime.reduce((sum, e) => sum + (e.usd_value || 0), 0);
-        const bidVolume = bidEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
-        const askVolume = askEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+        const bidVolume = bidEvents.reduce((sum, e) => sum + e.usd_value, 0);
+        const askVolume = askEvents.reduce((sum, e) => sum + e.usd_value, 0);
+        const tradeVolume = tradeEvents.reduce((sum, e) => sum + e.usd_value, 0);
+        const totalVolume = bidVolume + askVolume + tradeVolume;
 
-        // Build modal content
+        // Calculate net pressure
+        let pressureText = 'Neutral';
+        if (bidVolume > askVolume * 1.2) {
+            const ratio = (bidVolume / askVolume).toFixed(1);
+            pressureText = `<span style="color: #00ff88;">${ratio}x more bids</span>`;
+        } else if (askVolume > bidVolume * 1.2) {
+            const ratio = (askVolume / bidVolume).toFixed(1);
+            pressureText = `<span style="color: #ff4444;">${ratio}x more asks</span>`;
+        }
+
         modalBody.innerHTML = `
             <div class="modal-summary">
-                <div class="modal-summary-grid">
-                    <div class="modal-summary-item">
-                        <div class="modal-summary-label">Total Events</div>
-                        <div class="modal-summary-value">${eventsAtTime.length}</div>
-                    </div>
-                    <div class="modal-summary-item">
-                        <div class="modal-summary-label">Total Volume</div>
-                        <div class="modal-summary-value">$${formatNumber(totalVolume)}</div>
-                    </div>
-                    <div class="modal-summary-item">
-                        <div class="modal-summary-label">Bids</div>
-                        <div class="modal-summary-value" style="color: #00ff88;">
-                            ${bidEvents.length}
-                            <div style="font-size: 0.75rem; color: #00ff88; margin-top: 2px;">$${formatNumber(bidVolume)}</div>
-                        </div>
-                    </div>
-                    <div class="modal-summary-item">
-                        <div class="modal-summary-label">Asks</div>
-                        <div class="modal-summary-value" style="color: #ff4444;">
-                            ${askEvents.length}
-                            <div style="font-size: 0.75rem; color: #ff4444; margin-top: 2px;">$${formatNumber(askVolume)}</div>
-                        </div>
-                    </div>
-                    <div class="modal-summary-item">
-                        <div class="modal-summary-label">Trades</div>
-                        <div class="modal-summary-value" style="color: #ffaa00;">
-                            ${marketEvents.length}
-                            <div style="font-size: 0.75rem; color: #ffaa00; margin-top: 2px;">$${formatNumber(marketEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0))}</div>
-                        </div>
-                    </div>
-                    <div class="modal-summary-item">
-                        <div class="modal-summary-label">Net Pressure</div>
-                        <div class="modal-summary-value" style="color: ${bidVolume > askVolume ? '#00ff88' : '#ff4444'};">
-                            ${bidVolume > askVolume ? '🟢 BULLISH' : '🔴 BEARISH'}
-                            <div style="font-size: 0.75rem; margin-top: 2px;">
-                                ${bidVolume > askVolume ?
-                                    `${((bidVolume / askVolume) || 0).toFixed(1)}x more bids` :
-                                    `${((askVolume / bidVolume) || 0).toFixed(1)}x more asks`}
-                            </div>
-                        </div>
+                <div class="modal-summary-item">
+                    <div class="modal-summary-label">Total Events</div>
+                    <div class="modal-summary-value">${eventsAtTime.length}</div>
+                </div>
+                <div class="modal-summary-item">
+                    <div class="modal-summary-label">Total Volume</div>
+                    <div class="modal-summary-value">$${formatNumber(totalVolume)}</div>
+                </div>
+                <div class="modal-summary-item">
+                    <div class="modal-summary-label">Bids</div>
+                    <div class="modal-summary-value" style="color: #00ff88;">
+                        ${bidEvents.length}
+                        <div style="font-size: 0.75rem; color: #00ff88; margin-top: 2px;">$${formatNumber(bidVolume)}</div>
                     </div>
                 </div>
+                <div class="modal-summary-item">
+                    <div class="modal-summary-label">Asks</div>
+                    <div class="modal-summary-value" style="color: #ff4444;">
+                        ${askEvents.length}
+                        <div style="font-size: 0.75rem; color: #ff4444; margin-top: 2px;">$${formatNumber(askVolume)}</div>
+                    </div>
+                </div>
+                <div class="modal-summary-item">
+                    <div class="modal-summary-label">Trades</div>
+                    <div class="modal-summary-value" style="color: #ffaa00;">
+                        ${tradeEvents.length}
+                        <div style="font-size: 0.75rem; color: #ffaa00; margin-top: 2px;">$${formatNumber(tradeVolume)}</div>
+                    </div>
+                </div>
+                <div class="modal-summary-item">
+                    <div class="modal-summary-label">Net Pressure</div>
+                    <div class="modal-summary-value">${pressureText}</div>
+                </div>
             </div>
-
-            <div class="modal-section">
-                <div class="modal-section-title">Event Details (${eventsAtTime.length} events)</div>
-                ${eventsAtTime.map(event => createModalEventItem(event)).join('')}
+            <div class="modal-events-list">
+                ${eventsAtTime.map(event => createModalEventItem(event, startTime, endTime)).join('')}
             </div>
         `;
     }
 
-    // Show modal
     modal.style.display = 'flex';
 
     // Close on background click
@@ -887,16 +982,22 @@ function showEventDetailsModal(clickedTime, intervalData) {
     };
 }
 
-// Create detailed event item for modal
-function createModalEventItem(event) {
-    const isBid = event.side === 'bid' || event.event_type.includes('bid');
-    const isAsk = event.side === 'ask' || event.event_type.includes('ask');
-    const isMarket = event.event_type.includes('market');
+// Create modal event item
+function createModalEventItem(event, intervalStart, intervalEnd) {
+    const eventTime = new Date(event.time).getTime();
+    let periodBadge = '';
+    let periodColor = '';
 
-    let eventClass = '';
-    if (isBid) eventClass = 'bid';
-    else if (isAsk) eventClass = 'ask';
-    else if (isMarket) eventClass = 'market';
+    if (event.period === 'before') {
+        periodBadge = '⬅ BEFORE';
+        periodColor = '#2962ff';
+    } else if (event.period === 'during') {
+        periodBadge = '◆ DURING';
+        periodColor = '#ffaa00';
+    } else {
+        periodBadge = '➡ AFTER';
+        periodColor = '#ff6b6b';
+    }
 
     const time = new Date(event.time).toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -905,24 +1006,16 @@ function createModalEventItem(event) {
         fractionalSecondDigits: 3
     });
 
-    const periodBadge = event.period === 'before' ? '<span style="color: #2962ff; font-size: 0.75rem;">⬅ BEFORE</span>' :
-                        event.period === 'during' ? '<span style="color: #ffaa00; font-size: 0.75rem;">◆ DURING</span>' :
-                        '<span style="color: #ff6b6b; font-size: 0.75rem;">➡ AFTER</span>';
+    const sideColor = event.side === 'bid' ? '#00ff88' : event.side === 'ask' ? '#ff4444' : '#ffaa00';
 
     return `
-        <div class="modal-event-item ${eventClass}">
+        <div class="modal-event-item ${event.side}">
             <div class="modal-event-header">
-                <div>
-                    <span class="modal-event-type ${eventClass}">${event.event_type.replace('_', ' ').toUpperCase()}</span>
-                    ${periodBadge}
-                </div>
+                <span class="modal-event-type" style="background-color: ${sideColor};">${event.event_type.replace('_', ' ')}</span>
+                <span class="modal-event-period" style="color: ${periodColor};">${periodBadge}</span>
                 <span class="modal-event-time">${time}</span>
             </div>
             <div class="modal-event-details">
-                <div class="modal-event-detail">
-                    <span class="modal-event-detail-label">Side</span>
-                    <span class="modal-event-detail-value">${event.side.toUpperCase()}</span>
-                </div>
                 <div class="modal-event-detail">
                     <span class="modal-event-detail-label">Price</span>
                     <span class="modal-event-detail-value">$${event.price.toFixed(6)}</span>
@@ -996,6 +1089,14 @@ function setupEventListeners() {
             }
         }
     });
+
+    // Modal close button
+    const closeBtn = document.querySelector('.modal-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            document.getElementById('event-details-modal').style.display = 'none';
+        });
+    }
 }
 
 // Filter whale events by USD value
@@ -1028,78 +1129,18 @@ function showLoading(show) {
     }
 }
 
-// Show error toast
+// Show error message
 function showError(message) {
-    const toast = document.getElementById('error-toast');
-    const messageElement = document.getElementById('error-message');
-
-    messageElement.textContent = message;
-    toast.style.display = 'flex';
-
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-        toast.style.display = 'none';
-    }, 5000);
+    alert(message);
 }
 
-// Update analysis info from filename and data
-function updateAnalysisInfo(filename, intervals, metadata) {
-    const analysisInfo = document.getElementById('analysis-info');
-
-    // Use metadata if available, otherwise extract from filename
-    let symbol = 'Unknown';
-    let lookback = 'N/A';
-    let interval = 'N/A';
-    let threshold = 'N/A';
-
-    if (metadata) {
-        // Use metadata from new JSON format
-        symbol = metadata.symbol || 'Unknown';
-        lookback = metadata.lookback || 'N/A';
-        interval = metadata.interval || 'N/A';
-        threshold = `${metadata.min_change}%+`;
+// Format number with K/M suffixes
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(2) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(2) + 'K';
     } else {
-        // Fallback: extract from filename for old format
-        console.log('Parsing filename:', filename);
-
-        // Extract symbol from filename
-        let match = filename.match(/price_changes_([A-Z0-9]+_[A-Z0-9]+)_\d+\.json/i);
-        if (match) {
-            symbol = match[1];
-        } else {
-            match = filename.match(/price_changes_(.+?)_\d{8}_\d{6}\.json/i);
-            if (match) {
-                symbol = match[1];
-            }
-        }
-
-        // Calculate interval from first interval data
-        if (intervals && intervals.length > 0) {
-            const firstInterval = intervals[0];
-            const startTime = new Date(firstInterval.start_time);
-            const endTime = new Date(firstInterval.end_time);
-            const durationMs = endTime - startTime;
-            const durationSec = Math.round(durationMs / 1000);
-
-            if (durationSec >= 3600) {
-                interval = `${Math.round(durationSec / 3600)}h`;
-            } else if (durationSec >= 60) {
-                interval = `${Math.round(durationSec / 60)}m`;
-            } else {
-                interval = `${durationSec}s`;
-            }
-
-            threshold = `${Math.abs(firstInterval.change_pct).toFixed(2)}%+ detected`;
-        }
+        return num.toFixed(2);
     }
-
-    console.log('Analysis info:', { symbol, lookback, interval, threshold });
-
-    document.getElementById('info-symbol').textContent = symbol;
-    document.getElementById('info-interval').textContent = interval;
-    document.getElementById('info-lookback').textContent = lookback;
-    document.getElementById('info-threshold').textContent = threshold;
-
-    // Show the analysis info section
-    analysisInfo.style.display = 'flex';
 }
