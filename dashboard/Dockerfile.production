@@ -9,11 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better layer caching
-COPY dashboard/requirements.txt /app/dashboard/requirements.txt
-RUN pip install --no-cache-dir -r /app/dashboard/requirements.txt
+COPY dashboard/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy dashboard application
-COPY dashboard/ /app/dashboard/
+COPY dashboard/ .
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/live
@@ -43,5 +43,4 @@ CMD ["gunicorn", \
      "--timeout", "120", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
-     "--chdir", "/app/dashboard", \
      "app:app"]
