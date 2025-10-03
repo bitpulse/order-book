@@ -499,6 +499,11 @@ function prepareWhaleScatterData(events, period) {
     // Sort by time
     const sortedEvents = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
 
+    // Find min and max USD values for scaling
+    const usdValues = sortedEvents.map(e => e.usd_value);
+    const minUsd = Math.min(...usdValues);
+    const maxUsd = Math.max(...usdValues);
+
     // Track offsets for same timestamps
     const timeOffsets = new Map();
 
@@ -534,6 +539,23 @@ function prepareWhaleScatterData(events, period) {
             timeOffsets.set(timeKey, 1);
         }
 
+        // Calculate size based on USD value (logarithmic scale for better visualization)
+        // Base size depends on period, then scale by USD value
+        const baseSize = period === 'during' ? 12 : 6;
+        const minSize = period === 'during' ? 8 : 4;
+        const maxSize = period === 'during' ? 24 : 12;
+
+        let size;
+        if (maxUsd === minUsd) {
+            // All values are the same
+            size = baseSize;
+        } else {
+            // Logarithmic scaling for better distribution
+            const normalizedValue = (Math.log(event.usd_value + 1) - Math.log(minUsd + 1)) /
+                                   (Math.log(maxUsd + 1) - Math.log(minUsd + 1));
+            size = minSize + (maxSize - minSize) * normalizedValue;
+        }
+
         const usdValue = event.usd_value / 1000;
         const label = usdValue >= 1 ? `${usdValue.toFixed(1)}K` : '';
 
@@ -542,7 +564,7 @@ function prepareWhaleScatterData(events, period) {
             price: event.price,
             color: color,
             symbol: symbol,
-            size: period === 'during' ? 12 : 6,
+            size: size,
             label: label,
             labelPosition: labelPosition,
             originalEvent: event,
