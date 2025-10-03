@@ -9,7 +9,7 @@ import sys
 import json
 import csv
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Tuple
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -82,6 +82,22 @@ class PriceChangeAnalyzer:
         else:
             raise ValueError(f"Invalid interval unit: {unit}. Use s, m, or h")
 
+    def _parse_lookback_to_timedelta(self, lookback: str) -> timedelta:
+        """Parse lookback string (e.g., '1h', '24h', '7d') to timedelta"""
+        value = int(lookback[:-1])
+        unit = lookback[-1]
+
+        if unit == 's':
+            return timedelta(seconds=value)
+        elif unit == 'm':
+            return timedelta(minutes=value)
+        elif unit == 'h':
+            return timedelta(hours=value)
+        elif unit == 'd':
+            return timedelta(days=value)
+        else:
+            raise ValueError(f"Invalid lookback unit: {unit}. Use s, m, h, or d")
+
     def find_price_changes(self) -> List[Dict]:
         """
         Find intervals with largest price changes
@@ -91,54 +107,60 @@ class PriceChangeAnalyzer:
         """
         interval_seconds = self._parse_interval_to_seconds(self.interval)
 
-        # Query to get price data and calculate changes over sliding windows
-        # Using aggregateWindow to get first and last price in each window
-        query = f'''
-        import "timezone"
+        # Get all price data for the lookback period
+        lookback_time = datetime.now(timezone.utc) - self._parse_lookback_to_timedelta(self.lookback)
+        end_time = datetime.now(timezone.utc)
 
-        data = from(bucket: "{self.influx_bucket}")
-          |> range(start: -{self.lookback})
-          |> filter(fn: (r) => r._measurement == "orderbook_price")
-          |> filter(fn: (r) => r.symbol == "{self.symbol}")
-          |> filter(fn: (r) => r._field == "mid_price")
+        all_price_data = self.get_price_data(lookback_time, end_time)
 
-        first = data
-          |> aggregateWindow(every: {interval_seconds}s, fn: first, createEmpty: false)
-          |> set(key: "_field", value: "start_price")
+        if not all_price_data:
+            print(f"{RED}No price data found for {self.symbol}{RESET}")
+            return []
 
-        last = data
-          |> aggregateWindow(every: {interval_seconds}s, fn: last, createEmpty: false)
-          |> set(key: "_field", value: "end_price")
-
-        union(tables: [first, last])
-          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-        '''
-
-        result = self.query_api.query(query)
-
+        # Calculate price changes using sliding window over actual data points
         price_changes = []
-        for table in result:
-            for record in table.records:
-                start_price = record.values.get('start_price')
-                end_price = record.values.get('end_price')
-                timestamp = record.get_time()
+        interval_delta = timedelta(seconds=interval_seconds)
 
-                if start_price and end_price and start_price > 0:
-                    change_pct = ((end_price - start_price) / start_price) * 100
+        # Use 1-second sliding window for high resolution
+        slide_seconds = 1
 
-                    if abs(change_pct) >= self.min_change:
-                        # Calculate window boundaries
-                        start_time = timestamp
-                        end_time = timestamp + timedelta(seconds=interval_seconds)
+        for i in range(0, len(all_price_data) - 1):
+            start_point = all_price_data[i]
+            start_time = start_point['time']
+            end_time = start_time + interval_delta
 
-                        price_changes.append({
-                            'start_time': start_time,
-                            'end_time': end_time,
-                            'start_price': start_price,
-                            'end_price': end_price,
-                            'change_pct': change_pct,
-                            'change_abs': abs(change_pct)
-                        })
+            # Find the closest price point to the end time
+            end_point = None
+            for j in range(i + 1, len(all_price_data)):
+                if all_price_data[j]['time'] >= end_time:
+                    end_point = all_price_data[j]
+                    break
+
+            if not end_point:
+                continue
+
+            start_price = start_point['mid_price']
+            end_price = end_point['mid_price']
+            actual_end_time = end_point['time']
+
+            if start_price > 0:
+                change_pct = ((end_price - start_price) / start_price) * 100
+
+                if abs(change_pct) >= self.min_change:
+                    price_changes.append({
+                        'start_time': start_time,
+                        'end_time': actual_end_time,
+                        'start_price': start_price,
+                        'end_price': end_price,
+                        'change_pct': change_pct,
+                        'change_abs': abs(change_pct)
+                    })
+
+            # Slide window by moving forward based on slide_seconds
+            # Skip ahead to avoid duplicate overlapping windows
+            for k in range(i + 1, len(all_price_data)):
+                if (all_price_data[k]['time'] - start_time).total_seconds() >= slide_seconds:
+                    break
 
         # Sort by absolute change and return top N
         price_changes.sort(key=lambda x: x['change_abs'], reverse=True)
