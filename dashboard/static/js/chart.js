@@ -1228,9 +1228,10 @@ function toggleFullscreen() {
 
     // Resize chart to fit new container size
     if (chart) {
+        // Use longer timeout to ensure CSS transition completes
         setTimeout(() => {
             chart.resize();
-        }, 100);
+        }, 350);
     }
 }
 
