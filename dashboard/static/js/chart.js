@@ -4,6 +4,7 @@ let chart = null;
 let lineSeries = null;
 let currentData = null;
 let currentInterval = null;
+let minUsdFilter = 0; // Global filter for minimum USD value
 
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -141,9 +142,11 @@ function updateStats(data) {
 
     document.getElementById('stat-price').textContent = `$${data.start_price.toFixed(6)} → $${data.end_price.toFixed(6)}`;
 
-    const totalEvents = data.whale_events.length +
-                       (data.whale_events_before?.length || 0) +
-                       (data.whale_events_after?.length || 0);
+    // Apply USD filter to event counts
+    const filteredDuring = filterWhaleEventsByUsd(data.whale_events || []);
+    const filteredBefore = filterWhaleEventsByUsd(data.whale_events_before || []);
+    const filteredAfter = filterWhaleEventsByUsd(data.whale_events_after || []);
+    const totalEvents = filteredDuring.length + filteredBefore.length + filteredAfter.length;
     document.getElementById('stat-events').textContent = totalEvents;
 }
 
@@ -239,11 +242,11 @@ function initializeChart() {
         // Find whale events near this time (from all periods: before, during, after)
         const currentTime = new Date(param.time * 1000);
 
-        // Collect events from all three periods
+        // Collect events from all three periods (apply USD filter)
         const allEvents = [
-            ...(currentInterval.whale_events_before || []),
-            ...(currentInterval.whale_events || []),
-            ...(currentInterval.whale_events_after || [])
+            ...filterWhaleEventsByUsd(currentInterval.whale_events_before || []),
+            ...filterWhaleEventsByUsd(currentInterval.whale_events || []),
+            ...filterWhaleEventsByUsd(currentInterval.whale_events_after || [])
         ];
 
         let nearbyEvents = allEvents.filter(event => {
@@ -362,19 +365,22 @@ function loadPriceData(priceData) {
 
     // Add whale event markers - BEFORE interval (semi-transparent)
     if (currentInterval && currentInterval.whale_events_before) {
-        const beforeMarkers = createWhaleMarkers(currentInterval.whale_events_before, 0.3);
+        const filteredBefore = filterWhaleEventsByUsd(currentInterval.whale_events_before);
+        const beforeMarkers = createWhaleMarkers(filteredBefore, 0.3);
         allMarkers.push(...beforeMarkers);
     }
 
     // Add whale event markers - DURING interval (full opacity)
     if (currentInterval && currentInterval.whale_events) {
-        const duringMarkers = createWhaleMarkers(currentInterval.whale_events, 1.0);
+        const filteredDuring = filterWhaleEventsByUsd(currentInterval.whale_events);
+        const duringMarkers = createWhaleMarkers(filteredDuring, 1.0);
         allMarkers.push(...duringMarkers);
     }
 
     // Add whale event markers - AFTER interval (semi-transparent)
     if (currentInterval && currentInterval.whale_events_after) {
-        const afterMarkers = createWhaleMarkers(currentInterval.whale_events_after, 0.3);
+        const filteredAfter = filterWhaleEventsByUsd(currentInterval.whale_events_after);
+        const afterMarkers = createWhaleMarkers(filteredAfter, 0.3);
         allMarkers.push(...afterMarkers);
     }
 
@@ -492,10 +498,10 @@ function applyOpacity(hexColor, opacity) {
 
 // Load whale events into the events panel
 function loadWhaleEvents(data) {
-    // Calculate statistics for all three periods
-    const beforeEvents = data.whale_events_before || [];
-    const duringEvents = data.whale_events || [];
-    const afterEvents = data.whale_events_after || [];
+    // Calculate statistics for all three periods (apply USD filter)
+    const beforeEvents = filterWhaleEventsByUsd(data.whale_events_before || []);
+    const duringEvents = filterWhaleEventsByUsd(data.whale_events || []);
+    const afterEvents = filterWhaleEventsByUsd(data.whale_events_after || []);
 
     const beforeCount = beforeEvents.length;
     const duringCount = duringEvents.length;
@@ -751,11 +757,11 @@ function showEventDetailsModal(clickedTime, intervalData) {
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
 
-    // Get all events from all periods
+    // Get all events from all periods (apply USD filter)
     const allEvents = [
-        ...(intervalData.whale_events_before || []).map(e => ({ ...e, period: 'before' })),
-        ...(intervalData.whale_events || []).map(e => ({ ...e, period: 'during' })),
-        ...(intervalData.whale_events_after || []).map(e => ({ ...e, period: 'after' }))
+        ...filterWhaleEventsByUsd(intervalData.whale_events_before || []).map(e => ({ ...e, period: 'before' })),
+        ...filterWhaleEventsByUsd(intervalData.whale_events || []).map(e => ({ ...e, period: 'during' })),
+        ...filterWhaleEventsByUsd(intervalData.whale_events_after || []).map(e => ({ ...e, period: 'after' }))
     ];
 
     // Find events within ±2 seconds of clicked time
@@ -967,6 +973,37 @@ function setupEventListeners() {
     document.getElementById('event-type-filter').addEventListener('change', (e) => {
         filterEvents(document.getElementById('event-search').value, e.target.value);
     });
+
+    // USD filter - apply on Enter key
+    document.getElementById('min-usd-filter').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            minUsdFilter = parseFloat(e.target.value) || 0;
+            // Reload the current interval with new filter
+            if (currentInterval) {
+                loadInterval(currentInterval);
+            }
+        }
+    });
+
+    // Also apply on blur (when clicking outside)
+    document.getElementById('min-usd-filter').addEventListener('blur', (e) => {
+        const newValue = parseFloat(e.target.value) || 0;
+        if (newValue !== minUsdFilter) {
+            minUsdFilter = newValue;
+            // Reload the current interval with new filter
+            if (currentInterval) {
+                loadInterval(currentInterval);
+            }
+        }
+    });
+}
+
+// Filter whale events by USD value
+function filterWhaleEventsByUsd(events) {
+    if (minUsdFilter <= 0) {
+        return events;
+    }
+    return events.filter(event => event.usd_value >= minUsdFilter);
 }
 
 // Filter events based on search and type

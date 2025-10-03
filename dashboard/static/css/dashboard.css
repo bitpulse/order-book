@@ -301,6 +301,33 @@ body {
     border-color: var(--blue);
 }
 
+.usd-filter-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.usd-filter-container label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.usd-filter-input {
+    flex: 1;
+    padding: 0.5rem;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.usd-filter-input:focus {
+    outline: none;
+    border-color: var(--blue);
+}
+
 /* Event Stats */
 .event-stats {
     display: grid;
