@@ -608,7 +608,11 @@ class PriceChangeAnalyzer:
 
     def _get_event_color(self, event_type: str) -> str:
         """Get color for event type"""
-        if 'bid' in event_type or 'buy' in event_type:
+        if event_type == 'market_buy':
+            return GREEN
+        elif event_type == 'market_sell':
+            return RED
+        elif 'bid' in event_type or 'buy' in event_type:
             return GREEN
         elif 'ask' in event_type or 'sell' in event_type:
             return RED

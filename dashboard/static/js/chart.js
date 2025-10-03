@@ -593,21 +593,31 @@ function prepareWhaleScatterData(events, period) {
     const timeOffsets = new Map();
 
     return sortedEvents.map(event => {
+        const isMarketBuy = event.event_type === 'market_buy';
+        const isMarketSell = event.event_type === 'market_sell';
         const isBid = event.side === 'bid' || event.event_type.includes('bid');
         const isAsk = event.side === 'ask' || event.event_type.includes('ask');
 
         let color, symbol, labelPosition;
 
-        if (isBid) {
-            color = period === 'during' ? '#00ff88' : 'rgba(0, 255, 136, 0.3)';
+        if (isMarketBuy) {
+            color = period === 'during' ? '#00c2ff' : 'rgba(0, 194, 255, 0.3)'; // Bright cyan/blue
+            symbol = 'circle';
+            labelPosition = 'bottom';
+        } else if (isMarketSell) {
+            color = period === 'during' ? '#ff00ff' : 'rgba(255, 0, 255, 0.3)'; // Magenta/pink
+            symbol = 'circle';
+            labelPosition = 'top';
+        } else if (isBid) {
+            color = period === 'during' ? '#00ff88' : 'rgba(0, 255, 136, 0.3)'; // Green
             symbol = 'triangle';
             labelPosition = 'bottom';
         } else if (isAsk) {
-            color = period === 'during' ? '#ff4444' : 'rgba(255, 68, 68, 0.3)';
+            color = period === 'during' ? '#ff4444' : 'rgba(255, 68, 68, 0.3)'; // Red
             symbol = 'triangle';
             labelPosition = 'top';
         } else {
-            color = period === 'during' ? '#ffaa00' : 'rgba(255, 170, 0, 0.3)';
+            color = period === 'during' ? '#ffaa00' : 'rgba(255, 170, 0, 0.3)'; // Orange
             symbol = 'circle';
             labelPosition = 'top';
         }
