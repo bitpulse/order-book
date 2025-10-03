@@ -6,7 +6,7 @@ Serves web interface for visualizing price changes and whale events
 
 import os
 import json
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, send_from_directory, request
 from flask_cors import CORS
 from pathlib import Path
 
@@ -91,6 +91,73 @@ def get_stats():
             'data_dir': str(DATA_DIR)
         })
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/run-analysis', methods=['POST'])
+def run_analysis():
+    """Run price change analyzer with provided parameters"""
+    import subprocess
+    from datetime import datetime
+
+    try:
+        data = json.loads(request.data)
+
+        symbol = data.get('symbol', 'SPX_USDT')
+        lookback = data.get('lookback', '3h')
+        interval = data.get('interval', '10s')
+        top = data.get('top', 5)
+        min_change = data.get('min_change', 0.1)
+
+        # Build command
+        script_path = BASE_DIR / 'live' / 'price_change_analyzer.py'
+
+        if not script_path.exists():
+            return jsonify({'error': f'Analyzer script not found: {script_path}'}), 404
+
+        cmd = [
+            'python',
+            str(script_path),
+            '--symbol', symbol,
+            '--lookback', lookback,
+            '--interval', interval,
+            '--top', str(top),
+            '--min-change', str(min_change),
+            '--output', 'json'
+        ]
+
+        # Run analyzer in background
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(BASE_DIR)
+        )
+
+        # Wait for completion (with timeout)
+        stdout, stderr = process.communicate(timeout=300)  # 5 minute timeout
+
+        if process.returncode != 0:
+            error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
+            return jsonify({'error': f'Analysis failed: {error_msg}'}), 500
+
+        # Find the newly created file
+        files = sorted(DATA_DIR.glob(f'price_changes_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+
+        if files:
+            newest_file = files[0]
+            return jsonify({
+                'success': True,
+                'message': 'Analysis completed successfully',
+                'filename': newest_file.name,
+                'output': stdout.decode('utf-8') if stdout else ''
+            })
+        else:
+            return jsonify({'error': 'Analysis completed but no output file found'}), 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Analysis timeout (exceeded 5 minutes)'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

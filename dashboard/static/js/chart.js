@@ -1211,6 +1211,17 @@ function createModalEventItem(event, intervalStart, intervalEnd) {
 
 // Setup event listeners
 function setupEventListeners() {
+    // New Analysis button
+    document.getElementById('new-analysis-btn').addEventListener('click', () => {
+        document.getElementById('new-analysis-modal').style.display = 'flex';
+    });
+
+    // Analysis form submit
+    document.getElementById('analysis-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await runAnalysis();
+    });
+
     // File selector change
     document.getElementById('file-selector').addEventListener('change', (e) => {
         loadDataFile(e.target.value);
@@ -1365,5 +1376,74 @@ function formatNumber(num) {
         return (num / 1000).toFixed(2) + 'K';
     } else {
         return num.toFixed(2);
+    }
+}
+
+// Run new analysis
+async function runAnalysis() {
+    const form = document.getElementById('analysis-form');
+    const statusDiv = document.getElementById('analysis-status');
+    const statusMsg = document.getElementById('status-message');
+
+    // Get form values
+    const params = {
+        symbol: document.getElementById('symbol-input').value,
+        lookback: document.getElementById('lookback-input').value,
+        interval: document.getElementById('interval-input').value,
+        top: parseInt(document.getElementById('top-input').value),
+        min_change: parseFloat(document.getElementById('min-change-input').value)
+    };
+
+    // Show status
+    form.style.display = 'none';
+    statusDiv.style.display = 'flex';
+    statusMsg.textContent = `Running analysis for ${params.symbol}...`;
+
+    try {
+        const response = await fetch('/api/run-analysis', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(params)
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+            throw new Error(result.error);
+        }
+
+        // Success - reload file list and select new file
+        statusMsg.textContent = 'Analysis complete! Loading results...';
+
+        await loadFileList();
+
+        // Select the new file
+        const selector = document.getElementById('file-selector');
+        const option = Array.from(selector.options).find(opt => opt.value === result.filename);
+        if (option) {
+            selector.value = result.filename;
+            await loadDataFile(result.filename);
+        }
+
+        // Close modal
+        setTimeout(() => {
+            document.getElementById('new-analysis-modal').style.display = 'none';
+            form.style.display = 'block';
+            statusDiv.style.display = 'none';
+        }, 1000);
+
+    } catch (error) {
+        console.error('Analysis error:', error);
+        statusMsg.textContent = `Error: ${error.message}`;
+        statusMsg.style.color = 'var(--red)';
+
+        // Reset after showing error
+        setTimeout(() => {
+            form.style.display = 'block';
+            statusDiv.style.display = 'none';
+            statusMsg.style.color = 'var(--green)';
+        }, 3000);
     }
 }

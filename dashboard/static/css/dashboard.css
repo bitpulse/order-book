@@ -198,6 +198,30 @@ body::after {
     overflow: hidden;
 }
 
+.btn-primary {
+    background: var(--green);
+    color: #000000;
+    border: 1px solid var(--green);
+    box-shadow: 0 4px 12px var(--green-glow);
+    position: relative;
+    z-index: 1;
+    font-weight: 700;
+}
+
+.btn-primary:hover {
+    background: transparent;
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 4px 20px var(--green-glow), 0 0 40px var(--green-glow);
+    transform: translateY(-2px);
+}
+
+.btn-large {
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    width: 100%;
+}
+
 .btn::before {
     content: '';
     position: absolute;
@@ -1248,6 +1272,85 @@ body::after {
     color: var(--text-primary);
 }
 
+/* Analysis Form */
+.analysis-modal-content {
+    max-width: 600px;
+}
+
+.analysis-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.form-group input {
+    padding: 0.75rem 1rem;
+    background: rgba(17, 17, 17, 0.8);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px var(--green-glow);
+    background: rgba(17, 17, 17, 0.95);
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.analysis-status {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: rgba(0, 255, 163, 0.05);
+    border-radius: 8px;
+    border: 1px solid var(--green);
+    margin-top: 1rem;
+}
+
+.status-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(0, 255, 163, 0.2);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+#status-message {
+    color: var(--green);
+    font-weight: 600;
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
     .main-content {
@@ -1284,5 +1387,9 @@ body::after {
 
     .chart-container {
         height: 400px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
     }
 }
