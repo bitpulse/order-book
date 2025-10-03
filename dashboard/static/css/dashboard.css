@@ -110,6 +110,34 @@ body {
     gap: 1rem;
 }
 
+/* Analysis Info */
+.analysis-info {
+    background-color: var(--bg-secondary);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.info-icon {
+    font-size: 1rem;
+}
+
+.info-text {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
 .stats-summary {
     background-color: var(--bg-secondary);
     padding: 1rem;

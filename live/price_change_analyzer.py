@@ -557,7 +557,7 @@ class PriceChangeAnalyzer:
     def export_json(self, results: List[Dict], filepath: str):
         """Export results to JSON file"""
         # Convert datetime objects to strings
-        export_data = []
+        intervals = []
         for result in results:
             export_result = result.copy()
             export_result['start_time'] = result['start_time'].isoformat()
@@ -587,7 +587,19 @@ class PriceChangeAnalyzer:
                 for event in result['whale_events_after']
             ]
 
-            export_data.append(export_result)
+            intervals.append(export_result)
+
+        # Create export data with metadata
+        export_data = {
+            'metadata': {
+                'symbol': self.symbol,
+                'lookback': self.lookback,
+                'interval': self.interval,
+                'min_change': self.min_change,
+                'export_time': datetime.now().isoformat()
+            },
+            'intervals': intervals
+        }
 
         with open(filepath, 'w') as f:
             json.dump(export_data, f, indent=2)

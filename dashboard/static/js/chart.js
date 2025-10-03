@@ -48,24 +48,39 @@ async function loadDataFile(filename) {
 
     try {
         const response = await fetch(`/api/data/${filename}`);
-        const data = await response.json();
+        let data = await response.json();
 
         if (data.error) {
             throw new Error(data.error);
         }
 
-        currentData = data;
+        // Handle new JSON format with metadata or old format (array)
+        let intervals, metadata;
+        if (Array.isArray(data)) {
+            // Old format: array of intervals
+            intervals = data;
+            metadata = null;
+        } else {
+            // New format: {metadata: {...}, intervals: [...]}
+            intervals = data.intervals;
+            metadata = data.metadata;
+        }
+
+        currentData = intervals;
+
+        // Extract and display analysis metadata
+        updateAnalysisInfo(filename, intervals, metadata);
 
         // If multiple intervals, show selector
-        if (data.length > 1) {
-            showIntervalSelector(data);
+        if (intervals.length > 1) {
+            showIntervalSelector(intervals);
         } else {
             document.getElementById('interval-selector-container').style.display = 'none';
         }
 
         // Load first interval by default
-        if (data.length > 0) {
-            loadInterval(data[0]);
+        if (intervals.length > 0) {
+            loadInterval(intervals[0]);
         }
 
         showLoading(false);
@@ -480,4 +495,66 @@ function showError(message) {
     setTimeout(() => {
         toast.style.display = 'none';
     }, 5000);
+}
+
+// Update analysis info from filename and data
+function updateAnalysisInfo(filename, intervals, metadata) {
+    const analysisInfo = document.getElementById('analysis-info');
+
+    // Use metadata if available, otherwise extract from filename
+    let symbol = 'Unknown';
+    let lookback = 'N/A';
+    let interval = 'N/A';
+    let threshold = 'N/A';
+
+    if (metadata) {
+        // Use metadata from new JSON format
+        symbol = metadata.symbol || 'Unknown';
+        lookback = metadata.lookback || 'N/A';
+        interval = metadata.interval || 'N/A';
+        threshold = `${metadata.min_change}%+`;
+    } else {
+        // Fallback: extract from filename for old format
+        console.log('Parsing filename:', filename);
+
+        // Extract symbol from filename
+        let match = filename.match(/price_changes_([A-Z0-9]+_[A-Z0-9]+)_\d+\.json/i);
+        if (match) {
+            symbol = match[1];
+        } else {
+            match = filename.match(/price_changes_(.+?)_\d{8}_\d{6}\.json/i);
+            if (match) {
+                symbol = match[1];
+            }
+        }
+
+        // Calculate interval from first interval data
+        if (intervals && intervals.length > 0) {
+            const firstInterval = intervals[0];
+            const startTime = new Date(firstInterval.start_time);
+            const endTime = new Date(firstInterval.end_time);
+            const durationMs = endTime - startTime;
+            const durationSec = Math.round(durationMs / 1000);
+
+            if (durationSec >= 3600) {
+                interval = `${Math.round(durationSec / 3600)}h`;
+            } else if (durationSec >= 60) {
+                interval = `${Math.round(durationSec / 60)}m`;
+            } else {
+                interval = `${durationSec}s`;
+            }
+
+            threshold = `${Math.abs(firstInterval.change_pct).toFixed(2)}%+ detected`;
+        }
+    }
+
+    console.log('Analysis info:', { symbol, lookback, interval, threshold });
+
+    document.getElementById('info-symbol').textContent = symbol;
+    document.getElementById('info-interval').textContent = interval;
+    document.getElementById('info-lookback').textContent = lookback;
+    document.getElementById('info-threshold').textContent = threshold;
+
+    // Show the analysis info section
+    analysisInfo.style.display = 'flex';
 }
