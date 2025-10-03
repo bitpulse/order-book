@@ -182,6 +182,17 @@
         <button onclick="this.parentElement.style.display='none'">&times;</button>
     </div>
 
+    <!-- Event Details Modal -->
+    <div id="event-details-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Whale Events at Time</h3>
+                <button class="modal-close" onclick="document.getElementById('event-details-modal').style.display='none'">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+        </div>
+    </div>
+
     <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
 </body>

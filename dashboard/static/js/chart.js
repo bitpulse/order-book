@@ -305,6 +305,14 @@ function initializeChart() {
         `;
     });
 
+    // Handle chart click to show detailed event information
+    chart.subscribeClick((param) => {
+        if (!param.time || !currentInterval) return;
+
+        const clickedTime = new Date(param.time * 1000);
+        showEventDetailsModal(clickedTime, currentInterval);
+    });
+
     // Handle window resize
     window.addEventListener('resize', () => {
         chart.applyOptions({
@@ -735,6 +743,199 @@ function formatNumber(num) {
     } else {
         return num.toFixed(2);
     }
+}
+
+// Show detailed event information modal when clicking on chart
+function showEventDetailsModal(clickedTime, intervalData) {
+    const modal = document.getElementById('event-details-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+
+    // Get all events from all periods
+    const allEvents = [
+        ...(intervalData.whale_events_before || []).map(e => ({ ...e, period: 'before' })),
+        ...(intervalData.whale_events || []).map(e => ({ ...e, period: 'during' })),
+        ...(intervalData.whale_events_after || []).map(e => ({ ...e, period: 'after' }))
+    ];
+
+    // Find events within ±2 seconds of clicked time
+    const timeWindow = 2000; // 2 seconds
+    const eventsAtTime = allEvents.filter(event => {
+        const eventTime = new Date(event.time);
+        return Math.abs(eventTime - clickedTime) <= timeWindow;
+    });
+
+    // Sort events by time
+    eventsAtTime.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    // Update modal title with time
+    const timeStr = clickedTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        fractionalSecondDigits: 3
+    });
+
+    // Determine which period
+    const startTime = new Date(intervalData.start_time).getTime();
+    const endTime = new Date(intervalData.end_time).getTime();
+    const clickedTimeMs = clickedTime.getTime();
+
+    let periodLabel = '';
+    let periodColor = '';
+    if (clickedTimeMs < startTime) {
+        periodLabel = '⬅ BEFORE';
+        periodColor = '#2962ff';
+    } else if (clickedTimeMs >= startTime && clickedTimeMs <= endTime) {
+        periodLabel = '◆ DURING';
+        periodColor = '#ffaa00';
+    } else {
+        periodLabel = '➡ AFTER';
+        periodColor = '#ff6b6b';
+    }
+
+    modalTitle.innerHTML = `
+        <span style="color: ${periodColor};">${periodLabel}</span>
+        Whale Events at ${timeStr}
+    `;
+
+    if (eventsAtTime.length === 0) {
+        modalBody.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: #707070;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🐋</div>
+                <div style="font-size: 1.1rem;">No whale events found within ±2s of this time</div>
+            </div>
+        `;
+    } else {
+        // Calculate summary statistics
+        const bidEvents = eventsAtTime.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
+        const askEvents = eventsAtTime.filter(e => e.side === 'ask' || e.event_type.includes('ask'));
+        const marketEvents = eventsAtTime.filter(e => e.event_type.includes('market'));
+
+        const totalVolume = eventsAtTime.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+        const bidVolume = bidEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+        const askVolume = askEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
+
+        // Build modal content
+        modalBody.innerHTML = `
+            <div class="modal-summary">
+                <div class="modal-summary-grid">
+                    <div class="modal-summary-item">
+                        <div class="modal-summary-label">Total Events</div>
+                        <div class="modal-summary-value">${eventsAtTime.length}</div>
+                    </div>
+                    <div class="modal-summary-item">
+                        <div class="modal-summary-label">Total Volume</div>
+                        <div class="modal-summary-value">$${formatNumber(totalVolume)}</div>
+                    </div>
+                    <div class="modal-summary-item">
+                        <div class="modal-summary-label">Bids</div>
+                        <div class="modal-summary-value" style="color: #00ff88;">
+                            ${bidEvents.length}
+                            <div style="font-size: 0.75rem; color: #00ff88; margin-top: 2px;">$${formatNumber(bidVolume)}</div>
+                        </div>
+                    </div>
+                    <div class="modal-summary-item">
+                        <div class="modal-summary-label">Asks</div>
+                        <div class="modal-summary-value" style="color: #ff4444;">
+                            ${askEvents.length}
+                            <div style="font-size: 0.75rem; color: #ff4444; margin-top: 2px;">$${formatNumber(askVolume)}</div>
+                        </div>
+                    </div>
+                    <div class="modal-summary-item">
+                        <div class="modal-summary-label">Trades</div>
+                        <div class="modal-summary-value" style="color: #ffaa00;">
+                            ${marketEvents.length}
+                            <div style="font-size: 0.75rem; color: #ffaa00; margin-top: 2px;">$${formatNumber(marketEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0))}</div>
+                        </div>
+                    </div>
+                    <div class="modal-summary-item">
+                        <div class="modal-summary-label">Net Pressure</div>
+                        <div class="modal-summary-value" style="color: ${bidVolume > askVolume ? '#00ff88' : '#ff4444'};">
+                            ${bidVolume > askVolume ? '🟢 BULLISH' : '🔴 BEARISH'}
+                            <div style="font-size: 0.75rem; margin-top: 2px;">
+                                ${bidVolume > askVolume ?
+                                    `${((bidVolume / askVolume) || 0).toFixed(1)}x more bids` :
+                                    `${((askVolume / bidVolume) || 0).toFixed(1)}x more asks`}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-section-title">Event Details (${eventsAtTime.length} events)</div>
+                ${eventsAtTime.map(event => createModalEventItem(event)).join('')}
+            </div>
+        `;
+    }
+
+    // Show modal
+    modal.style.display = 'flex';
+
+    // Close on background click
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
+}
+
+// Create detailed event item for modal
+function createModalEventItem(event) {
+    const isBid = event.side === 'bid' || event.event_type.includes('bid');
+    const isAsk = event.side === 'ask' || event.event_type.includes('ask');
+    const isMarket = event.event_type.includes('market');
+
+    let eventClass = '';
+    if (isBid) eventClass = 'bid';
+    else if (isAsk) eventClass = 'ask';
+    else if (isMarket) eventClass = 'market';
+
+    const time = new Date(event.time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        fractionalSecondDigits: 3
+    });
+
+    const periodBadge = event.period === 'before' ? '<span style="color: #2962ff; font-size: 0.75rem;">⬅ BEFORE</span>' :
+                        event.period === 'during' ? '<span style="color: #ffaa00; font-size: 0.75rem;">◆ DURING</span>' :
+                        '<span style="color: #ff6b6b; font-size: 0.75rem;">➡ AFTER</span>';
+
+    return `
+        <div class="modal-event-item ${eventClass}">
+            <div class="modal-event-header">
+                <div>
+                    <span class="modal-event-type ${eventClass}">${event.event_type.replace('_', ' ').toUpperCase()}</span>
+                    ${periodBadge}
+                </div>
+                <span class="modal-event-time">${time}</span>
+            </div>
+            <div class="modal-event-details">
+                <div class="modal-event-detail">
+                    <span class="modal-event-detail-label">Side</span>
+                    <span class="modal-event-detail-value">${event.side.toUpperCase()}</span>
+                </div>
+                <div class="modal-event-detail">
+                    <span class="modal-event-detail-label">Price</span>
+                    <span class="modal-event-detail-value">$${event.price.toFixed(6)}</span>
+                </div>
+                <div class="modal-event-detail">
+                    <span class="modal-event-detail-label">Volume</span>
+                    <span class="modal-event-detail-value">${formatNumber(event.volume)}</span>
+                </div>
+                <div class="modal-event-detail">
+                    <span class="modal-event-detail-label">USD Value</span>
+                    <span class="modal-event-detail-value">$${formatNumber(event.usd_value)}</span>
+                </div>
+                <div class="modal-event-detail">
+                    <span class="modal-event-detail-label">Distance from Mid</span>
+                    <span class="modal-event-detail-value">${event.distance_from_mid_pct.toFixed(3)}%</span>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // Setup event listeners
