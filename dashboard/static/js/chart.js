@@ -1086,6 +1086,11 @@ function setupEventListeners() {
         await loadFileList();
     });
 
+    // Fullscreen toggle
+    document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        toggleFullscreen();
+    });
+
     // Event search
     document.getElementById('event-search').addEventListener('input', (e) => {
         filterEvents(e.target.value, document.getElementById('event-type-filter').value);
@@ -1126,6 +1131,24 @@ function setupEventListeners() {
             document.getElementById('event-details-modal').style.display = 'none';
         });
     }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // ESC to exit fullscreen
+        if (e.key === 'Escape') {
+            const wrapper = document.querySelector('.chart-wrapper');
+            if (wrapper.classList.contains('fullscreen')) {
+                toggleFullscreen();
+            }
+        }
+        // F for fullscreen toggle
+        if (e.key === 'f' || e.key === 'F') {
+            // Only if not typing in an input field
+            if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+                toggleFullscreen();
+            }
+        }
+    });
 }
 
 // Filter whale events by USD value
@@ -1161,6 +1184,32 @@ function showLoading(show) {
 // Show error message
 function showError(message) {
     alert(message);
+}
+
+// Toggle fullscreen mode for chart
+function toggleFullscreen() {
+    const wrapper = document.querySelector('.chart-wrapper');
+    const container = document.getElementById('chart-container');
+    const btn = document.getElementById('fullscreen-btn');
+
+    if (wrapper.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        wrapper.classList.remove('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Toggle Fullscreen';
+    } else {
+        // Enter fullscreen
+        wrapper.classList.add('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Exit Fullscreen';
+    }
+
+    // Resize chart to fit new container size
+    if (chart) {
+        setTimeout(() => {
+            chart.resize();
+        }, 100);
+    }
 }
 
 // Format number with K/M suffixes
