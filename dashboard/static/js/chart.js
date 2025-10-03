@@ -481,12 +481,12 @@ function loadPriceData(data) {
 
     chart.setOption(option);
 
-    // Add click handler for event details modal
+    // Add click handler for single event details modal
     chart.on('click', function(params) {
         if (params.componentType === 'series' && params.seriesName.includes('Whale')) {
             const eventData = params.data[2];
             if (eventData && eventData.originalEvent) {
-                showEventDetailsModal(new Date(eventData.time), currentInterval);
+                showSingleEventModal(eventData.originalEvent, eventData.period);
             }
         }
     });
@@ -694,44 +694,6 @@ function loadWhaleEvents(data) {
         document.getElementById('event-stat-biggest-during').textContent = '$0';
     }
 
-    // Update section titles with counts
-    const beforeSection = document.getElementById('events-before');
-    const duringSection = document.getElementById('events-during');
-    const afterSection = document.getElementById('events-after');
-
-    // Update section titles
-    beforeSection.querySelector('.section-title').innerHTML = `
-        <span style="color: #2962ff;">⬅ Before Interval</span>
-        <span style="color: #b0b0b0; font-size: 0.8rem; margin-left: 0.5rem;">(${beforeCount})</span>
-    `;
-
-    duringSection.querySelector('.section-title').innerHTML = `
-        <span style="color: #ffaa00;">◆ During Interval</span>
-        <span style="color: white; font-size: 0.8rem; margin-left: 0.5rem; font-weight: 600;">(${duringCount})</span>
-    `;
-
-    afterSection.querySelector('.section-title').innerHTML = `
-        <span style="color: #ff6b6b;">➡ After Interval</span>
-        <span style="color: #b0b0b0; font-size: 0.8rem; margin-left: 0.5rem;">(${afterCount})</span>
-    `;
-
-    // Load events into timeline
-    loadEventsList('during', duringEvents);
-
-    if (beforeEvents.length > 0) {
-        beforeSection.style.display = 'block';
-        loadEventsList('before', beforeEvents);
-    } else {
-        beforeSection.style.display = 'none';
-    }
-
-    if (afterEvents.length > 0) {
-        afterSection.style.display = 'block';
-        loadEventsList('after', afterEvents);
-    } else {
-        afterSection.style.display = 'none';
-    }
-
     // Generate analytical insights
     generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeVolume, duringVolume, afterVolume);
 }
@@ -906,7 +868,81 @@ function createEventItem(event) {
     return div;
 }
 
-// Show event details modal
+// Show single event details modal
+function showSingleEventModal(event, period) {
+    const modal = document.getElementById('event-details-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+
+    // Determine period info
+    let periodBadge = '';
+    let periodColor = '';
+
+    if (period === 'before') {
+        periodBadge = '⬅ BEFORE';
+        periodColor = '#2962ff';
+    } else if (period === 'during') {
+        periodBadge = '◆ DURING';
+        periodColor = '#ffaa00';
+    } else {
+        periodBadge = '➡ AFTER';
+        periodColor = '#ff6b6b';
+    }
+
+    const time = new Date(event.time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        fractionalSecondDigits: 3
+    });
+
+    const sideColor = event.side === 'bid' ? '#00ff88' : event.side === 'ask' ? '#ff4444' : '#ffaa00';
+    const sideIcon = event.side === 'bid' ? '▲' : event.side === 'ask' ? '▼' : '●';
+
+    modalTitle.innerHTML = `${sideIcon} Whale Event Details <span style="color: ${periodColor}; margin-left: 8px;">${periodBadge}</span>`;
+
+    modalBody.innerHTML = `
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 1.5rem; border-radius: 8px; border-left: 4px solid ${sideColor};">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Event Type</div>
+                    <div style="color: ${sideColor}; font-size: 1.1rem; font-weight: 600; text-transform: uppercase;">${event.event_type.replace('_', ' ')}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Time</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-family: 'Courier New', monospace;">${time}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Price</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">$${event.price.toFixed(6)}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Volume</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${formatNumber(event.volume)}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">USD Value</div>
+                    <div style="color: ${sideColor}; font-size: 1.3rem; font-weight: 700;">$${formatNumber(event.usd_value)}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Distance from Mid</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct.toFixed(3)}%</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    // Close on background click
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
+}
+
+// Show event details modal (multiple events at a time)
 function showEventDetailsModal(clickedTime, intervalData) {
     const modal = document.getElementById('event-details-modal');
     const modalTitle = document.getElementById('modal-title');
@@ -1153,6 +1189,7 @@ function setupEventListeners() {
             document.getElementById('event-details-modal').style.display = 'none';
         });
     }
+
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
