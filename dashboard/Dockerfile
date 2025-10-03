@@ -7,11 +7,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY dashboard/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy dashboard application
-COPY . /app/dashboard/
+COPY dashboard/ .
 
 # Create data directory
 RUN mkdir -p /app/data
@@ -20,8 +20,7 @@ RUN mkdir -p /app/data
 EXPOSE 5000
 
 # Set environment variables
-ENV FLASK_APP=dashboard/app.py
 ENV PYTHONUNBUFFERED=1
 
 # Run the application
-CMD ["python", "dashboard/app.py"]
+CMD ["python", "app.py"]
