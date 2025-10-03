@@ -234,27 +234,40 @@ function loadPriceData(data) {
 
     // ECharts option
     const option = {
-        backgroundColor: '#2d2d2d',
+        backgroundColor: 'transparent',
         animation: false,
         tooltip: {
             trigger: 'axis',
             axisPointer: {
-                type: 'cross'
+                type: 'cross',
+                crossStyle: {
+                    color: 'rgba(0, 255, 163, 0.3)',
+                    width: 1
+                },
+                lineStyle: {
+                    color: 'rgba(0, 255, 163, 0.3)',
+                    width: 1
+                }
             },
-            backgroundColor: 'rgba(45, 45, 45, 0.95)',
-            borderColor: '#404040',
+            backgroundColor: 'rgba(10, 10, 10, 0.95)',
+            borderColor: 'rgba(0, 255, 163, 0.2)',
+            borderWidth: 1,
             textStyle: {
-                color: '#e0e0e0'
+                color: '#ffffff',
+                fontSize: 13
             },
             formatter: function(params) {
                 return formatTooltip(params, data);
-            }
+            },
+            padding: [12, 16],
+            shadowBlur: 20,
+            shadowColor: 'rgba(0, 255, 163, 0.1)'
         },
         grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '8%',
-            top: '10%',
+            left: '2%',
+            right: '3%',
+            bottom: '10%',
+            top: '8%',
             containLabel: true
         },
         dataZoom: [
@@ -267,30 +280,41 @@ function loadPriceData(data) {
                 type: 'slider',
                 start: 0,
                 end: 100,
-                backgroundColor: '#2d2d2d',
+                backgroundColor: 'rgba(17, 17, 17, 0.8)',
                 dataBackground: {
                     lineStyle: {
-                        color: '#2962ff'
+                        color: '#00c2ff',
+                        width: 1.5
                     },
                     areaStyle: {
-                        color: 'rgba(41, 98, 255, 0.2)'
+                        color: 'rgba(0, 194, 255, 0.1)'
                     }
                 },
                 selectedDataBackground: {
                     lineStyle: {
-                        color: '#2962ff'
+                        color: '#00c2ff',
+                        width: 2
                     },
                     areaStyle: {
-                        color: 'rgba(41, 98, 255, 0.5)'
+                        color: 'rgba(0, 194, 255, 0.3)'
                     }
                 },
-                fillerColor: 'rgba(41, 98, 255, 0.15)',
-                borderColor: '#404040',
+                fillerColor: 'rgba(0, 194, 255, 0.15)',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
                 handleStyle: {
-                    color: '#2962ff'
+                    color: '#00c2ff',
+                    borderColor: '#00c2ff',
+                    shadowBlur: 8,
+                    shadowColor: 'rgba(0, 194, 255, 0.5)'
                 },
                 textStyle: {
-                    color: '#e0e0e0'
+                    color: '#b0b0b0'
+                },
+                emphasis: {
+                    handleStyle: {
+                        shadowBlur: 12,
+                        shadowColor: 'rgba(0, 194, 255, 0.8)'
+                    }
                 }
             }
         ],
@@ -298,10 +322,19 @@ function loadPriceData(data) {
             type: 'time',
             boundaryGap: false,
             axisLine: {
-                lineStyle: { color: '#404040' }
+                lineStyle: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                    width: 1
+                }
+            },
+            axisTick: {
+                lineStyle: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                }
             },
             axisLabel: {
-                color: '#e0e0e0',
+                color: '#808080',
+                fontSize: 11,
                 formatter: function(value) {
                     const date = new Date(value);
                     return date.toLocaleTimeString('en-US', {
@@ -316,13 +349,25 @@ function loadPriceData(data) {
             type: 'value',
             scale: true,
             axisLine: {
-                lineStyle: { color: '#404040' }
+                lineStyle: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                    width: 1
+                }
             },
             splitLine: {
-                lineStyle: { color: '#404040' }
+                lineStyle: {
+                    color: 'rgba(255, 255, 255, 0.05)',
+                    type: 'dashed'
+                }
+            },
+            axisTick: {
+                lineStyle: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                }
             },
             axisLabel: {
-                color: '#e0e0e0',
+                color: '#808080',
+                fontSize: 11,
                 formatter: function(value) {
                     if (value == null) return '$0';
                     return '$' + value.toFixed(6);
@@ -336,37 +381,62 @@ function loadPriceData(data) {
                 type: 'line',
                 data: chartData.map(d => [d.time, d.value]),
                 lineStyle: {
-                    color: '#2962ff',
-                    width: 3
+                    color: '#00c2ff',
+                    width: 2.5,
+                    shadowBlur: 4,
+                    shadowColor: 'rgba(0, 194, 255, 0.3)'
                 },
                 itemStyle: {
-                    color: '#2962ff'
+                    color: '#00c2ff',
+                    borderWidth: 0
                 },
-                symbol: 'circle',
-                symbolSize: 4,
-                smooth: false,
+                symbol: 'none',
+                smooth: 0.3,
                 z: 2,
                 emphasis: {
                     lineStyle: {
-                        width: 4
+                        width: 3.5,
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(0, 194, 255, 0.5)'
                     }
-                }
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0,
+                        y: 0,
+                        x2: 0,
+                        y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(0, 194, 255, 0.15)' },
+                            { offset: 1, color: 'rgba(0, 194, 255, 0.01)' }
+                        ]
+                    }
+                },
+                sampling: 'lttb'
             },
             // START marker
             {
                 name: 'START',
                 type: 'scatter',
                 data: [[startTime, data.start_price]],
-                symbolSize: 15,
+                symbolSize: 16,
                 itemStyle: {
-                    color: '#ffaa00'
+                    color: '#ffd60a',
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(255, 214, 10, 0.6)',
+                    borderWidth: 2,
+                    borderColor: 'rgba(255, 214, 10, 0.8)'
                 },
                 label: {
                     show: true,
-                    formatter: '▼START',
+                    formatter: '▼ START',
                     position: 'top',
-                    color: '#ffaa00',
-                    fontSize: 10
+                    color: '#ffd60a',
+                    fontSize: 11,
+                    fontWeight: 'bold',
+                    shadowBlur: 4,
+                    shadowColor: 'rgba(255, 214, 10, 0.5)'
                 },
                 z: 10
             },
@@ -375,16 +445,23 @@ function loadPriceData(data) {
                 name: 'END',
                 type: 'scatter',
                 data: [[endTime, data.end_price]],
-                symbolSize: 15,
+                symbolSize: 16,
                 itemStyle: {
-                    color: '#ffaa00'
+                    color: '#ffd60a',
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(255, 214, 10, 0.6)',
+                    borderWidth: 2,
+                    borderColor: 'rgba(255, 214, 10, 0.8)'
                 },
                 label: {
                     show: true,
-                    formatter: '▲END',
+                    formatter: '▲ END',
                     position: 'top',
-                    color: '#ffaa00',
-                    fontSize: 10
+                    color: '#ffd60a',
+                    fontSize: 11,
+                    fontWeight: 'bold',
+                    shadowBlur: 4,
+                    shadowColor: 'rgba(255, 214, 10, 0.5)'
                 },
                 z: 10
             },
@@ -393,15 +470,23 @@ function loadPriceData(data) {
                 name: 'SPIKE',
                 type: 'scatter',
                 data: [[spikePoint.time, spikePoint.value]],
-                symbolSize: 20,
+                symbolSize: 22,
                 itemStyle: {
-                    color: spikePoint.value > data.start_price ? '#00ff88' : '#ff4444'
+                    color: spikePoint.value > data.start_price ? '#00ffa3' : '#ff3b69',
+                    shadowBlur: 12,
+                    shadowColor: spikePoint.value > data.start_price ? 'rgba(0, 255, 163, 0.6)' : 'rgba(255, 59, 105, 0.6)',
+                    borderWidth: 2,
+                    borderColor: spikePoint.value > data.start_price ? 'rgba(0, 255, 163, 0.8)' : 'rgba(255, 59, 105, 0.8)'
                 },
                 label: {
                     show: true,
                     formatter: '★',
                     position: spikePoint.value > data.start_price ? 'bottom' : 'top',
-                    fontSize: 16
+                    fontSize: 18,
+                    fontWeight: 'bold',
+                    color: spikePoint.value > data.start_price ? '#00ffa3' : '#ff3b69',
+                    shadowBlur: 6,
+                    shadowColor: spikePoint.value > data.start_price ? 'rgba(0, 255, 163, 0.6)' : 'rgba(255, 59, 105, 0.6)'
                 },
                 z: 10
             } : null,
