@@ -7,8 +7,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY dashboard/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY dashboard/requirements.txt dashboard-requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r dashboard-requirements.txt
 
 # Copy dashboard application
 COPY dashboard/ .

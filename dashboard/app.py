@@ -14,8 +14,15 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for development
 
 # Get the data directory path
-BASE_DIR = Path(__file__).parent.parent
+# In Docker, files are at /app/data and /app/live
+# In local dev, files are at ../data and ../live
+if os.getenv('DOCKER_ENV'):
+    BASE_DIR = Path('/app')
+else:
+    BASE_DIR = Path(__file__).parent.parent
+
 DATA_DIR = BASE_DIR / 'data'
+LIVE_DIR = BASE_DIR / 'live'
 
 
 @app.route('/')
@@ -111,7 +118,7 @@ def run_analysis():
         min_change = data.get('min_change', 0.1)
 
         # Build command
-        script_path = BASE_DIR / 'live' / 'price_change_analyzer.py'
+        script_path = LIVE_DIR / 'price_change_analyzer.py'
 
         if not script_path.exists():
             return jsonify({'error': f'Analyzer script not found: {script_path}'}), 404

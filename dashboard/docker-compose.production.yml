@@ -9,11 +9,14 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # Mount data directory from parent directory (read-only)
-      - ../data:/app/data:ro
+      # Mount data directory from parent directory (writable for analysis output)
+      - ../data:/app/data
       # Mount live scripts for run-analysis feature (read-only)
       - ../live:/app/live:ro
+      # Mount .env file for InfluxDB credentials (read-only)
+      - ../.env:/app/.env:ro
     environment:
+      - DOCKER_ENV=1
       - FLASK_ENV=production
     restart: unless-stopped
     healthcheck:
