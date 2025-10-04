@@ -31,6 +31,12 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/whale-actions')
+def whale_actions():
+    """Serve the whale actions analysis page"""
+    return render_template('whale_actions.html')
+
+
 @app.route('/api/files')
 def list_files():
     """List all available price change JSON files"""
