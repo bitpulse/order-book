@@ -1848,6 +1848,19 @@ details[open] .data-flow-toggle {
     border-radius: 8px;
     color: var(--text-primary);
     font-size: 14px;
+    cursor: pointer;
+}
+
+.event-select option {
+    background: #111111;
+    color: var(--text-primary);
+    padding: 12px;
+}
+
+.event-select:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px var(--green-glow);
 }
 
 .event-info {
