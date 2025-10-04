@@ -2250,3 +2250,55 @@ details[open] .data-flow-toggle {
     box-shadow: 0 8px 24px rgba(0, 255, 163, 0.2);
     border-color: var(--green);
 }
+
+/* Quick Filter Buttons */
+.quick-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.filter-btn:hover {
+    background: rgba(0, 255, 163, 0.1);
+    border-color: var(--green);
+    color: var(--text-primary);
+}
+
+.filter-btn.active {
+    background: var(--green);
+    border-color: var(--green);
+    color: #000;
+    font-weight: 600;
+}
+
+/* Enhanced tooltip styling */
+.filter-btn[title] {
+    cursor: help;
+}
+
+.filter-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+
+/* Whale Monitor - Single Column Layout */
+.main-content {
+    grid-template-columns: 1fr !important;
+}
+
