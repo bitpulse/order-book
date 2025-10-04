@@ -1269,6 +1269,39 @@ function createModalEventItem(event, intervalStart, intervalEnd) {
     `;
 }
 
+// Export current interval as JSON
+function exportCurrentInterval() {
+    if (!currentInterval) {
+        alert('No interval data loaded');
+        return;
+    }
+
+    // Create filename with symbol and timestamp
+    const symbol = currentInterval.symbol || 'UNKNOWN';
+    const startTime = new Date(currentInterval.start_time);
+    const filename = `interval_${symbol}_rank${currentInterval.rank}_${startTime.toISOString().replace(/[:.]/g, '-')}.json`;
+
+    // Create JSON blob
+    const jsonData = JSON.stringify(currentInterval, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+
+    // Create download link
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    // Cleanup
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    console.log('Exported interval:', filename);
+}
+
 // Setup event listeners
 function setupEventListeners() {
     // New Analysis button
@@ -1298,6 +1331,11 @@ function setupEventListeners() {
     // Refresh button
     document.getElementById('refresh-btn').addEventListener('click', async () => {
         await loadFileList();
+    });
+
+    // Export interval button
+    document.getElementById('export-interval-btn').addEventListener('click', () => {
+        exportCurrentInterval();
     });
 
     // Fullscreen toggle

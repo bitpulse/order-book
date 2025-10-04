@@ -371,6 +371,43 @@ body::after {
     text-shadow: 0 0 15px var(--red-glow);
 }
 
+.stat-export {
+    grid-column: span 1;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-export {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    background: linear-gradient(135deg, rgba(0, 194, 255, 0.1), rgba(0, 194, 255, 0.05));
+    border: 1px solid rgba(0, 194, 255, 0.3);
+    border-radius: 8px;
+    color: #00c2ff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.btn-export:hover {
+    background: linear-gradient(135deg, rgba(0, 194, 255, 0.2), rgba(0, 194, 255, 0.1));
+    border-color: #00c2ff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 194, 255, 0.3);
+}
+
+.btn-export:active {
+    transform: translateY(0);
+}
+
+.export-icon {
+    font-size: 1rem;
+}
+
 /* Interval Selector */
 .interval-selector-container {
     background: rgba(17, 17, 17, 0.6);
