@@ -593,7 +593,7 @@ class PriceChangeAnalyzer:
             if result['whale_events']:
                 print(f"\n{BOLD}Event Timeline ({len(result['whale_events'])} events):{RESET}")
                 for event in result['whale_events'][:20]:  # Show first 20
-                    event_color = self._get_event_color(event['event_type'])
+                    event_color = self._get_event_color(event['event_type'], event.get('side', ''))
                     time_str = event['time'].strftime('%H:%M:%S.%f')[:-3]
                     print(f"  {DIM}{time_str}{RESET} {event_color}{event['event_type']:15s}{RESET} "
                           f"${event['price']:.2f} × {event['volume']:.4f} "
@@ -606,20 +606,26 @@ class PriceChangeAnalyzer:
 
             print()
 
-    def _get_event_color(self, event_type: str) -> str:
-        """Get color for event type"""
+    def _get_event_color(self, event_type: str, side: str = '') -> str:
+        """
+        Get color for event type based on market impact
+        Bright colors = definitive events, Dim colors = volume changes (ambiguous)
+        """
+        # Definitive market events - bright colors
         if event_type == 'market_buy':
-            return GREEN
+            return CYAN
         elif event_type == 'market_sell':
-            return RED
+            return MAGENTA
+        # Volume changes - muted colors (could be cancellations or modifications)
+        elif event_type == 'increase':
+            return f"{DIM}{GREEN}" if side == 'bid' else f"{DIM}{RED}"
+        elif event_type == 'decrease':
+            return f"{DIM}{RED}" if side == 'bid' else f"{DIM}{GREEN}"
+        # New orders - bright colors
         elif 'bid' in event_type or 'buy' in event_type:
             return GREEN
         elif 'ask' in event_type or 'sell' in event_type:
             return RED
-        elif 'increase' in event_type:
-            return CYAN
-        elif 'decrease' in event_type:
-            return MAGENTA
         else:
             return WHITE
 
