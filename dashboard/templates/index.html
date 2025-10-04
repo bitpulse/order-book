@@ -142,21 +142,49 @@
 
                 <!-- Chart Legend -->
                 <div class="chart-legend">
-                    <div class="legend-item">
-                        <span class="legend-marker" style="background: #00c2ff;"></span>
-                        <span>Price</span>
+                    <div class="legend-section">
+                        <div class="legend-title">Price & Markers</div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #00c2ff;"></span>
+                            <span>Price Line</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #ffd60a;"></span>
+                            <span>START/END</span>
+                        </div>
                     </div>
-                    <div class="legend-item">
-                        <span class="legend-marker" style="background: #00ffa3;"></span>
-                        <span>Bid Events</span>
+                    <div class="legend-section">
+                        <div class="legend-title">Definitive Events (Bright)</div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-triangle" style="border-bottom-color: #00ff88;"></span>
+                            <span>New Bid Orders</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-triangle-down" style="border-top-color: #ff4444;"></span>
+                            <span>New Ask Orders</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #00c2ff;"></span>
+                            <span>Market Buy</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #ff00ff;"></span>
+                            <span>Market Sell</span>
+                        </div>
                     </div>
-                    <div class="legend-item">
-                        <span class="legend-marker" style="background: #ff3b69;"></span>
-                        <span>Ask Events</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-marker" style="background: #ffd60a;"></span>
-                        <span>Market Trades</span>
+                    <div class="legend-section">
+                        <div class="legend-title">Volume Changes (Muted)</div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-diamond" style="background: #88cc88;"></span>
+                            <span>Bid Increase / Ask Decrease</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-diamond" style="background: #cc8888;"></span>
+                            <span>Ask Increase / Bid Decrease</span>
+                        </div>
+                        <div class="legend-note">
+                            Volume changes could be order modifications, cancellations, or partial fills
+                        </div>
                     </div>
                 </div>
             </div>

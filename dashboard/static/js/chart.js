@@ -595,29 +595,52 @@ function prepareWhaleScatterData(events, period) {
     return sortedEvents.map(event => {
         const isMarketBuy = event.event_type === 'market_buy';
         const isMarketSell = event.event_type === 'market_sell';
+        const isIncrease = event.event_type === 'increase';
+        const isDecrease = event.event_type === 'decrease';
         const isBid = event.side === 'bid' || event.event_type.includes('bid');
         const isAsk = event.side === 'ask' || event.event_type.includes('ask');
 
         let color, symbol, labelPosition;
 
+        // Definitive events - bright colors
         if (isMarketBuy) {
             color = period === 'during' ? '#00c2ff' : 'rgba(0, 194, 255, 0.3)'; // Bright cyan/blue
             symbol = 'circle';
             labelPosition = 'bottom';
         } else if (isMarketSell) {
-            color = period === 'during' ? '#ff00ff' : 'rgba(255, 0, 255, 0.3)'; // Magenta/pink
+            color = period === 'during' ? '#ff00ff' : 'rgba(255, 0, 255, 0.3)'; // Bright magenta/pink
             symbol = 'circle';
             labelPosition = 'top';
-        } else if (isBid) {
-            color = period === 'during' ? '#00ff88' : 'rgba(0, 255, 136, 0.3)'; // Green
+        }
+        // Volume changes - muted colors (ambiguous: could be cancellation or modification)
+        else if (isIncrease && isBid) {
+            color = period === 'during' ? '#88cc88' : 'rgba(136, 204, 136, 0.3)'; // Muted green (potential support)
+            symbol = 'diamond';
+            labelPosition = 'bottom';
+        } else if (isIncrease && isAsk) {
+            color = period === 'during' ? '#cc8888' : 'rgba(204, 136, 136, 0.3)'; // Muted red (potential resistance)
+            symbol = 'diamond';
+            labelPosition = 'top';
+        } else if (isDecrease && isBid) {
+            color = period === 'during' ? '#cc8888' : 'rgba(204, 136, 136, 0.3)'; // Muted red (support weakening)
+            symbol = 'diamond';
+            labelPosition = 'top';
+        } else if (isDecrease && isAsk) {
+            color = period === 'during' ? '#88cc88' : 'rgba(136, 204, 136, 0.3)'; // Muted green (resistance weakening)
+            symbol = 'diamond';
+            labelPosition = 'bottom';
+        }
+        // New orders - bright colors
+        else if (isBid) {
+            color = period === 'during' ? '#00ff88' : 'rgba(0, 255, 136, 0.3)'; // Bright green
             symbol = 'triangle';
             labelPosition = 'bottom';
         } else if (isAsk) {
-            color = period === 'during' ? '#ff4444' : 'rgba(255, 68, 68, 0.3)'; // Red
+            color = period === 'during' ? '#ff4444' : 'rgba(255, 68, 68, 0.3)'; // Bright red
             symbol = 'triangle';
             labelPosition = 'top';
         } else {
-            color = period === 'during' ? '#ffaa00' : 'rgba(255, 170, 0, 0.3)'; // Orange
+            color = period === 'during' ? '#ffaa00' : 'rgba(255, 170, 0, 0.3)'; // Orange (unknown)
             symbol = 'circle';
             labelPosition = 'top';
         }

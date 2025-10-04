@@ -15,6 +15,21 @@ Dashboard available at: http://localhost:5000
 - Docker Compose installed
 - Data files in `../data/` directory
 
+## 📊 Data Tracked
+
+The system tracks comprehensive order book data:
+
+**Price Data** (saved to InfluxDB `orderbook_price`):
+- Best bid/ask prices
+- Mid price & spread
+
+**Whale Events** (saved to InfluxDB `orderbook_whale_events`):
+- Event types: new orders, volume changes, market trades
+- Price, volume, USD value
+- Distance from mid-price
+- Order book level & order count
+- Market context (bid/ask/spread at event time)
+
 ## 🎯 Common Commands
 
 ```bash
