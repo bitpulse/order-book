@@ -4,7 +4,7 @@
 
 ```bash
 cd dashboard
-./deploy.sh dev up
+./deploy.sh up
 ```
 
 Dashboard available at: http://localhost:5000
@@ -15,51 +15,46 @@ Dashboard available at: http://localhost:5000
 - Docker Compose installed
 - Data files in `../data/` directory
 
+## 📊 Data Tracked
+
+The system tracks comprehensive order book data:
+
+**Price Data** (saved to InfluxDB `orderbook_price`):
+- Best bid/ask prices
+- Mid price & spread
+
+**Whale Events** (saved to InfluxDB `orderbook_whale_events`):
+- Event types: new orders, volume changes, market trades
+- Price, volume, USD value
+- Distance from mid-price
+- Order book level & order count
+- Market context (bid/ask/spread at event time)
+
 ## 🎯 Common Commands
 
-### Development Mode
-
 ```bash
 # Start
-./deploy.sh dev up
+./deploy.sh up
 
 # Stop
-./deploy.sh dev down
+./deploy.sh down
 
 # View logs
-./deploy.sh dev logs
+./deploy.sh logs
 
 # Check status
-./deploy.sh dev status
+./deploy.sh status
 
 # Restart
-./deploy.sh dev restart
-```
-
-### Production Mode
-
-```bash
-# Start
-./deploy.sh prod up
+./deploy.sh restart
 
 # Rebuild and start
-./deploy.sh prod rebuild
-
-# Stop
-./deploy.sh prod down
-
-# View logs
-./deploy.sh prod logs
-
-# Check status
-./deploy.sh prod status
+./deploy.sh rebuild
 ```
 
 ## 🔧 Manual Docker Commands
 
 If you prefer not to use the deploy script:
-
-### Development
 
 ```bash
 # Start
@@ -70,31 +65,23 @@ docker-compose down
 
 # View logs
 docker-compose logs -f
-```
 
-### Production
-
-```bash
-# Start
-docker-compose -f docker-compose.production.yml up -d
-
-# Stop
-docker-compose -f docker-compose.production.yml down
-
-# View logs
-docker-compose -f docker-compose.production.yml logs -f
+# Rebuild and start
+docker-compose up -d --build
 ```
 
 ## 🌐 Accessing the Dashboard
 
 ### Local Access
-- Development: http://localhost:5000
-- Production: http://localhost:5000
+
+- <http://localhost:5000>
 
 ### Remote Access (Server)
-- http://YOUR_SERVER_IP:5000
+
+- <http://YOUR_SERVER_IP:5000>
 
 ⚠️ **Note**: Make sure port 5000 is open in your firewall:
+
 ```bash
 sudo ufw allow 5000/tcp
 ```
@@ -115,11 +102,13 @@ docker logs orderbook-dashboard
 ## 🐛 Troubleshooting
 
 ### Container won't start
+
 ```bash
 docker-compose logs
 ```
 
 ### Port already in use
+
 ```bash
 # Find what's using port 5000
 sudo lsof -i :5000
@@ -128,6 +117,7 @@ sudo lsof -i :5000
 ```
 
 ### No data showing
+
 ```bash
 # Check if data files exist
 ls -la ../data/price_changes_*.json
@@ -137,6 +127,7 @@ docker exec orderbook-dashboard ls -la /app/data
 ```
 
 ### Permission issues
+
 ```bash
 # Fix data directory permissions
 chmod -R 755 ../data
@@ -149,14 +140,14 @@ chmod -R 755 ../data
 git pull
 
 # Rebuild and restart
-./deploy.sh prod rebuild
+./deploy.sh rebuild
 ```
 
 ## 📝 Configuration
 
 ### Change Port
 
-Edit `docker-compose.yml` or `docker-compose.production.yml`:
+Edit `docker-compose.yml`:
 
 ```yaml
 ports:
@@ -187,6 +178,5 @@ docker volume prune
 
 ## 📖 More Information
 
-- Full deployment guide: [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)
 - Dashboard features: [README.md](README.md)
 - Project overview: [../CLAUDE.md](../CLAUDE.md)

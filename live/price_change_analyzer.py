@@ -593,7 +593,7 @@ class PriceChangeAnalyzer:
             if result['whale_events']:
                 print(f"\n{BOLD}Event Timeline ({len(result['whale_events'])} events):{RESET}")
                 for event in result['whale_events'][:20]:  # Show first 20
-                    event_color = self._get_event_color(event['event_type'])
+                    event_color = self._get_event_color(event['event_type'], event.get('side', ''))
                     time_str = event['time'].strftime('%H:%M:%S.%f')[:-3]
                     print(f"  {DIM}{time_str}{RESET} {event_color}{event['event_type']:15s}{RESET} "
                           f"${event['price']:.2f} × {event['volume']:.4f} "
@@ -606,20 +606,26 @@ class PriceChangeAnalyzer:
 
             print()
 
-    def _get_event_color(self, event_type: str) -> str:
-        """Get color for event type"""
+    def _get_event_color(self, event_type: str, side: str = '') -> str:
+        """
+        Get color for event type based on market impact
+        Bright colors = definitive events, Dim colors = volume changes (ambiguous)
+        """
+        # Definitive market events - bright colors
         if event_type == 'market_buy':
-            return GREEN
+            return CYAN
         elif event_type == 'market_sell':
-            return RED
+            return MAGENTA
+        # Volume changes - muted colors (could be cancellations or modifications)
+        elif event_type == 'increase':
+            return f"{DIM}{GREEN}" if side == 'bid' else f"{DIM}{RED}"
+        elif event_type == 'decrease':
+            return f"{DIM}{RED}" if side == 'bid' else f"{DIM}{GREEN}"
+        # New orders - bright colors
         elif 'bid' in event_type or 'buy' in event_type:
             return GREEN
         elif 'ask' in event_type or 'sell' in event_type:
             return RED
-        elif 'increase' in event_type:
-            return CYAN
-        elif 'decrease' in event_type:
-            return MAGENTA
         else:
             return WHITE
 
@@ -629,6 +635,7 @@ class PriceChangeAnalyzer:
         intervals = []
         for result in results:
             export_result = result.copy()
+            export_result['symbol'] = self.symbol  # Add symbol to each interval
             export_result['start_time'] = result['start_time'].isoformat()
             export_result['end_time'] = result['end_time'].isoformat()
             export_result['extended_start'] = result['extended_start'].isoformat()
@@ -674,210 +681,6 @@ class PriceChangeAnalyzer:
             json.dump(export_data, f, indent=2)
 
         print(f"{GREEN}Exported to {filepath}{RESET}")
-
-    def export_json_summary(self, results: List[Dict], filepath: str):
-        """Export LLM-optimized summary to JSON file (90%+ size reduction)"""
-        # Helper to sample price data intelligently
-        def sample_price_data(price_data, start_time, end_time):
-            if not price_data:
-                return []
-
-            # Split into before, during, after periods
-            before = [p for p in price_data if p['time'] < start_time]
-            during = [p for p in price_data if start_time <= p['time'] <= end_time]
-            after = [p for p in price_data if p['time'] > end_time]
-
-            sampled = []
-
-            # Before: first 3 and last 3
-            if len(before) > 6:
-                sampled.extend(before[:3])
-                sampled.extend(before[-3:])
-            else:
-                sampled.extend(before)
-
-            # During: intelligently sample key points
-            if len(during) > 15:
-                # Always include first and last
-                sampled.append(during[0])
-
-                # Find the biggest price changes
-                changes = []
-                for i in range(1, len(during)):
-                    change = abs(during[i]['mid_price'] - during[i-1]['mid_price'])
-                    changes.append((change, i))
-
-                changes.sort(reverse=True)
-                key_indices = sorted([idx for _, idx in changes[:10]])
-
-                for idx in key_indices:
-                    sampled.append(during[idx])
-
-                sampled.append(during[-1])
-            else:
-                sampled.extend(during)
-
-            # After: first 3 and last 3
-            if len(after) > 6:
-                sampled.extend(after[:3])
-                sampled.extend(after[-3:])
-            else:
-                sampled.extend(after)
-
-            # Sort by time and convert
-            sampled.sort(key=lambda x: x['time'])
-            return [
-                {
-                    'time': point['time'].isoformat(),
-                    'mid_price': point['mid_price'],
-                    'spread': point['spread']
-                }
-                for point in sampled
-            ]
-
-        # Helper to summarize whale events
-        def summarize_events(events, period_name):
-            if not events:
-                return None
-
-            # Sort by USD value
-            sorted_events = sorted(events, key=lambda x: x['usd_value'], reverse=True)
-
-            # Calculate aggregates
-            total_count = len(events)
-            total_volume = sum(e['usd_value'] for e in events)
-
-            # Event type breakdown
-            event_types = defaultdict(lambda: {'count': 0, 'volume': 0})
-            for event in events:
-                etype = event['event_type']
-                event_types[etype]['count'] += 1
-                event_types[etype]['volume'] += event['usd_value']
-
-            # Side breakdown
-            sides = defaultdict(lambda: {'count': 0, 'volume': 0})
-            for event in events:
-                side = event['side']
-                sides[side]['count'] += 1
-                sides[side]['volume'] += event['usd_value']
-
-            # Top 5 events
-            top_events = [
-                {
-                    'time': e['time'].isoformat(),
-                    'event_type': e['event_type'],
-                    'side': e['side'],
-                    'price': e['price'],
-                    'volume': e['volume'],
-                    'usd_value': e['usd_value'],
-                    'distance_from_mid_pct': e['distance_from_mid_pct']
-                }
-                for e in sorted_events[:5]
-            ]
-
-            return {
-                'period': period_name,
-                'total_events': total_count,
-                'total_volume_usd': total_volume,
-                'biggest_whale_usd': sorted_events[0]['usd_value'] if sorted_events else 0,
-                'event_types': dict(event_types),
-                'sides': dict(sides),
-                'top_5_events': top_events
-            }
-
-        # Create summary intervals
-        intervals = []
-        for result in results:
-            # Sample price data intelligently
-            sampled_prices = sample_price_data(
-                result['price_data'],
-                result['start_time'],
-                result['end_time']
-            )
-
-            # Summarize whale events for each period
-            whale_summary_before = summarize_events(result['whale_events_before'], 'before')
-            whale_summary_during = summarize_events(result['whale_events'], 'during')
-            whale_summary_after = summarize_events(result['whale_events_after'], 'after')
-
-            interval_summary = {
-                'rank': result['rank'],
-                'start_time': result['start_time'].isoformat(),
-                'end_time': result['end_time'].isoformat(),
-                'start_price': result['start_price'],
-                'end_price': result['end_price'],
-                'change_pct': result['change_pct'],
-                'extended_start': result['extended_start'].isoformat(),
-                'extended_end': result['extended_end'].isoformat(),
-                'price_data_summary': {
-                    'total_points': len(result['price_data']),
-                    'sampled_points': len(sampled_prices),
-                    'key_prices': sampled_prices,
-                    'price_range': {
-                        'min': min(p['mid_price'] for p in result['price_data']),
-                        'max': max(p['mid_price'] for p in result['price_data']),
-                        'avg': sum(p['mid_price'] for p in result['price_data']) / len(result['price_data'])
-                    }
-                },
-                'whale_events_summary': {
-                    'before': whale_summary_before,
-                    'during': whale_summary_during,
-                    'after': whale_summary_after
-                }
-            }
-
-            intervals.append(interval_summary)
-
-        # Find overall statistics
-        all_changes = [r['change_pct'] for r in results]
-        biggest_spike = max(results, key=lambda x: abs(x['change_pct']))
-
-        # Create summary export
-        export_data = {
-            'metadata': {
-                'symbol': self.symbol,
-                'lookback': self.lookback,
-                'interval': self.interval,
-                'min_change': self.min_change,
-                'export_time': datetime.now().isoformat(),
-                'format': 'llm_summary',
-                'note': 'This is an LLM-optimized summary with ~90% size reduction from full export'
-            },
-            'summary_stats': {
-                'total_intervals': len(results),
-                'biggest_spike_pct': biggest_spike['change_pct'],
-                'biggest_spike_time': biggest_spike['start_time'].isoformat(),
-                'avg_change_pct': sum(all_changes) / len(all_changes) if all_changes else 0,
-                'price_volatility': max(all_changes) - min(all_changes) if all_changes else 0
-            },
-            'intervals': intervals
-        }
-
-        with open(filepath, 'w') as f:
-            json.dump(export_data, f, indent=2)
-
-        # Calculate size reduction
-        full_size = len(json.dumps({
-            'metadata': {'symbol': self.symbol},
-            'intervals': [
-                {**r,
-                 'start_time': r['start_time'].isoformat(),
-                 'end_time': r['end_time'].isoformat(),
-                 'extended_start': r['extended_start'].isoformat(),
-                 'extended_end': r['extended_end'].isoformat(),
-                 'price_data': [{**p, 'time': p['time'].isoformat()} for p in r['price_data']],
-                 'whale_events': [{**e, 'time': e['time'].isoformat()} for e in r['whale_events']],
-                 'whale_events_before': [{**e, 'time': e['time'].isoformat()} for e in r['whale_events_before']],
-                 'whale_events_after': [{**e, 'time': e['time'].isoformat()} for e in r['whale_events_after']]}
-                for r in results
-            ]
-        }, indent=2))
-
-        summary_size = os.path.getsize(filepath)
-        reduction_pct = ((full_size - summary_size) / full_size * 100) if full_size > 0 else 0
-
-        print(f"{GREEN}Exported summary to {filepath}{RESET}")
-        print(f"{DIM}Size reduction: {reduction_pct:.1f}% ({full_size:,} → {summary_size:,} bytes){RESET}")
 
     def export_csv(self, results: List[Dict], filepath: str):
         """Export results to CSV file"""
@@ -958,7 +761,7 @@ def parse_args():
     parser.add_argument(
         '--output',
         type=str,
-        choices=['terminal', 'json', 'csv', 'json-summary'],
+        choices=['terminal', 'json', 'csv'],
         default='terminal',
         help='Output format (default: terminal)'
     )
@@ -1004,18 +807,6 @@ def main():
                 export_path = os.path.join(data_dir, filename)
 
             analyzer.export_json(results, export_path)
-        elif args.output == 'json-summary':
-            # Create data directory if it doesn't exist
-            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-            os.makedirs(data_dir, exist_ok=True)
-
-            if args.export_path:
-                export_path = args.export_path
-            else:
-                filename = f"price_changes_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_summary.json"
-                export_path = os.path.join(data_dir, filename)
-
-            analyzer.export_json_summary(results, export_path)
         elif args.output == 'csv':
             # Create data directory if it doesn't exist
             data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')

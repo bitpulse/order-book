@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Dashboard Deployment Script
-# Usage: ./deploy.sh [dev|prod] [up|down|restart|logs]
+# Usage: ./deploy.sh [up|down|restart|logs]
 
 set -e
 
@@ -11,18 +11,12 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Default values
-MODE="${1:-dev}"
-ACTION="${2:-up}"
+# Default action
+ACTION="${1:-up}"
 
-# Determine which compose file to use
-if [ "$MODE" = "prod" ]; then
-    COMPOSE_FILE="docker-compose.production.yml"
-    echo -e "${GREEN}Using PRODUCTION configuration${NC}"
-else
-    COMPOSE_FILE="docker-compose.yml"
-    echo -e "${YELLOW}Using DEVELOPMENT configuration${NC}"
-fi
+# Use standard docker-compose file
+COMPOSE_FILE="docker-compose.yml"
+echo -e "${GREEN}Starting dashboard with docker-compose.yml${NC}"
 
 # Execute action
 case "$ACTION" in
@@ -59,14 +53,13 @@ case "$ACTION" in
         curl -s http://localhost:5000/api/stats | python3 -m json.tool || echo -e "${RED}Dashboard not responding${NC}"
         ;;
     *)
-        echo -e "${RED}Usage: $0 [dev|prod] [up|down|restart|rebuild|logs|status]${NC}"
+        echo -e "${RED}Usage: $0 [up|down|restart|rebuild|logs|status]${NC}"
         echo ""
         echo "Examples:"
-        echo "  $0 dev up        - Start in development mode"
-        echo "  $0 prod up       - Start in production mode"
-        echo "  $0 prod rebuild  - Rebuild and restart in production"
-        echo "  $0 dev logs      - View development logs"
-        echo "  $0 prod status   - Check production status"
+        echo "  $0 up        - Start dashboard"
+        echo "  $0 rebuild   - Rebuild and restart dashboard"
+        echo "  $0 logs      - View logs"
+        echo "  $0 status    - Check status"
         exit 1
         ;;
 esac
