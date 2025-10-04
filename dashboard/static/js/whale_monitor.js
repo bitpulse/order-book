@@ -60,27 +60,7 @@ function setupEventListeners() {
     });
 
     // Fullscreen
-    document.getElementById('fullscreen-btn').addEventListener('click', function() {
-        const wrapper = document.querySelector('.chart-wrapper');
-        const btn = document.getElementById('fullscreen-btn');
-
-        if (wrapper.classList.contains('fullscreen')) {
-            // Exit fullscreen
-            wrapper.classList.remove('fullscreen');
-            btn.textContent = '⛶';
-            btn.title = 'Toggle Fullscreen';
-        } else {
-            // Enter fullscreen
-            wrapper.classList.add('fullscreen');
-            btn.textContent = '⛶';
-            btn.title = 'Exit Fullscreen (Press Esc)';
-        }
-
-        // Resize chart when toggling fullscreen
-        if (chart) {
-            setTimeout(() => chart.resize(), 100);
-        }
-    });
+    document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
 
     // Filter event listeners
     document.getElementById('filter-market').addEventListener('change', applyFilters);
@@ -145,7 +125,7 @@ function setupEventListeners() {
                 document.getElementById('fullscreen-btn').textContent = '⛶';
                 document.getElementById('fullscreen-btn').title = 'Toggle Fullscreen';
                 if (chart) {
-                    setTimeout(() => chart.resize(), 100);
+                    setTimeout(() => chart.resize(), 350);
                 }
             }
         }
@@ -818,4 +798,32 @@ function showEventDetailsModal() {
 
     document.getElementById('event-modal-content').innerHTML = html;
     document.getElementById('event-details-modal').style.display = 'flex';
+}
+
+// Toggle fullscreen mode for chart
+function toggleFullscreen() {
+    const wrapper = document.querySelector('.chart-wrapper');
+    const container = document.getElementById('main-chart');
+    const btn = document.getElementById('fullscreen-btn');
+
+    if (wrapper.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        wrapper.classList.remove('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Toggle Fullscreen';
+    } else {
+        // Enter fullscreen
+        wrapper.classList.add('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Exit Fullscreen (Press Esc)';
+    }
+
+    // Resize chart to fit new container size
+    if (chart) {
+        // Use longer timeout to ensure CSS transition completes
+        setTimeout(() => {
+            chart.resize();
+            console.log('Chart resized after fullscreen toggle');
+        }, 350);
+    }
 }
