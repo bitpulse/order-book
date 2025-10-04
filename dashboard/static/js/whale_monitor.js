@@ -220,6 +220,47 @@ function showEvent(idx) {
     updateChart(event);
 }
 
+// Helper function to get marker color and symbol for an event
+function getEventMarkerProperties(etype, side) {
+    let markerColor, markerSymbol;
+
+    if (etype === 'market_buy') {
+        markerColor = '#00c2ff';
+        markerSymbol = 'circle';
+    } else if (etype === 'market_sell') {
+        markerColor = '#ff00ff';
+        markerSymbol = 'circle';
+    } else if (etype === 'increase' && side === 'bid') {
+        markerColor = '#88cc88';
+        markerSymbol = 'diamond';
+    } else if (etype === 'increase' && side === 'ask') {
+        markerColor = '#cc8888';
+        markerSymbol = 'diamond';
+    } else if (etype === 'decrease' && side === 'bid') {
+        markerColor = '#cc8888';
+        markerSymbol = 'triangle';
+    } else if (etype === 'decrease' && side === 'ask') {
+        markerColor = '#88cc88';
+        markerSymbol = 'triangle';
+    } else if (side === 'bid') {
+        markerColor = '#00ff88';
+        markerSymbol = 'triangle';
+    } else {
+        markerColor = '#ff4444';
+        markerSymbol = 'triangle';
+    }
+
+    return { markerColor, markerSymbol };
+}
+
+// Helper function to convert hex color to rgba with opacity
+function hexToRgba(hex, opacity) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 function updateChart(event) {
     if (!chart || !currentData) return;
 
@@ -274,37 +315,14 @@ function updateChart(event) {
 
     document.getElementById('loading').style.display = 'none';
 
-    // Event marker
-    let markerColor, markerSymbol;
-    const etype = event.event_type;
-    const side = event.side;
+    // Get other whale events in the time window (excluding current event)
+    const otherEvents = allEvents.filter(e => {
+        const eTime = new Date(e.time);
+        return eTime >= startTime && eTime <= endTime && e.time !== event.time;
+    });
 
-    if (etype === 'market_buy') {
-        markerColor = '#00c2ff';
-        markerSymbol = 'circle';
-    } else if (etype === 'market_sell') {
-        markerColor = '#ff00ff';
-        markerSymbol = 'circle';
-    } else if (etype === 'increase' && side === 'bid') {
-        markerColor = '#88cc88';
-        markerSymbol = 'diamond';
-    } else if (etype === 'increase' && side === 'ask') {
-        markerColor = '#cc8888';
-        markerSymbol = 'diamond';
-    } else if (etype === 'decrease' && side === 'bid') {
-        markerColor = '#cc8888';
-        markerSymbol = 'triangle';
-    } else if (etype === 'decrease' && side === 'ask') {
-        markerColor = '#88cc88';
-        markerSymbol = 'triangle';
-    } else if (side === 'bid') {
-        markerColor = '#00ff88';
-        markerSymbol = 'triangle';
-    } else {
-        markerColor = '#ff4444';
-        markerSymbol = 'triangle';
-    }
-
+    // Event marker properties for main event
+    const { markerColor, markerSymbol } = getEventMarkerProperties(event.event_type, event.side);
     const markerSize = Math.max(15, Math.min(30, event.usd_value / 5000));
 
     const option = {
@@ -383,6 +401,39 @@ function updateChart(event) {
                 z: 2
             },
             {
+                name: 'Other Whale Events',
+                type: 'scatter',
+                data: otherEvents.map(e => {
+                    const { markerColor, markerSymbol } = getEventMarkerProperties(e.event_type, e.side);
+                    const size = Math.max(10, Math.min(20, e.usd_value / 7000)); // Smaller than main event
+                    return {
+                        value: [new Date(e.time), e.price],
+                        symbolSize: size,
+                        itemStyle: {
+                            color: hexToRgba(markerColor, 0.3), // 30% opacity
+                            borderColor: hexToRgba(markerColor, 0.5),
+                            borderWidth: 1
+                        },
+                        symbol: markerSymbol
+                    };
+                }),
+                z: 5,
+                silent: false, // Enable hover
+                tooltip: {
+                    formatter: (params) => {
+                        const evt = otherEvents[params.dataIndex];
+                        return `
+                            <div style="font-size: 12px;">
+                                <strong>${formatEventType(evt.event_type, evt.side)}</strong><br/>
+                                <span style="color: #00ff88;">${formatUSD(evt.usd_value)}</span><br/>
+                                Price: $${evt.price.toFixed(2)}<br/>
+                                Time: ${new Date(evt.time).toLocaleTimeString()}
+                            </div>
+                        `;
+                    }
+                }
+            },
+            {
                 name: 'Whale Event',
                 type: 'scatter',
                 data: [[eventTime, event.price]],
@@ -413,10 +464,17 @@ function updateChart(event) {
 
     chart.setOption(option);
 
-    // Add click handler for event marker
+    // Add click handler for event markers
     chart.on('click', function(params) {
-        if (params.componentType === 'series' && params.seriesName === 'Whale Event') {
-            showEventDetailsModal();
+        if (params.componentType === 'series') {
+            if (params.seriesName === 'Whale Event') {
+                // Main event - show modal for current event
+                showEventDetailsModal();
+            } else if (params.seriesName === 'Other Whale Events') {
+                // Background event - show modal for this specific event
+                const clickedEvent = otherEvents[params.dataIndex];
+                showEventDetailsModal(clickedEvent);
+            }
         }
     });
 }
@@ -678,10 +736,14 @@ function applyQuickFilter(filterType) {
     }
 }
 
-function showEventDetailsModal() {
-    if (currentEventIndex < 0 || currentEventIndex >= filteredEvents.length) return;
+function showEventDetailsModal(eventOverride = null) {
+    // Use provided event or get from current index
+    const event = eventOverride || filteredEvents[currentEventIndex];
+    if (!event) return;
 
-    const event = filteredEvents[currentEventIndex];
+    // Find rank in allEvents for this event
+    const eventRank = allEvents.findIndex(e => e.time === event.time && e.price === event.price) + 1;
+    const totalEvents = allEvents.length;
 
     // Calculate price impact (if we have price data)
     const eventTime = new Date(event.time);
@@ -734,7 +796,7 @@ function showEventDetailsModal() {
                 </div>
                 <div class="event-modal-item">
                     <span class="event-modal-label">Rank:</span>
-                    <span class="event-modal-value">#${currentEventIndex + 1} of ${filteredEvents.length}</span>
+                    <span class="event-modal-value">#${eventRank} of ${totalEvents}</span>
                 </div>
             </div>
 
