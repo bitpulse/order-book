@@ -60,14 +60,7 @@ function setupEventListeners() {
     });
 
     // Fullscreen
-    document.getElementById('fullscreen-btn').addEventListener('click', function() {
-        const wrapper = document.querySelector('.chart-wrapper');
-        if (!document.fullscreenElement) {
-            wrapper.requestFullscreen();
-        } else {
-            document.exitFullscreen();
-        }
-    });
+    document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
 
     // Filter event listeners
     document.getElementById('filter-market').addEventListener('change', applyFilters);
@@ -93,6 +86,61 @@ function setupEventListeners() {
         // Close popup when clicking outside
         if (e.target && e.target.id === 'filter-details-popup') {
             e.target.style.display = 'none';
+        }
+    });
+
+    // Quick filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            // Update active state
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Apply quick filter
+            applyQuickFilter(this.dataset.filter);
+        });
+    });
+
+    // ESC key to close modals first, then exit fullscreen
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            // Check if any modal is open and close it
+            const newMonitorModal = document.getElementById('new-monitor-modal');
+            const eventDetailsModal = document.getElementById('event-details-modal');
+
+            if (newMonitorModal.style.display === 'block' || newMonitorModal.style.display === 'flex') {
+                newMonitorModal.style.display = 'none';
+                return; // Don't exit fullscreen, just close modal
+            }
+
+            if (eventDetailsModal.style.display === 'block' || eventDetailsModal.style.display === 'flex') {
+                eventDetailsModal.style.display = 'none';
+                return; // Don't exit fullscreen, just close modal
+            }
+
+            // If no modals are open, exit fullscreen
+            const wrapper = document.querySelector('.chart-wrapper');
+            if (wrapper.classList.contains('fullscreen')) {
+                wrapper.classList.remove('fullscreen');
+                document.getElementById('fullscreen-btn').textContent = '⛶';
+                document.getElementById('fullscreen-btn').title = 'Toggle Fullscreen';
+                if (chart) {
+                    setTimeout(() => chart.resize(), 350);
+                }
+            }
+        }
+    });
+
+    // Close modals when clicking outside (on backdrop)
+    document.getElementById('new-monitor-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.style.display = 'none';
+        }
+    });
+
+    document.getElementById('event-details-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.style.display = 'none';
         }
     });
 }
@@ -135,6 +183,9 @@ async function loadWhaleData(filename) {
 
         // Apply filters and populate event selector
         applyFilters();
+
+        // Update filter button states based on available events
+        updateFilterButtonStates();
     } catch (err) {
         console.error('Error loading data:', err);
     }
@@ -534,6 +585,99 @@ function resetFilters() {
     applyFilters();
 }
 
+function updateFilterButtonStates() {
+    // Count events by filter type
+    const counts = {
+        all: allEvents.length,
+        market: allEvents.filter(e => e.event_type === 'market_buy' || e.event_type === 'market_sell').length,
+        bid_increase: allEvents.filter(e => e.event_type === 'increase' && e.side === 'bid').length,
+        ask_increase: allEvents.filter(e => e.event_type === 'increase' && e.side === 'ask').length,
+        bid_decrease: allEvents.filter(e => e.event_type === 'decrease' && e.side === 'bid').length,
+        ask_decrease: allEvents.filter(e => e.event_type === 'decrease' && e.side === 'ask').length,
+        new_bid: allEvents.filter(e => e.event_type === 'new_bid').length,
+        new_ask: allEvents.filter(e => e.event_type === 'new_ask').length,
+        technical: allEvents.filter(e => e.event_type === 'entered_top' || e.event_type === 'left_top').length
+    };
+
+    // Update button states
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        const filterType = btn.dataset.filter;
+        const count = counts[filterType] || 0;
+
+        if (count === 0 && filterType !== 'all') {
+            btn.disabled = true;
+            btn.style.opacity = '0.3';
+            btn.style.cursor = 'not-allowed';
+            btn.title = `No ${filterType.replace('_', ' ')} events in this scan`;
+        } else {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.title = '';
+        }
+    });
+}
+
+function applyQuickFilter(filterType) {
+    if (allEvents.length === 0) return;
+
+    // Filter events based on quick filter type
+    filteredEvents = allEvents.filter(event => {
+        switch(filterType) {
+            case 'all':
+                return true;
+            case 'market':
+                return event.event_type === 'market_buy' || event.event_type === 'market_sell';
+            case 'bid_increase':
+                return event.event_type === 'increase' && event.side === 'bid';
+            case 'ask_increase':
+                return event.event_type === 'increase' && event.side === 'ask';
+            case 'bid_decrease':
+                return event.event_type === 'decrease' && event.side === 'bid';
+            case 'ask_decrease':
+                return event.event_type === 'decrease' && event.side === 'ask';
+            case 'new_bid':
+                return event.event_type === 'new_bid';
+            case 'new_ask':
+                return event.event_type === 'new_ask';
+            case 'technical':
+                return event.event_type === 'entered_top' || event.event_type === 'left_top';
+            default:
+                return true;
+        }
+    });
+
+    // Update event selector
+    const selector = document.getElementById('event-selector');
+    selector.innerHTML = '';
+    filteredEvents.forEach((event, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = `#${idx + 1}: ${formatEventType(event.event_type, event.side)} - ${formatUSD(event.usd_value)}`;
+        selector.appendChild(opt);
+    });
+
+    // Update count
+    const countEl = document.getElementById('filtered-count');
+    if (filteredEvents.length === allEvents.length) {
+        countEl.textContent = `Showing all ${allEvents.length} events`;
+    } else {
+        countEl.textContent = `Showing ${filteredEvents.length} of ${allEvents.length} events`;
+    }
+
+    document.getElementById('event-total').textContent = `of ${filteredEvents.length} events`;
+
+    // Show first filtered event
+    if (filteredEvents.length > 0) {
+        selector.value = 0;
+        showEvent(0);
+    } else {
+        document.getElementById('event-details').style.display = 'none';
+        document.getElementById('loading').innerHTML = '<p>No events match the current filter</p>';
+        document.getElementById('loading').style.display = 'block';
+    }
+}
+
 function showEventDetailsModal() {
     if (currentEventIndex < 0 || currentEventIndex >= filteredEvents.length) return;
 
@@ -654,4 +798,32 @@ function showEventDetailsModal() {
 
     document.getElementById('event-modal-content').innerHTML = html;
     document.getElementById('event-details-modal').style.display = 'flex';
+}
+
+// Toggle fullscreen mode for chart
+function toggleFullscreen() {
+    const wrapper = document.querySelector('.chart-wrapper');
+    const container = document.getElementById('main-chart');
+    const btn = document.getElementById('fullscreen-btn');
+
+    if (wrapper.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        wrapper.classList.remove('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Toggle Fullscreen';
+    } else {
+        // Enter fullscreen
+        wrapper.classList.add('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Exit Fullscreen (Press Esc)';
+    }
+
+    // Resize chart to fit new container size
+    if (chart) {
+        // Use longer timeout to ensure CSS transition completes
+        setTimeout(() => {
+            chart.resize();
+            console.log('Chart resized after fullscreen toggle');
+        }, 350);
+    }
 }

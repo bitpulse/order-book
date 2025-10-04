@@ -141,6 +141,19 @@
             </div>
         </div>
 
+        <!-- Quick Filter Buttons -->
+        <div class="quick-filters">
+            <button class="filter-btn active" data-filter="all" title="Show all whale events regardless of type">All Events</button>
+            <button class="filter-btn" data-filter="market" title="Aggressive buy/sell orders that execute immediately and remove liquidity from the order book">Market Orders</button>
+            <button class="filter-btn" data-filter="bid_increase" title="Existing bid orders getting larger - indicates support building and accumulation">📈 Bid Increases</button>
+            <button class="filter-btn" data-filter="ask_increase" title="Existing ask orders getting larger - indicates resistance building and distribution">📉 Ask Increases</button>
+            <button class="filter-btn" data-filter="bid_decrease" title="Existing bid orders getting smaller - indicates support weakening or profit taking">📉 Bid Decreases</button>
+            <button class="filter-btn" data-filter="ask_decrease" title="Existing ask orders getting smaller - indicates resistance weakening or accumulation">📈 Ask Decreases</button>
+            <button class="filter-btn" data-filter="new_bid" title="Brand new bid orders never seen before in the order book (rare - most orders are existing ones moving into top 20)">🆕 New Bids</button>
+            <button class="filter-btn" data-filter="new_ask" title="Brand new ask orders never seen before in the order book (rare - most orders are existing ones moving into top 20)">🆕 New Asks</button>
+            <button class="filter-btn" data-filter="technical" title="Orders moving into/out of top 20 from deeper levels - usually noise from existing orders repositioning">⚙️ Technical</button>
+        </div>
+
         <!-- Event Details Modal -->
         <div id="event-details-modal" class="modal" style="display: none;">
             <div class="modal-content event-details-modal-content">
@@ -197,6 +210,293 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Filter Legend -->
+                <div class="chart-legend">
+                    <div class="legend-section">
+                        <div class="legend-title">Filter Guide</div>
+                        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <span style="color: var(--green); font-weight: 600;">All Events</span>
+                                <span style="color: var(--text-secondary); font-size: 0.8rem;">Show all whale events regardless of type</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="legend-section">
+                        <div class="legend-title">Definitive Actions (High Signal)</div>
+                        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                            <span style="font-weight: 600;">Market Orders</span>
+                            <span class="legend-note">Aggressive buy/sell orders that execute immediately. Strong directional signal.</span>
+                        </div>
+                        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                            <span style="font-weight: 600;">🆕 New Bids/Asks</span>
+                            <span class="legend-note">Brand new orders at price levels never seen before. <em>Rare but very significant</em> - most orders are repositioning.</span>
+                        </div>
+                    </div>
+
+                    <div class="legend-section">
+                        <div class="legend-title">Positioning Changes (Medium Signal)</div>
+                        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                            <span style="font-weight: 600;">📈 Bid Increases / 📉 Ask Decreases</span>
+                            <span class="legend-note">Support building or resistance weakening. Bullish pressure.</span>
+                        </div>
+                        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                            <span style="font-weight: 600;">📉 Bid Decreases / 📉 Ask Increases</span>
+                            <span class="legend-note">Support weakening or resistance building. Bearish pressure.</span>
+                        </div>
+                    </div>
+
+                    <div class="legend-section">
+                        <div class="legend-title">Technical Noise (Low Signal)</div>
+                        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                            <span style="font-weight: 600;">⚙️ Technical (Entered/Left Top)</span>
+                            <span class="legend-note">Existing orders moving into/out of top 20 window. Usually noise from deeper levels - less important.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Flow Documentation -->
+                <details class="data-flow-info">
+                    <summary class="data-flow-summary">
+                        <span class="data-flow-icon">📡</span>
+                        Data Flow: From MEXC API to Whale Monitor Dashboard
+                        <span class="data-flow-toggle">▼</span>
+                    </summary>
+                    <div class="data-flow-content">
+                        <!-- Step 1: API Sources -->
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">📡 Step 1: MEXC WebSocket API Sources</div>
+                            <div class="data-flow-item">
+                                <code class="api-endpoint">sub.depth.full</code>
+                                <span class="api-description">Order Book Updates (Top 20 levels)</span>
+                            </div>
+                            <div class="data-flow-detail">
+                                <span class="field-label">Format:</span>
+                                <code>[price, volume, order_count]</code>
+                            </div>
+                            <div class="data-flow-detail">
+                                <span class="field-label">Fields:</span>
+                                <ul class="field-list">
+                                    <li><code>price</code> - Price level</li>
+                                    <li><code>volume</code> - Total quantity at this price</li>
+                                    <li><code>order_count</code> - Number of individual orders</li>
+                                    <li><code>version</code> - Sequence number (packet loss detection)</li>
+                                    <li><code>ts</code> - Timestamp</li>
+                                </ul>
+                            </div>
+
+                            <div class="data-flow-item" style="margin-top: 0.75rem;">
+                                <code class="api-endpoint">sub.deal</code>
+                                <span class="api-description">Trade Executions (Market orders)</span>
+                            </div>
+                            <div class="data-flow-detail">
+                                <span class="field-label">Fields:</span>
+                                <ul class="field-list">
+                                    <li><code>p</code> - Execution price</li>
+                                    <li><code>v</code> - Execution volume</li>
+                                    <li><code>T</code> - Trade type (1=Buy, 2=Sell)</li>
+                                    <li><code>t</code> - Timestamp</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: OrderBook Processor -->
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">🔄 Step 2: OrderBook Processor (orderbook_processor.py)</div>
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Parse WebSocket Messages</span>
+                                    <span class="logic-badge logic-badge-definitive">Real-time</span>
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Function:</strong> <code>parse_message()</code> converts raw WebSocket data into structured OrderBookSnapshot objects
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Output:</strong> OrderBookSnapshot with bids, asks, mid_price, spread, timestamp
+                                </div>
+                            </div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Detect Whale Orders</span>
+                                    <span class="logic-badge logic-badge-ambiguous">Filtering</span>
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Function:</strong> <code>detect_whale_orders()</code> scans order book for large orders
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Threshold:</strong> Checks if <code>price × volume ≥ whale_min_value</code> (e.g., $50,000)
+                                </div>
+                                <div class="logic-impact">
+                                    <strong>Enrichment:</strong> Calculates distance from mid price, USD value, and level position (1-20)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Event Tracker -->
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">🔍 Step 3: Event Detection (orderbook_tracker.py)</div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">New Bid/Ask Detection</span>
+                                    <span class="logic-badge logic-badge-definitive">Definitive</span>
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Condition:</strong> Price NOT in previous snapshot AND NOT in <code>full_bids</code>/<code>full_asks</code> history
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Why Rare:</strong> After tracker runs for hours, <code>full_bids</code> contains hundreds of price levels.
+                                    New orders at truly new prices are rare during normal market conditions.
+                                </div>
+                                <div class="logic-example">
+                                    <strong>Example:</strong> $500K order appears at $95,123.45 (never seen before) → <code>new_bid</code>
+                                </div>
+                            </div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Increase/Decrease Detection</span>
+                                    <span class="logic-badge logic-badge-ambiguous">Ambiguous</span>
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Increase:</strong> Price exists in previous snapshot, current volume > previous volume<br>
+                                    <strong>Decrease:</strong> Price exists in previous snapshot, current volume < previous volume
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Ambiguity:</strong> Could be whale adding/reducing position, or another trader joining/leaving, or order modification.
+                                    We can't distinguish the cause.
+                                </div>
+                            </div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Entered/Left Top Detection</span>
+                                    <span class="logic-badge logic-badge-technical">Technical</span>
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Entered Top:</strong> Price was in <code>full_bids</code> history but NOW appears in top 20<br>
+                                    <strong>Left Top:</strong> Price was in previous top 20 but NOW disappeared
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Why Noise:</strong> API only tracks top 20 levels. Orders move in/out of this window constantly as market shifts.
+                                    This is visibility change, not new market activity.
+                                </div>
+                                <div class="logic-example">
+                                    <strong>Example:</strong> Order at position #25 moves to position #18 → <code>entered_top</code> (not actually new)
+                                </div>
+                            </div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Market Buy/Sell Detection</span>
+                                    <span class="logic-badge logic-badge-definitive">Definitive</span>
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Source:</strong> Separate <code>sub.deal</code> stream, Type field: 1=Buy, 2=Sell
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Why Definitive:</strong> Aggressive orders that executed immediately against order book.
+                                    Market Buy = bought at ask (bullish), Market Sell = sold at bid (bearish).
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: InfluxDB Storage -->
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">💾 Step 4: InfluxDB Storage</div>
+                            <div class="metric-item">
+                                <span class="metric-name">Measurement:</span>
+                                <span class="metric-source"><code>orderbook_whale_events</code></span>
+                            </div>
+                            <div class="data-flow-detail">
+                                <span class="field-label">Tags:</span>
+                                <ul class="field-list">
+                                    <li><code>symbol</code> - Trading pair (e.g., BANANA_USDT)</li>
+                                    <li><code>event_type</code> - market_buy, market_sell, increase, decrease, new_bid, new_ask, entered_top, left_top</li>
+                                    <li><code>side</code> - bid or ask</li>
+                                </ul>
+                            </div>
+                            <div class="data-flow-detail">
+                                <span class="field-label">Fields:</span>
+                                <ul class="field-list">
+                                    <li><code>price</code> - Order price</li>
+                                    <li><code>volume</code> - Order volume</li>
+                                    <li><code>usd_value</code> - USD value (price × volume)</li>
+                                    <li><code>distance_from_mid_pct</code> - Distance from mid price (%)</li>
+                                    <li><code>mid_price</code> - Mid price at time of event</li>
+                                    <li><code>best_bid</code> - Best bid at time of event</li>
+                                    <li><code>best_ask</code> - Best ask at time of event</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Step 5: Whale Monitor Analysis -->
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">📊 Step 5: Whale Monitor Analysis (whale_monitor.py)</div>
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Query & Filter</span>
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Query InfluxDB:</strong> Fetch all whale events for specified lookback period (e.g., 3h)
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Server-side Filters:</strong>
+                                    <ul class="field-list">
+                                        <li><code>usd_value ≥ min_usd</code> - Filter by minimum USD value (e.g., $5,000)</li>
+                                        <li><code>abs(distance_from_mid_pct) ≤ max_distance</code> - Filter by distance from mid price (e.g., 5%)</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Categorize & Rank</span>
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Function:</strong> <code>categorize_events()</code> groups events into 9 categories:
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Categories:</strong> market_buy, market_sell, bid_increase, ask_increase, bid_decrease, ask_decrease, new_bid, new_ask, technical
+                                </div>
+                                <div class="logic-impact">
+                                    <strong>Ranking:</strong> Each category sorted by USD value (largest first), then truncated to top N (e.g., 50)
+                                </div>
+                            </div>
+
+                            <div class="logic-detailed">
+                                <div class="logic-header">
+                                    <span class="logic-type">Export to JSON</span>
+                                </div>
+                                <div class="logic-explanation">
+                                    <strong>Output:</strong> Categorized whale events + price data → JSON file in <code>data/</code> directory
+                                </div>
+                                <div class="logic-condition">
+                                    <strong>Dashboard reads:</strong> JSON files to display events, charts, and filters
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 6: Dashboard Display -->
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">🖥️ Step 6: Dashboard Display (whale_monitor.html)</div>
+                            <div class="metric-item">
+                                <span class="metric-name">Client-side Filters:</span>
+                                <span class="metric-source">Quick filter buttons allow instant toggling between event types</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-name">Event Navigation:</span>
+                                <span class="metric-source">Browse top whale events one-by-one with price context chart</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-name">Event Details Modal:</span>
+                                <span class="metric-source">Click event to see detailed info + price impact (1min/5min after)</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>
     </div>
