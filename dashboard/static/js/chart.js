@@ -1349,11 +1349,21 @@ function setupEventListeners() {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-        // ESC to exit fullscreen
+        // ESC key: close modal first, then exit fullscreen
         if (e.key === 'Escape') {
-            const wrapper = document.querySelector('.chart-wrapper');
-            if (wrapper.classList.contains('fullscreen')) {
-                toggleFullscreen();
+            // First check if any modal is open
+            const modal = document.getElementById('event-details-modal');
+            const isModalOpen = modal && modal.style.display === 'flex';
+
+            if (isModalOpen) {
+                // Close the modal
+                modal.style.display = 'none';
+            } else {
+                // If no modal, exit fullscreen if active
+                const wrapper = document.querySelector('.chart-wrapper');
+                if (wrapper.classList.contains('fullscreen')) {
+                    toggleFullscreen();
+                }
             }
         }
         // F for fullscreen toggle
