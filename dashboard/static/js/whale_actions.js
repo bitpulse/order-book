@@ -213,20 +213,12 @@ function initChart() {
 }
 
 /**
- * Update the main chart with whale events
+ * Prepare whale scatter data with colors and symbols
  */
-function updateChart(intervalData) {
-    if (!chart || !intervalData) return;
+function prepareWhaleScatterData(events) {
+    if (!events || events.length === 0) return [];
 
-    // Prepare price data as continuous line (like price analyzer)
-    const priceData = intervalData.price_data || [];
-    const chartData = priceData.map(p => ({
-        time: new Date(p.time),
-        value: p.mid_price
-    }));
-
-    // Prepare whale events scatter data with proper symbols
-    const whaleScatterData = intervalData.whale_events.map(event => {
+    return events.map(event => {
         const isMarketBuy = event.event_type === 'market_buy';
         const isMarketSell = event.event_type === 'market_sell';
         const isIncrease = event.event_type === 'increase';
@@ -236,7 +228,7 @@ function updateChart(intervalData) {
 
         let color, symbol;
 
-        // Definitive events - bright colors
+        // Market orders - bright cyan/magenta
         if (isMarketBuy) {
             color = '#00c2ff';
             symbol = 'circle';
@@ -258,7 +250,7 @@ function updateChart(intervalData) {
             color = '#88cc88';
             symbol = 'triangle';
         }
-        // New orders - bright colors
+        // New orders - bright green/red
         else if (isBid) {
             color = '#00ff88';
             symbol = 'triangle';
@@ -279,6 +271,29 @@ function updateChart(intervalData) {
             event: event
         };
     });
+}
+
+/**
+ * Update the main chart with whale events
+ */
+function updateChart(intervalData) {
+    if (!chart || !intervalData) return;
+
+    // Prepare price data as continuous line
+    const priceData = intervalData.price_data || [];
+    const chartData = priceData.map(p => ({
+        time: new Date(p.time),
+        value: p.mid_price
+    }));
+
+    // Combine all whale events from before, during, and after
+    const allWhaleEvents = [
+        ...(intervalData.whale_events_before || []),
+        ...(intervalData.whale_events || []),
+        ...(intervalData.whale_events_after || [])
+    ];
+
+    const whaleScatterData = prepareWhaleScatterData(allWhaleEvents);
 
     // Chart configuration (matching price analyzer style)
     const option = {
@@ -300,12 +315,54 @@ function updateChart(intervalData) {
             }
         },
         grid: {
-            left: '3%',
+            left: '2%',
             right: '3%',
-            top: '10%',
-            bottom: '10%',
+            bottom: '15%',
+            top: '8%',
             containLabel: true
         },
+        dataZoom: [
+            {
+                type: 'inside',
+                start: 0,
+                end: 100
+            },
+            {
+                type: 'slider',
+                start: 0,
+                end: 100,
+                backgroundColor: 'rgba(17, 17, 17, 0.8)',
+                dataBackground: {
+                    lineStyle: {
+                        color: '#00c2ff',
+                        width: 1.5
+                    },
+                    areaStyle: {
+                        color: 'rgba(0, 194, 255, 0.1)'
+                    }
+                },
+                selectedDataBackground: {
+                    lineStyle: {
+                        color: '#00c2ff',
+                        width: 2
+                    },
+                    areaStyle: {
+                        color: 'rgba(0, 194, 255, 0.3)'
+                    }
+                },
+                fillerColor: 'rgba(0, 194, 255, 0.15)',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                handleStyle: {
+                    color: '#00c2ff',
+                    borderColor: '#00c2ff',
+                    shadowBlur: 8,
+                    shadowColor: 'rgba(0, 194, 255, 0.5)'
+                },
+                textStyle: {
+                    color: '#888'
+                }
+            }
+        ],
         xAxis: {
             type: 'time',
             axisLabel: {
@@ -383,6 +440,7 @@ function updateChart(intervalData) {
                 },
                 sampling: 'lttb'
             },
+            // Whale events
             {
                 name: 'Whale Events',
                 type: 'scatter',
@@ -414,7 +472,10 @@ function updateChart(intervalData) {
     chart.off('click'); // Remove previous handlers
     chart.on('click', function(params) {
         if (params.seriesName === 'Whale Events') {
-            showEventDetails(intervalData.whale_events[params.dataIndex]);
+            const eventData = params.data[2];
+            if (eventData && eventData.event) {
+                showEventDetails(eventData.event);
+            }
         }
     });
 }
