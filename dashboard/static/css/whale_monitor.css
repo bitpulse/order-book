@@ -1411,7 +1411,7 @@ details[open] .data-flow-toggle {
 /* Modal */
 .modal {
     position: fixed;
-    z-index: 2000;
+    z-index: 10001;
     left: 0;
     top: 0;
     width: 100%;

@@ -121,9 +121,24 @@ function setupEventListeners() {
         });
     });
 
-    // ESC key to exit fullscreen
+    // ESC key to close modals first, then exit fullscreen
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
+            // Check if any modal is open and close it
+            const newMonitorModal = document.getElementById('new-monitor-modal');
+            const eventDetailsModal = document.getElementById('event-details-modal');
+
+            if (newMonitorModal.style.display === 'block' || newMonitorModal.style.display === 'flex') {
+                newMonitorModal.style.display = 'none';
+                return; // Don't exit fullscreen, just close modal
+            }
+
+            if (eventDetailsModal.style.display === 'block' || eventDetailsModal.style.display === 'flex') {
+                eventDetailsModal.style.display = 'none';
+                return; // Don't exit fullscreen, just close modal
+            }
+
+            // If no modals are open, exit fullscreen
             const wrapper = document.querySelector('.chart-wrapper');
             if (wrapper.classList.contains('fullscreen')) {
                 wrapper.classList.remove('fullscreen');
@@ -133,6 +148,19 @@ function setupEventListeners() {
                     setTimeout(() => chart.resize(), 100);
                 }
             }
+        }
+    });
+
+    // Close modals when clicking outside (on backdrop)
+    document.getElementById('new-monitor-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.style.display = 'none';
+        }
+    });
+
+    document.getElementById('event-details-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.style.display = 'none';
         }
     });
 }
