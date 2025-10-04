@@ -1211,12 +1211,39 @@ function createModalEventItem(event, intervalStart, intervalEnd) {
         fractionalSecondDigits: 3
     });
 
-    const sideColor = event.side === 'bid' ? '#00ff88' : event.side === 'ask' ? '#ff4444' : '#ffaa00';
+    // Use same color logic as chart markers
+    let eventColor;
+    const isMarketBuy = event.event_type === 'market_buy';
+    const isMarketSell = event.event_type === 'market_sell';
+    const isIncrease = event.event_type === 'increase';
+    const isDecrease = event.event_type === 'decrease';
+    const isBid = event.side === 'bid';
+    const isAsk = event.side === 'ask';
+
+    if (isMarketBuy) {
+        eventColor = '#00c2ff'; // Bright cyan
+    } else if (isMarketSell) {
+        eventColor = '#ff00ff'; // Bright magenta
+    } else if (isIncrease && isBid) {
+        eventColor = '#88cc88'; // Muted green (potential support)
+    } else if (isIncrease && isAsk) {
+        eventColor = '#cc8888'; // Muted red (potential resistance)
+    } else if (isDecrease && isBid) {
+        eventColor = '#cc8888'; // Muted red (support weakening)
+    } else if (isDecrease && isAsk) {
+        eventColor = '#88cc88'; // Muted green (resistance weakening)
+    } else if (isBid) {
+        eventColor = '#00ff88'; // Bright green (new bid)
+    } else if (isAsk) {
+        eventColor = '#ff4444'; // Bright red (new ask)
+    } else {
+        eventColor = '#ffaa00'; // Orange (unknown)
+    }
 
     return `
         <div class="modal-event-item ${event.side}">
             <div class="modal-event-header">
-                <span class="modal-event-type" style="background-color: ${sideColor};">${event.event_type.replace('_', ' ')}</span>
+                <span class="modal-event-type" style="background-color: ${eventColor};">${event.event_type.replace('_', ' ')}</span>
                 <span class="modal-event-period" style="color: ${periodColor};">${periodBadge}</span>
                 <span class="modal-event-time">${time}</span>
             </div>
