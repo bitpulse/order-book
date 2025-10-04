@@ -17,10 +17,77 @@
         <header class="header">
             <h1>Whale Actions Analysis Dashboard</h1>
             <div class="header-controls">
+                <button id="new-analysis-btn" class="btn btn-primary">+ New Analysis</button>
+                <select id="file-selector" class="file-selector">
+                    <option value="">Loading files...</option>
+                </select>
                 <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
                 <a href="/" class="btn btn-link">← Price Analysis</a>
             </div>
         </header>
+
+        <!-- New Analysis Modal -->
+        <div id="new-analysis-modal" class="modal" style="display: none;">
+            <div class="modal-content analysis-modal-content">
+                <div class="modal-header">
+                    <h3>Run New Whale Activity Analysis</h3>
+                    <button class="modal-close" onclick="document.getElementById('new-analysis-modal').style.display='none'">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="analysis-form" class="analysis-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="symbol-input">Symbol</label>
+                                <input type="text" id="symbol-input" placeholder="e.g., BANANA_USDT" value="BANANA_USDT" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="lookback-input">Lookback</label>
+                                <input type="text" id="lookback-input" placeholder="e.g., 3h" value="3h" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="interval-input">Interval</label>
+                                <input type="text" id="interval-input" placeholder="e.g., 30s" value="30s" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="top-input">Top N</label>
+                                <input type="number" id="top-input" placeholder="10" value="10" min="1" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="min-usd-input">Min USD</label>
+                                <input type="number" id="min-usd-input" placeholder="10000" value="10000" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="sort-by-input">Sort By</label>
+                                <select id="sort-by-input" required>
+                                    <option value="volume">Volume</option>
+                                    <option value="imbalance">Imbalance</option>
+                                    <option value="events">Event Count</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary btn-large">Run Analysis</button>
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-analysis-modal').style.display='none'">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="analysis-status" class="analysis-status" style="display: none;">
+                        <div class="status-spinner"></div>
+                        <div id="status-message">Running analysis...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interval Selector -->
+        <div id="interval-selector-container" class="interval-selector-container" style="display: none;">
+            <label for="interval-selector">Select Interval:</label>
+            <select id="interval-selector" class="interval-selector">
+            </select>
+        </div>
 
         <!-- Main Content -->
         <div class="main-content">
