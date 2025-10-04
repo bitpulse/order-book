@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whale Event Monitor</title>
+
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/whale_monitor.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🐋 Top Whale Events</h1>
+            <div class="header-controls">
+                <button id="new-monitor-btn" class="btn btn-primary">+ New Scan</button>
+                <select id="file-selector" class="file-selector">
+                    <option value="">Loading...</option>
+                </select>
+                <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+                <a href="/" class="btn btn-link">← Price Analysis</a>
+            </div>
+        </header>
+
+        <!-- New Monitor Modal -->
+        <div id="new-monitor-modal" class="modal" style="display: none;">
+            <div class="modal-content analysis-modal-content">
+                <div class="modal-header">
+                    <h3>Run Whale Event Monitor</h3>
+                    <button class="modal-close" onclick="document.getElementById('new-monitor-modal').style.display='none'">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="monitor-form" class="monitor-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="symbol-input">Symbol</label>
+                                <input type="text" id="symbol-input" value="BANANA_USDT" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="lookback-input">Lookback</label>
+                                <input type="text" id="lookback-input" value="3h" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="min-usd-input">Min USD</label>
+                                <input type="number" id="min-usd-input" value="5000" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="top-input">Top N</label>
+                                <input type="number" id="top-input" value="50" min="1" required>
+                            </div>
+                        </div>
+
+                        <!-- Filters Section -->
+                        <div class="form-section">
+                            <h4>Filters</h4>
+
+                            <!-- Event Type Filter -->
+                            <div class="form-group">
+                                <label class="filter-label">Event Types:</label>
+                                <div class="filter-checkboxes">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="filter-market" checked>
+                                        <span>Market Orders</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="filter-increase" checked>
+                                        <span>Increases</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="filter-decrease">
+                                        <span>Decreases</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="filter-technical">
+                                        <span>Technical</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Distance Filter -->
+                            <div class="form-group">
+                                <label class="filter-label">Max Distance from Mid:</label>
+                                <div class="filter-range">
+                                    <input type="range" id="distance-slider" min="0" max="500" value="500" step="10">
+                                    <span id="distance-value" class="filter-value">5.00%</span>
+                                </div>
+                            </div>
+
+                            <!-- Side Filter -->
+                            <div class="form-group">
+                                <label class="filter-label">Side:</label>
+                                <div class="filter-radio">
+                                    <label class="radio-label">
+                                        <input type="radio" name="side-filter" value="both" checked>
+                                        <span>Both</span>
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="side-filter" value="bid">
+                                        <span>Bids Only</span>
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="side-filter" value="ask">
+                                        <span>Asks Only</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary btn-large">Run Monitor</button>
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-monitor-modal').style.display='none'">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="monitor-status" class="monitor-status" style="display: none;">
+                        <div class="status-spinner"></div>
+                        <div id="status-message">Running monitor...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Event Selector with Filter Status -->
+        <div class="event-selector-container">
+            <div class="event-nav">
+                <button id="prev-event" class="nav-btn" disabled>← Previous</button>
+                <select id="event-selector" class="event-select">
+                    <option value="">Select whale event...</option>
+                </select>
+                <button id="next-event" class="nav-btn" disabled>Next →</button>
+            </div>
+            <div class="event-info">
+                <span id="event-rank" class="event-rank"></span>
+                <span id="event-total" class="event-total"></span>
+                <span id="filtered-count" class="filtered-count">Showing all events</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Chart Panel -->
+            <div class="chart-panel">
+                <!-- Event Details -->
+                <div id="event-details" class="event-details-card" style="display: none;">
+                    <div class="event-header-main">
+                        <h2 id="event-type-display"></h2>
+                        <div id="event-usd-display" class="event-usd-large"></div>
+                    </div>
+                    <div class="event-grid">
+                        <div class="event-detail-item">
+                            <span class="detail-label">Price:</span>
+                            <span id="event-price-display" class="detail-value"></span>
+                        </div>
+                        <div class="event-detail-item">
+                            <span class="detail-label">Volume:</span>
+                            <span id="event-volume-display" class="detail-value"></span>
+                        </div>
+                        <div class="event-detail-item">
+                            <span class="detail-label">Time:</span>
+                            <span id="event-time-display" class="detail-value"></span>
+                        </div>
+                        <div class="event-detail-item">
+                            <span class="detail-label">From Mid:</span>
+                            <span id="event-distance-display" class="detail-value"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="chart-wrapper">
+                    <button id="fullscreen-btn" class="fullscreen-btn">⛶</button>
+                    <div class="chart-container">
+                        <div id="main-chart" style="width: 100%; height: 100%;"></div>
+                        <div id="loading" class="loading">
+                            <div class="spinner"></div>
+                            <p>Select a whale event to view</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/whale_monitor.js') }}"></script>
+</body>
+</html>
