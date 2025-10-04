@@ -84,7 +84,17 @@ function setupEventListeners() {
         radio.addEventListener('change', applyFilters);
     });
 
-    document.getElementById('reset-filters').addEventListener('click', resetFilters);
+    // Filter details popup - use event delegation
+    document.addEventListener('click', function(e) {
+        if (e.target && e.target.id === 'filtered-count') {
+            showFilterDetails();
+        }
+
+        // Close popup when clicking outside
+        if (e.target && e.target.id === 'filter-details-popup') {
+            e.target.style.display = 'none';
+        }
+    });
 }
 
 async function loadFileList() {
@@ -326,6 +336,13 @@ function updateChart(event) {
     };
 
     chart.setOption(option);
+
+    // Add click handler for event marker
+    chart.on('click', function(params) {
+        if (params.componentType === 'series' && params.seriesName === 'Whale Event') {
+            showEventDetailsModal();
+        }
+    });
 }
 
 async function runMonitor() {
@@ -490,4 +507,126 @@ function resetFilters() {
 
     // Re-apply filters
     applyFilters();
+}
+
+function showEventDetailsModal() {
+    if (currentEventIndex < 0 || currentEventIndex >= filteredEvents.length) return;
+
+    const event = filteredEvents[currentEventIndex];
+
+    // Calculate price impact (if we have price data)
+    const eventTime = new Date(event.time);
+    const priceData = currentData.price_data || [];
+
+    // Find price 1min and 5min after event
+    const oneMinAfter = new Date(eventTime.getTime() + 60 * 1000);
+    const fiveMinAfter = new Date(eventTime.getTime() + 5 * 60 * 1000);
+
+    let priceAfter1min = null;
+    let priceAfter5min = null;
+
+    for (const p of priceData) {
+        const t = new Date(p.time);
+        if (!priceAfter1min && t >= oneMinAfter) {
+            priceAfter1min = p.mid_price;
+        }
+        if (!priceAfter5min && t >= fiveMinAfter) {
+            priceAfter5min = p.mid_price;
+            break;
+        }
+    }
+
+    const priceChange1min = priceAfter1min ? ((priceAfter1min - event.price) / event.price * 100).toFixed(2) : 'N/A';
+    const priceChange5min = priceAfter5min ? ((priceAfter5min - event.price) / event.price * 100).toFixed(2) : 'N/A';
+
+    // Determine color based on event type and side
+    let eventColor = '#00ffa3';
+    if (event.event_type === 'market_buy' || (event.event_type === 'increase' && event.side === 'bid')) {
+        eventColor = '#00ffa3';
+    } else if (event.event_type === 'market_sell' || (event.event_type === 'increase' && event.side === 'ask')) {
+        eventColor = '#ff3b69';
+    }
+
+    const html = `
+        <div class="event-modal-grid">
+            <div class="event-modal-section">
+                <h4>Event Information</h4>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Type:</span>
+                    <span class="event-modal-value" style="color: ${eventColor}">${formatEventType(event.event_type, event.side)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">USD Value:</span>
+                    <span class="event-modal-value" style="color: ${eventColor}; font-size: 1.3rem; font-weight: 700;">${formatUSD(event.usd_value)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Time:</span>
+                    <span class="event-modal-value">${new Date(event.time).toLocaleString()}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Rank:</span>
+                    <span class="event-modal-value">#${currentEventIndex + 1} of ${filteredEvents.length}</span>
+                </div>
+            </div>
+
+            <div class="event-modal-section">
+                <h4>Order Details</h4>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Price:</span>
+                    <span class="event-modal-value">$${event.price.toFixed(2)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Volume:</span>
+                    <span class="event-modal-value">${event.volume.toFixed(4)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Side:</span>
+                    <span class="event-modal-value">${event.side === 'bid' ? '📗 Bid' : '📕 Ask'}</span>
+                </div>
+            </div>
+
+            <div class="event-modal-section">
+                <h4>Market Context</h4>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Mid Price:</span>
+                    <span class="event-modal-value">$${event.mid_price.toFixed(2)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Distance from Mid:</span>
+                    <span class="event-modal-value">${event.distance_from_mid_pct.toFixed(2)}%</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Best Bid:</span>
+                    <span class="event-modal-value">$${event.best_bid.toFixed(2)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Best Ask:</span>
+                    <span class="event-modal-value">$${event.best_ask.toFixed(2)}</span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">Spread:</span>
+                    <span class="event-modal-value">${((event.best_ask - event.best_bid) / event.mid_price * 100).toFixed(3)}%</span>
+                </div>
+            </div>
+
+            <div class="event-modal-section">
+                <h4>Price Impact</h4>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">1min After:</span>
+                    <span class="event-modal-value" style="color: ${priceChange1min !== 'N/A' && parseFloat(priceChange1min) > 0 ? '#00ffa3' : priceChange1min !== 'N/A' && parseFloat(priceChange1min) < 0 ? '#ff3b69' : 'inherit'}">
+                        ${priceChange1min !== 'N/A' ? (priceChange1min > 0 ? '+' : '') + priceChange1min + '%' : 'N/A'}
+                    </span>
+                </div>
+                <div class="event-modal-item">
+                    <span class="event-modal-label">5min After:</span>
+                    <span class="event-modal-value" style="color: ${priceChange5min !== 'N/A' && parseFloat(priceChange5min) > 0 ? '#00ffa3' : priceChange5min !== 'N/A' && parseFloat(priceChange5min) < 0 ? '#ff3b69' : 'inherit'}">
+                        ${priceChange5min !== 'N/A' ? (priceChange5min > 0 ? '+' : '') + priceChange5min + '%' : 'N/A'}
+                    </span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('event-modal-content').innerHTML = html;
+    document.getElementById('event-details-modal').style.display = 'flex';
 }

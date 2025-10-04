@@ -137,7 +137,22 @@
             <div class="event-info">
                 <span id="event-rank" class="event-rank"></span>
                 <span id="event-total" class="event-total"></span>
-                <span id="filtered-count" class="filtered-count">Showing all events</span>
+                <span id="filtered-count" class="filtered-count" style="cursor: pointer;" title="Click to see active filters">Showing all events</span>
+            </div>
+        </div>
+
+        <!-- Event Details Modal -->
+        <div id="event-details-modal" class="modal" style="display: none;">
+            <div class="modal-content event-details-modal-content">
+                <div class="modal-header">
+                    <h3>Whale Event Details</h3>
+                    <button class="modal-close" onclick="document.getElementById('event-details-modal').style.display='none'">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="event-modal-content">
+                        <!-- Event details will be populated here -->
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -146,7 +161,7 @@
             <!-- Chart Panel -->
             <div class="chart-panel">
                 <!-- Event Details -->
-                <div id="event-details" class="event-details-card" style="display: none;">
+                <div id="event-details" class="event-details-card clickable-card" style="display: none; cursor: pointer;" onclick="showEventDetailsModal()">
                     <div class="event-header-main">
                         <h2 id="event-type-display"></h2>
                         <div id="event-usd-display" class="event-usd-large"></div>
