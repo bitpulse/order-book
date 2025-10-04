@@ -174,25 +174,50 @@ function updateChart(event) {
 
     const eventTime = new Date(event.time);
 
-    // Get price data around this event (±5 minutes)
+    // Get price data around this event (±5 minutes, or whatever is available)
     const before = 5 * 60 * 1000; // 5 minutes in ms
     const after = 5 * 60 * 1000;
-    const startTime = new Date(eventTime.getTime() - before);
-    const endTime = new Date(eventTime.getTime() + after);
+    let startTime = new Date(eventTime.getTime() - before);
+    let endTime = new Date(eventTime.getTime() + after);
+
+    // Get all price data
+    const allPriceData = (currentData.price_data || []).map(p => ({
+        time: new Date(p.time),
+        value: p.mid_price
+    }));
+
+    if (allPriceData.length === 0) {
+        document.getElementById('loading').innerHTML = '<p>No price data available</p>';
+        return;
+    }
+
+    // Find actual data boundaries
+    const dataStartTime = new Date(Math.min(...allPriceData.map(p => p.time.getTime())));
+    const dataEndTime = new Date(Math.max(...allPriceData.map(p => p.time.getTime())));
+
+    // Adjust time window to available data
+    if (startTime < dataStartTime) startTime = dataStartTime;
+    if (endTime > dataEndTime) endTime = dataEndTime;
+
+    // If event is outside data range, show 10 minutes of data around the closest available time
+    if (eventTime < dataStartTime || eventTime > dataEndTime) {
+        const tenMinutes = 10 * 60 * 1000;
+        if (eventTime < dataStartTime) {
+            startTime = dataStartTime;
+            endTime = new Date(Math.min(dataStartTime.getTime() + tenMinutes, dataEndTime.getTime()));
+        } else {
+            endTime = dataEndTime;
+            startTime = new Date(Math.max(dataEndTime.getTime() - tenMinutes, dataStartTime.getTime()));
+        }
+    }
 
     // Filter price data
-    const priceData = (currentData.price_data || [])
-        .filter(p => {
-            const t = new Date(p.time);
-            return t >= startTime && t <= endTime;
-        })
-        .map(p => ({
-            time: new Date(p.time),
-            value: p.mid_price
-        }));
+    const priceData = allPriceData.filter(p => {
+        return p.time >= startTime && p.time <= endTime;
+    });
 
     if (priceData.length === 0) {
-        document.getElementById('loading').innerHTML = '<p>No price data for this event</p>';
+        document.getElementById('loading').innerHTML = '<p>No price data for this time range</p>';
         return;
     }
 
