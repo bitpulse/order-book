@@ -99,6 +99,13 @@ async function loadAllData() {
         loadOrderBook(),
         loadStats()
     ]);
+
+    // Re-render chart after all data is loaded to ensure whale events are included
+    if (lastPriceData.length > 0) {
+        console.log('Re-rendering chart with all data loaded');
+        renderPriceChart(lastPriceData);
+    }
+
     updateStatus('live');
     updateLastUpdateTime();
 }
@@ -150,7 +157,7 @@ function renderPriceChart(priceData) {
         backgroundColor: 'transparent',
         animation: false,
         tooltip: {
-            trigger: 'axis',
+            trigger: 'item',
             axisPointer: {
                 type: 'cross'
             },
@@ -161,10 +168,24 @@ function renderPriceChart(priceData) {
                 color: '#ffffff'
             },
             formatter: function(params) {
-                if (!params || params.length === 0) return '';
-                const point = params[0];
-                const time = new Date(point.value[0]).toLocaleTimeString();
-                const price = point.value[1];
+                if (!params || !params.value) return '';
+
+                // Handle whale event scatter points
+                if (params.seriesName === 'Whale Events' && params.value[2]) {
+                    const event = params.value[2].originalEvent;
+                    const time = new Date(params.value[0]).toLocaleTimeString();
+                    const price = params.value[1].toFixed(6);
+                    const usdValue = event.usd_value || (event.price * event.volume);
+                    return `${time}<br/>` +
+                           `${event.event_type.toUpperCase()}<br/>` +
+                           `Price: $${price}<br/>` +
+                           `Volume: ${event.volume.toFixed(2)}<br/>` +
+                           `USD: $${usdValue.toLocaleString()}`;
+                }
+
+                // Handle price line
+                const time = new Date(params.value[0]).toLocaleTimeString();
+                const price = params.value[1];
                 return `${time}<br/>Price: $${price.toFixed(6)}`;
             }
         },
@@ -248,6 +269,9 @@ function renderPriceChart(priceData) {
         ]
     };
 
+    console.log('Chart series count:', option.series.length);
+    console.log('Series types:', option.series.map(s => s.type + ':' + s.name));
+
     chart.setOption(option);
 
     // Add click handler for whale event markers
@@ -325,6 +349,9 @@ async function loadWhaleEvents() {
             // Update last timestamp
             const newestEvent = data.events[data.events.length - 1];
             lastWhaleEventTimestamp = newestEvent.time;
+        } else if (data.is_incremental && data.events.length === 0) {
+            // No new events in incremental update
+            console.log('No new whale events since last update');
 
         } else if (!data.is_incremental) {
             // Initial load - replace all events
@@ -341,6 +368,7 @@ async function loadWhaleEvents() {
         }
 
         // Update chart with whale event markers
+        console.log('About to update chart with whale events:', lastWhaleEvents.length);
         if (lastPriceData.length > 0) {
             renderPriceChart(lastPriceData);
         }
@@ -668,7 +696,14 @@ function updateLastUpdateTime() {
 
 // Prepare whale event scatter series
 function prepareWhaleScatterSeries(events) {
-    if (!events || events.length === 0) return [];
+    if (!events || events.length === 0) {
+        console.log('No whale events to display on chart');
+        return [];
+    }
+
+    console.log(`Preparing ${events.length} whale events for chart display`);
+    console.log('First event fields:', Object.keys(events[0]));
+    console.log('First event:', events[0]);
 
     // Group events by type for color coding
     const scatterData = events.map(event => {
@@ -727,12 +762,15 @@ function prepareWhaleScatterSeries(events) {
         const usdValue = event.usd_value || (event.price * event.volume);
         const label = usdValue >= 1000 ? `$${(usdValue / 1000).toFixed(1)}K` : '';
 
+        // Make markers larger and more visible
+        const size = Math.min(Math.max(usdValue / 500, 12), 30);
+
         return {
             time: new Date(event.time),
             price: event.price,
             color: color,
             symbol: symbol,
-            size: Math.min(Math.max(usdValue / 1000, 8), 24),
+            size: size,
             label: label,
             labelPosition: labelPosition,
             originalEvent: event
@@ -740,7 +778,7 @@ function prepareWhaleScatterSeries(events) {
     });
 
     // Create single scatter series
-    return [{
+    const series = [{
         name: 'Whale Events',
         type: 'scatter',
         data: scatterData.map(e => [e.time, e.price, e]),
@@ -750,7 +788,10 @@ function prepareWhaleScatterSeries(events) {
         itemStyle: {
             color: function(params) {
                 return params.data[2].color;
-            }
+            },
+            opacity: 0.9,
+            borderColor: '#ffffff',
+            borderWidth: 1
         },
         symbol: function(data) {
             return data[2].symbol;
@@ -763,11 +804,27 @@ function prepareWhaleScatterSeries(events) {
             position: function(params) {
                 return params.data[2].labelPosition;
             },
-            fontSize: 9,
-            color: '#e0e0e0'
+            fontSize: 10,
+            fontWeight: 'bold',
+            color: '#ffffff',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            padding: 2,
+            borderRadius: 2
         },
-        z: 5
+        emphasis: {
+            itemStyle: {
+                borderWidth: 2,
+                opacity: 1
+            },
+            scale: 1.5
+        },
+        z: 10  // Increased z-index to ensure markers appear above price line
     }];
+
+    console.log('Scatter series data sample:', scatterData.slice(0, 3));
+    console.log('Total scatter points:', scatterData.length);
+    console.log('Price range:', scatterData.map(d => d.price).join(', ').substring(0, 100));
+    return series;
 }
 
 // Update refresh button

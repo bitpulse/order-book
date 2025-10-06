@@ -49,6 +49,12 @@ def live_dashboard():
     return render_template('live.html')
 
 
+@app.route('/live-chart')
+def live_chart():
+    """Serve the live chart page"""
+    return render_template('live_chart.html')
+
+
 # ===== Live Dashboard API Endpoints =====
 
 @app.route('/api/live/price-history')
@@ -139,8 +145,9 @@ def get_live_whale_events():
               |> range(start: time(v: "{start_time}"))
               |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
               |> filter(fn: (r) => r.symbol == "{symbol}")
-              |> filter(fn: (r) => r._field == "usd_value")
-              |> filter(fn: (r) => r._value >= {min_usd})
+              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume")
+              |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+              |> filter(fn: (r) => r.usd_value >= {min_usd})
               |> sort(columns: ["_time"], desc: false)
             '''
         else:
@@ -150,35 +157,29 @@ def get_live_whale_events():
               |> range(start: -{lookback})
               |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
               |> filter(fn: (r) => r.symbol == "{symbol}")
-              |> filter(fn: (r) => r._field == "usd_value")
-              |> filter(fn: (r) => r._value >= {min_usd})
+              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume")
+              |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+              |> filter(fn: (r) => r.usd_value >= {min_usd})
               |> sort(columns: ["_time"], desc: true)
               |> limit(n: 100)
             '''
 
         tables = query_api.query(query)
 
-        # Group records by timestamp to build complete events
-        events_by_time = {}
+        # Parse events from pivoted data
+        events = []
 
         for table in tables:
             for record in table.records:
-                time_key = record.get_time().isoformat()
-
-                if time_key not in events_by_time:
-                    events_by_time[time_key] = {
-                        'time': time_key,
-                        'event_type': record.values.get('event_type'),
-                        'side': record.values.get('side')
-                    }
-
-                # Add field value to event
-                field = record.get_field()
-                value = record.get_value()
-                events_by_time[time_key][field] = value
-
-        # Convert to list and sort
-        events = list(events_by_time.values())
+                event = {
+                    'time': record.get_time().isoformat(),
+                    'event_type': record.values.get('event_type'),
+                    'side': record.values.get('side'),
+                    'price': record.values.get('price'),
+                    'volume': record.values.get('volume'),
+                    'usd_value': record.values.get('usd_value')
+                }
+                events.append(event)
 
         if last_timestamp:
             # For incremental updates, sort ascending (oldest first)
