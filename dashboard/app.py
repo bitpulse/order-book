@@ -45,13 +45,7 @@ def whale_monitor():
 
 @app.route('/live')
 def live_dashboard():
-    """Serve the live order book dashboard page"""
-    return render_template('live.html')
-
-
-@app.route('/live-chart')
-def live_chart():
-    """Serve the live chart page"""
+    """Serve the live chart dashboard page"""
     return render_template('live_chart.html')
 
 
