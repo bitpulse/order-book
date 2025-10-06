@@ -456,7 +456,8 @@ function loadWhaleEvents(data) {
     // Setup click handler for whale events
     chart.off('click'); // Remove old handlers
     chart.on('click', function(params) {
-        if (params.seriesName.includes('Whale')) {
+        // Check if this is an event marker (scatter series with custom data)
+        if (params.componentType === 'series' && params.seriesType === 'scatter' && params.data && params.data[2]) {
             const eventData = params.data[2]; // Custom data attached to point
             if (eventData && eventData.originalEvent) {
                 showSingleEventModal(eventData.originalEvent, eventData.period);
@@ -465,27 +466,40 @@ function loadWhaleEvents(data) {
     });
 }
 
-// Create whale event marker series
+// Create whale event marker series (matching live_chart.js categorization)
 function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, intervalData) {
     const series = [];
 
     // Helper to create series for a set of events
     const createSeriesForPeriod = (events, period, baseOpacity = 1) => {
-        // Group events by type for different series
-        const eventsByType = {};
+        // Categorize events EXACTLY like live_chart.js (lines 729-742)
+        const marketBuys = events.filter(e => e.event_type === 'market_buy');
+        const marketSells = events.filter(e => e.event_type === 'market_sell');
+        const newBids = events.filter(e => e.event_type === 'new_bid' || (e.side === 'bid' && !e.event_type.includes('increase') && !e.event_type.includes('decrease')));
+        const newAsks = events.filter(e => e.event_type === 'new_ask' || (e.side === 'ask' && !e.event_type.includes('increase') && !e.event_type.includes('decrease')));
 
-        events.forEach(event => {
-            const type = event.event_type || 'unknown';
-            if (!eventsByType[type]) {
-                eventsByType[type] = [];
-            }
-            eventsByType[type].push(event);
-        });
+        // Volume changes (ambiguous events)
+        const bidIncreases = events.filter(e => e.event_type === 'increase' && e.side === 'bid');
+        const askIncreases = events.filter(e => e.event_type === 'increase' && e.side === 'ask');
+        const askDecreases = events.filter(e => e.event_type === 'decrease' && e.side === 'ask');
+        const bidDecreases = events.filter(e => e.event_type === 'decrease' && e.side === 'bid');
 
-        // Create a series for each event type
-        Object.entries(eventsByType).forEach(([eventType, typeEvents]) => {
-            const color = getEventColor(eventType, period, baseOpacity);
-            const symbol = getEventSymbol(eventType);
+        // Combine for ambiguous categories (support/resistance building)
+        const bidIncreasesAll = [...bidIncreases, ...askDecreases]; // Support building
+        const askIncreasesAll = [...askIncreases, ...bidDecreases]; // Resistance building
+
+        // Create series for each category with EXACT live chart colors
+        const categories = [
+            { name: 'Market Buy', events: marketBuys, color: '#00c2ff', symbol: 'circle' },
+            { name: 'Market Sell', events: marketSells, color: '#ff00ff', symbol: 'circle' },
+            { name: 'New Bid', events: newBids, color: '#00ff88', symbol: 'triangle' },
+            { name: 'New Ask', events: newAsks, color: '#ff4444', symbol: 'triangle' },
+            { name: 'Bid Increase', events: bidIncreasesAll, color: '#88cc88', symbol: 'diamond' },
+            { name: 'Ask Increase', events: askIncreasesAll, color: '#cc8888', symbol: 'diamond' }
+        ];
+
+        categories.forEach(({ name, events: typeEvents, color, symbol }) => {
+            if (typeEvents.length === 0) return;
 
             // Get USD value range for size scaling
             const usdValues = typeEvents.map(e => e.usd_value || 0);
@@ -535,7 +549,7 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
             });
 
             series.push({
-                name: `Whale ${eventType} (${period})`,
+                name: `${name} (${period})`,
                 type: 'scatter',
                 data: dataPoints,
                 symbolSize: function(data) {
@@ -543,8 +557,8 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
                 },
                 symbol: symbol,
                 itemStyle: {
-                    color: color.fill,
-                    borderColor: color.border,
+                    color: color,
+                    borderColor: color,
                     borderWidth: period === 'during' ? 1.5 : 1,
                     opacity: baseOpacity
                 },
@@ -717,9 +731,26 @@ function updateEventStats(duringEvents, beforeEvents, afterEvents) {
     const totalVolume = allEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0);
     document.getElementById('event-stat-volume').textContent = `$${totalVolume.toLocaleString()}`;
 
-    // Market orders count
-    const marketOrders = allEvents.filter(e => e.event_type === 'market_buy' || e.event_type === 'market_sell');
-    document.getElementById('event-stat-market').textContent = marketOrders.length;
+    // Event type breakdown (matching live chart categorization)
+    const marketBuys = allEvents.filter(e => e.event_type === 'market_buy').length;
+    const marketSells = allEvents.filter(e => e.event_type === 'market_sell').length;
+    const newBids = allEvents.filter(e => e.event_type === 'new_bid' || (e.side === 'bid' && !e.event_type.includes('increase') && !e.event_type.includes('decrease'))).length;
+    const newAsks = allEvents.filter(e => e.event_type === 'new_ask' || (e.side === 'ask' && !e.event_type.includes('increase') && !e.event_type.includes('decrease'))).length;
+    const bidIncreases = allEvents.filter(e => e.event_type === 'increase' && e.side === 'bid').length;
+    const askIncreases = allEvents.filter(e => e.event_type === 'increase' && e.side === 'ask').length;
+    const askDecreases = allEvents.filter(e => e.event_type === 'decrease' && e.side === 'ask').length;
+    const bidDecreases = allEvents.filter(e => e.event_type === 'decrease' && e.side === 'bid').length;
+
+    const breakdown = [
+        `Buy: ${marketBuys}`,
+        `Sell: ${marketSells}`,
+        `NewBid: ${newBids}`,
+        `NewAsk: ${newAsks}`,
+        `Bid↑: ${bidIncreases + askDecreases}`,
+        `Ask↑: ${askIncreases + bidDecreases}`
+    ].filter(s => !s.endsWith(': 0')).join(' | ');
+
+    document.getElementById('event-stat-market').textContent = breakdown || 'None';
 
     // Biggest whale
     const biggestEvent = allEvents.reduce((max, e) => (e.usd_value || 0) > (max.usd_value || 0) ? e : max, { usd_value: 0 });
