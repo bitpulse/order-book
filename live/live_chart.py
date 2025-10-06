@@ -162,10 +162,10 @@ class LiveChart:
         try:
             rows, columns = os.popen('stty size', 'r').read().split()
             width = int(columns) - 10
-            height = 20
+            height = 18
         except:
             width = 120
-            height = 20
+            height = 18
 
         # Prepare data
         start_time = self.price_data[0][0]
@@ -193,17 +193,21 @@ class LiveChart:
         # Plot price line
         fig.plot(list(range(len(prices))), prices, lc=51, label='Price')  # Cyan
 
-        # Create index mapping for whale events
-        # Map timestamp to index in price_data
-        time_to_idx = {}
-        for idx, (t, p) in enumerate(self.price_data):
-            time_to_idx[t] = idx
+        # Separate market orders from limit orders
+        market_buys = [e for e in self.whale_events if e.get('event_type') == 'market_buy' or e.get('side') == 'buy']
+        market_sells = [e for e in self.whale_events if e.get('event_type') == 'market_sell' or e.get('side') == 'sell']
+        limit_orders = [e for e in self.whale_events if e.get('side') in ['bid', 'ask']]
 
-        # Only show significant whale events (top 20 by USD value)
-        sorted_events = sorted(self.whale_events, key=lambda x: x['usd_value'], reverse=True)[:20]
+        # Take top events from each category
+        top_market_buys = sorted(market_buys, key=lambda x: x['usd_value'], reverse=True)[:10]
+        top_market_sells = sorted(market_sells, key=lambda x: x['usd_value'], reverse=True)[:10]
+        top_limit_orders = sorted(limit_orders, key=lambda x: x['usd_value'], reverse=True)[:20]
+
+        # Combine all events to plot
+        events_to_plot = top_market_buys + top_market_sells + top_limit_orders
 
         # Plot whale events as scatter points (no lines connecting them)
-        for event in sorted_events:
+        for event in events_to_plot:
             # Find closest price data point
             event_time = event['time']
             closest_idx = None
@@ -219,16 +223,37 @@ class LiveChart:
                 # Use the actual mid price at that time, not the event price
                 price_at_time = self.price_data[closest_idx][1]
 
-                # Plot single point (scatter)
-                if event['side'] == 'bid':
-                    fig.scatter([closest_idx], [price_at_time], lc=82, marker='▲')  # Green bids
-                elif event['side'] == 'ask':
-                    fig.scatter([closest_idx], [price_at_time], lc=196, marker='▼')  # Red asks
+                # Plot single point (scatter) - different markers for different event types
+                event_type = event.get('event_type', '')
+                side = event.get('side', '')
 
-        fig.x_label = 'Time →'
-        fig.y_label = 'Price'
+                # Market orders: check event_type first
+                if event_type == 'market_buy' or side == 'buy':
+                    fig.scatter([closest_idx], [price_at_time], lc=51, marker='●')  # Cyan circle for market buys
+                elif event_type == 'market_sell' or side == 'sell':
+                    fig.scatter([closest_idx], [price_at_time], lc=201, marker='●')  # Magenta circle for market sells
+                # Limit orders: bid/ask side
+                elif side == 'bid':
+                    fig.scatter([closest_idx], [price_at_time], lc=82, marker='▲')  # Green triangle for bids
+                elif side == 'ask':
+                    fig.scatter([closest_idx], [price_at_time], lc=196, marker='▼')  # Red triangle for asks
 
-        return fig.show(legend=False)
+        # Generate chart without labels (to avoid confusing indices)
+        fig.x_label = ''
+        fig.y_label = ''
+        chart_output = fig.show(legend=False)
+
+        # Add clean time range below
+        duration = (self.price_data[-1][0] - self.price_data[0][0]).total_seconds()
+        start_time_str = self.price_data[0][0].strftime('%H:%M:%S')
+        end_time_str = self.price_data[-1][0].strftime('%H:%M:%S')
+
+        if duration < 60:
+            time_info = f"⏱  {start_time_str} → {end_time_str} ({duration:.0f}s) | \033[96m●\033[0m Buys  \033[95m●\033[0m Sells  \033[92m▲\033[0m Bids  \033[91m▼\033[0m Asks"
+        else:
+            time_info = f"⏱  {start_time_str} → {end_time_str} ({duration/60:.1f}m) | \033[96m●\033[0m Buys  \033[95m●\033[0m Sells  \033[92m▲\033[0m Bids  \033[91m▼\033[0m Asks"
+
+        return chart_output + '\n' + time_info
 
     def get_stats(self) -> Dict:
         """Get current statistics"""
