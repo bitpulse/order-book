@@ -418,14 +418,14 @@ def get_stats():
 
 @app.route('/api/whale-files')
 def list_whale_files():
-    """List all available whale activity JSON files"""
+    """List all available whale activity AND market orders JSON files"""
     try:
         if not DATA_DIR.exists():
             return jsonify({'files': [], 'error': 'Data directory not found'})
 
-        # Find all whale_activity_*.json files
+        # Find all whale_activity_*.json AND market_orders_*.json files
         files = []
-        for file_path in DATA_DIR.glob('whale_activity_*.json'):
+        for file_path in list(DATA_DIR.glob('whale_activity_*.json')) + list(DATA_DIR.glob('market_orders_*.json')):
             file_stat = file_path.stat()
             files.append({
                 'filename': file_path.name,
@@ -444,10 +444,10 @@ def list_whale_files():
 
 @app.route('/api/whale-data/<filename>')
 def get_whale_data(filename):
-    """Serve a specific whale activity JSON file"""
+    """Serve a specific whale activity OR market orders JSON file"""
     try:
-        # Security: only allow whale_activity_*.json files
-        if not filename.startswith('whale_activity_') or not filename.endswith('.json'):
+        # Security: only allow whale_activity_*.json or market_orders_*.json files
+        if not ((filename.startswith('whale_activity_') or filename.startswith('market_orders_')) and filename.endswith('.json')):
             return jsonify({'error': 'Invalid filename'}), 400
 
         file_path = DATA_DIR / filename
@@ -537,7 +537,7 @@ def run_analysis():
 
 @app.route('/api/run-whale-analysis', methods=['POST'])
 def run_whale_analysis():
-    """Run whale events analyzer with provided parameters"""
+    """Run whale events analyzer OR market orders analyzer"""
     import subprocess
     import sys
     from datetime import datetime
@@ -551,9 +551,15 @@ def run_whale_analysis():
         top = data.get('top', 10)
         min_usd = data.get('min_usd', 10000)
         sort_by = data.get('sort_by', 'volume')
+        analyzer_type = data.get('analyzer_type', 'market_orders')  # 'market_orders' or 'all_events'
 
-        # Build command
-        script_path = LIVE_DIR / 'whale_events_analyzer.py'
+        # Choose analyzer script
+        if analyzer_type == 'market_orders':
+            script_path = LIVE_DIR / 'market_orders_analyzer.py'
+            file_prefix = 'market_orders'
+        else:
+            script_path = LIVE_DIR / 'whale_events_analyzer.py'
+            file_prefix = 'whale_activity'
 
         if not script_path.exists():
             return jsonify({'error': f'Analyzer script not found: {script_path}'}), 404
@@ -587,13 +593,13 @@ def run_whale_analysis():
             return jsonify({'error': f'Analysis failed: {error_msg}'}), 500
 
         # Find the newly created file
-        files = sorted(DATA_DIR.glob(f'whale_activity_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+        files = sorted(DATA_DIR.glob(f'{file_prefix}_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
 
         if files:
             newest_file = files[0]
             return jsonify({
                 'success': True,
-                'message': 'Whale analysis completed successfully',
+                'message': f'{analyzer_type.replace("_", " ").title()} analysis completed successfully',
                 'filename': newest_file.name,
                 'output': stdout.decode('utf-8') if stdout else ''
             })
