@@ -5,6 +5,17 @@ let currentData = null;
 let currentInterval = null;
 let minUsdFilter = 0; // Global filter for minimum USD value
 
+// Event type filters (matching live chart)
+let filters = {
+    price: true,
+    marketBuy: true,
+    marketSell: true,
+    newBid: true,
+    newAsk: true,
+    bidIncrease: true,
+    askIncrease: true
+};
+
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', async () => {
     await loadFileList();
@@ -265,11 +276,11 @@ function loadPriceData(data) {
     // Create series
     const series = [];
 
-    // Main price line
+    // Main price line (respect filter)
     series.push({
         name: 'Price',
         type: 'line',
-        data: chartData.map(d => [d.time, d.value]),
+        data: filters.price ? chartData.map(d => [d.time, d.value]) : [],
         lineStyle: {
             color: '#00c2ff',
             width: 2.5,
@@ -442,12 +453,44 @@ function loadWhaleEvents(data) {
     // Add whale event series
     const whaleEventSeries = createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, data);
 
-    // Get current option and append whale events
+    // Update chart series - rebuild price series to avoid stale references
     const currentOption = chart.getOption();
-    const newSeries = [...currentOption.series, ...whaleEventSeries];
 
+    // Get price data from first series (it should still have the data)
+    const existingPriceData = currentOption.series[0]?.data || [];
+
+    // Recreate price series from scratch with current filter state
+    const priceSeries = {
+        name: 'Price',
+        type: 'line',
+        data: filters.price ? existingPriceData : [],
+        lineStyle: {
+            color: '#00c2ff',
+            width: 2.5,
+            shadowBlur: 4,
+            shadowColor: 'rgba(0, 194, 255, 0.3)'
+        },
+        areaStyle: {
+            color: {
+                type: 'linear',
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                    { offset: 0, color: 'rgba(0, 194, 255, 0.15)' },
+                    { offset: 1, color: 'rgba(0, 194, 255, 0.01)' }
+                ]
+            }
+        },
+        symbol: 'none',
+        smooth: 0.3,
+        sampling: 'lttb',
+        z: 1
+    };
+
+    // Use replaceMerge to completely replace the series array (not merge)
     chart.setOption({
-        series: newSeries
+        series: [priceSeries, ...whaleEventSeries]
+    }, {
+        replaceMerge: ['series']
     });
 
     // Update event statistics
@@ -490,16 +533,17 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
 
         // Create series for each category with EXACT live chart colors
         const categories = [
-            { name: 'Market Buy', events: marketBuys, color: '#00c2ff', symbol: 'circle' },
-            { name: 'Market Sell', events: marketSells, color: '#ff00ff', symbol: 'circle' },
-            { name: 'New Bid', events: newBids, color: '#00ff88', symbol: 'triangle' },
-            { name: 'New Ask', events: newAsks, color: '#ff4444', symbol: 'triangle' },
-            { name: 'Bid Increase', events: bidIncreasesAll, color: '#88cc88', symbol: 'diamond' },
-            { name: 'Ask Increase', events: askIncreasesAll, color: '#cc8888', symbol: 'diamond' }
+            { name: 'Market Buy', events: marketBuys, color: '#00c2ff', symbol: 'circle', filterKey: 'marketBuy' },
+            { name: 'Market Sell', events: marketSells, color: '#ff00ff', symbol: 'circle', filterKey: 'marketSell' },
+            { name: 'New Bid', events: newBids, color: '#00ff88', symbol: 'triangle', filterKey: 'newBid' },
+            { name: 'New Ask', events: newAsks, color: '#ff4444', symbol: 'triangle', filterKey: 'newAsk' },
+            { name: 'Bid Increase', events: bidIncreasesAll, color: '#88cc88', symbol: 'diamond', filterKey: 'bidIncrease' },
+            { name: 'Ask Increase', events: askIncreasesAll, color: '#cc8888', symbol: 'diamond', filterKey: 'askIncrease' }
         ];
 
-        categories.forEach(({ name, events: typeEvents, color, symbol }) => {
-            if (typeEvents.length === 0) return;
+        categories.forEach(({ name, events: typeEvents, color, symbol, filterKey }) => {
+            // Skip if filtered out or no events
+            if (!filters[filterKey] || typeEvents.length === 0) return;
 
             // Get USD value range for size scaling
             const usdValues = typeEvents.map(e => e.usd_value || 0);
@@ -839,6 +883,42 @@ function setupEventListeners() {
 
     // Fullscreen
     document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
+
+    // Filter checkboxes
+    document.getElementById('filter-price').addEventListener('change', (e) => {
+        filters.price = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
+
+    document.getElementById('filter-market-buy').addEventListener('change', (e) => {
+        filters.marketBuy = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
+
+    document.getElementById('filter-market-sell').addEventListener('change', (e) => {
+        filters.marketSell = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
+
+    document.getElementById('filter-new-bid').addEventListener('change', (e) => {
+        filters.newBid = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
+
+    document.getElementById('filter-new-ask').addEventListener('change', (e) => {
+        filters.newAsk = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
+
+    document.getElementById('filter-bid-increase').addEventListener('change', (e) => {
+        filters.bidIncrease = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
+
+    document.getElementById('filter-ask-increase').addEventListener('change', (e) => {
+        filters.askIncrease = e.target.checked;
+        if (currentInterval) loadWhaleEvents(currentInterval);
+    });
 }
 
 // Run new whale activity analysis
