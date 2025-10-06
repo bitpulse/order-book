@@ -205,6 +205,17 @@ function getChartOption() {
                         return params.data[2]?.color || '#00c2ff';
                     }
                 },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2]?.label || '';
+                    },
+                    position: function(params) {
+                        return params.data[2]?.labelPosition || 'bottom';
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
+                },
                 z: 10
             },
             // Market Sell - Aggressive sell order executed immediately
@@ -220,6 +231,17 @@ function getChartOption() {
                     color: function(params) {
                         return params.data[2]?.color || '#ff00ff';
                     }
+                },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2]?.label || '';
+                    },
+                    position: function(params) {
+                        return params.data[2]?.labelPosition || 'top';
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
                 },
                 z: 10
             },
@@ -237,6 +259,17 @@ function getChartOption() {
                         return params.data[2]?.color || '#00ff88';
                     }
                 },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2]?.label || '';
+                    },
+                    position: function(params) {
+                        return params.data[2]?.labelPosition || 'bottom';
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
+                },
                 z: 9
             },
             // New Ask - Fresh sell order placed (never seen this price before)
@@ -252,6 +285,17 @@ function getChartOption() {
                     color: function(params) {
                         return params.data[2]?.color || '#ff4444';
                     }
+                },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2]?.label || '';
+                    },
+                    position: function(params) {
+                        return params.data[2]?.labelPosition || 'top';
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
                 },
                 z: 9
             },
@@ -270,6 +314,17 @@ function getChartOption() {
                         return params.data[2]?.color || '#88cc88';
                     }
                 },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2]?.label || '';
+                    },
+                    position: function(params) {
+                        return params.data[2]?.labelPosition || 'bottom';
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
+                },
                 z: 6
             },
             // Ask Increase / Bid Decrease - Potential resistance building
@@ -285,6 +340,17 @@ function getChartOption() {
                     color: function(params) {
                         return params.data[2]?.color || '#cc8888';
                     }
+                },
+                label: {
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2]?.label || '';
+                    },
+                    position: function(params) {
+                        return params.data[2]?.labelPosition || 'top';
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
                 },
                 z: 6
             }
@@ -423,39 +489,48 @@ function prepareWhaleScatterData(events) {
         const isBid = event.side === 'bid' || event.event_type.includes('bid');
         const isAsk = event.side === 'ask' || event.event_type.includes('ask');
 
-        let color, symbol;
+        let color, symbol, labelPosition;
 
         // DEFINITIVE EVENTS - Bright colors
         if (isMarketBuy) {
             color = '#00c2ff'; // Bright cyan/blue
             symbol = 'circle';
+            labelPosition = 'bottom';
         } else if (isMarketSell) {
             color = '#ff00ff'; // Bright magenta/pink
             symbol = 'circle';
+            labelPosition = 'top';
         } else if (isNewBid || (isBid && !isIncrease && !isDecrease)) {
             color = '#00ff88'; // Bright green
             symbol = 'triangle';
+            labelPosition = 'bottom';
         } else if (isNewAsk || (isAsk && !isIncrease && !isDecrease)) {
             color = '#ff4444'; // Bright red
             symbol = 'triangle';
+            labelPosition = 'top';
         }
         // AMBIGUOUS EVENTS - Muted colors (volume changes)
         else if (isIncrease && isBid) {
             color = '#88cc88'; // Muted green (potential support)
             symbol = 'diamond';
+            labelPosition = 'bottom';
         } else if (isIncrease && isAsk) {
             color = '#cc8888'; // Muted red (potential resistance)
             symbol = 'diamond';
+            labelPosition = 'top';
         } else if (isDecrease && isBid) {
             color = '#cc8888'; // Muted red (support weakening)
             symbol = 'diamond';
+            labelPosition = 'top';
         } else if (isDecrease && isAsk) {
             color = '#88cc88'; // Muted green (resistance weakening)
             symbol = 'diamond';
+            labelPosition = 'bottom';
         } else {
             // Fallback for other event types
             color = '#ffaa00'; // Orange (unknown)
             symbol = 'circle';
+            labelPosition = 'top';
         }
 
         // Calculate size based on USD value (logarithmic scale)
@@ -476,12 +551,18 @@ function prepareWhaleScatterData(events) {
 
         const eventTime = new Date(event.time);
 
+        // Calculate label (show USD value in K format for >= 1K)
+        const usdValue = event.usd_value / 1000;
+        const label = usdValue >= 1 ? `${usdValue.toFixed(1)}K` : '';
+
         return {
             time: eventTime,
             price: event.price,
             color: color,
             symbol: symbol,
             size: size,
+            label: label,
+            labelPosition: labelPosition,
             originalEvent: event
         };
     });
