@@ -12,6 +12,49 @@ let whaleEvents = [];
 let userHasZoomed = false; // Track if user manually zoomed/panned
 let initialDataZoom = null; // Store initial zoom state
 
+// Filter state
+let filters = {
+    price: true,
+    marketBuy: true,
+    marketSell: true,
+    newBid: true,
+    newAsk: true,
+    bidIncrease: true,
+    askIncrease: true
+};
+
+// Sound notification state
+let soundEnabled = true;
+let lastEventIds = new Set(); // Track which events we've already played sounds for
+
+// Create audio context for beep sounds
+let audioContext = null;
+function initAudio() {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+// Play beep sound
+function playBeep(frequency, duration) {
+    if (!soundEnabled || !audioContext) return;
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + duration);
+}
+
 // Configuration
 const config = {
     symbol: 'SPX_USDT',
@@ -434,12 +477,23 @@ function formatTooltip(params) {
         // Check if this is an event with metadata (third element in array)
         if (param.data && param.data[2] && param.data[2].originalEvent) {
             const event = param.data[2].originalEvent;
+            const isMarketOrder = event.event_type === 'market_buy' || event.event_type === 'market_sell';
+
             html += `
                 <div style="border-left: 3px solid ${color}; padding-left: 8px; margin: 8px 0;">
                     <div style="font-weight: bold; color: ${color}; margin-bottom: 4px;">${param.seriesName}</div>
                     <div style="margin: 2px 0;"><strong>Price:</strong> $${event.price.toFixed(6)}</div>
                     <div style="margin: 2px 0;"><strong>Volume:</strong> ${event.volume.toFixed(4)}</div>
                     <div style="margin: 2px 0;"><strong>USD Value:</strong> $${event.usd_value.toLocaleString()}</div>
+            `;
+
+            // Show distance from mid for market orders
+            if (isMarketOrder && event.distance_from_mid_pct !== undefined) {
+                const distanceColor = event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444';
+                html += `<div style="margin: 2px 0;"><strong>Distance from Mid:</strong> <span style="color: ${distanceColor};">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</span></div>`;
+            }
+
+            html += `
                     <div style="margin: 2px 0; color: #00ffa3; font-size: 0.85rem;">Click for details</div>
                 </div>
             `;
@@ -492,16 +546,50 @@ async function fetchWhaleEvents(incremental = false) {
             return;
         }
 
-        if (data.is_incremental) {
+        const newEvents = data.events || [];
+
+        if (data.is_incremental && newEvents.length > 0) {
+            // Check for new market buy/sell events and play sounds
+            newEvents.forEach(event => {
+                const eventId = `${event.time}_${event.event_type}_${event.price}_${event.volume}`;
+
+                if (!lastEventIds.has(eventId)) {
+                    lastEventIds.add(eventId);
+
+                    // Play sound for market orders
+                    if (event.event_type === 'market_buy') {
+                        playBeep(880, 0.15); // High beep for buy (A5 note)
+                    } else if (event.event_type === 'market_sell') {
+                        playBeep(440, 0.15); // Lower beep for sell (A4 note)
+                    }
+                }
+            });
+
             // Append new events
-            whaleEvents = whaleEvents.concat(data.events || []);
+            whaleEvents = whaleEvents.concat(newEvents);
 
             // Remove old events outside lookback window
             const cutoffTime = new Date(Date.now() - parseLookback(config.lookback));
             whaleEvents = whaleEvents.filter(e => new Date(e.time) > cutoffTime);
+
+            // Clean up old event IDs from tracking set
+            const cutoffTimestamp = cutoffTime.getTime();
+            const validEventIds = new Set();
+            whaleEvents.forEach(e => {
+                const eventId = `${e.time}_${e.event_type}_${e.price}_${e.volume}`;
+                if (new Date(e.time).getTime() > cutoffTimestamp) {
+                    validEventIds.add(eventId);
+                }
+            });
+            lastEventIds = validEventIds;
         } else {
-            // Full reload
-            whaleEvents = data.events || [];
+            // Full reload - rebuild event ID tracking
+            whaleEvents = newEvents;
+            lastEventIds.clear();
+            whaleEvents.forEach(e => {
+                const eventId = `${e.time}_${e.event_type}_${e.price}_${e.volume}`;
+                lastEventIds.add(eventId);
+            });
         }
 
         // Update last timestamp
@@ -665,15 +753,16 @@ function updateChart() {
     const currentOption = chart.getOption();
 
     // Prepare update options with all necessary config
+    // Apply filters - hide series data if filter is unchecked
     const updateOptions = {
         series: [
-            { data: chartData }, // Price line
-            { data: scatterMarketBuys.map(e => [e.time, e.price, e]) }, // Market Buy
-            { data: scatterMarketSells.map(e => [e.time, e.price, e]) }, // Market Sell
-            { data: scatterNewBids.map(e => [e.time, e.price, e]) }, // New Bid
-            { data: scatterNewAsks.map(e => [e.time, e.price, e]) }, // New Ask
-            { data: scatterBidIncreases.map(e => [e.time, e.price, e]) }, // Bid Increase
-            { data: scatterAskIncreases.map(e => [e.time, e.price, e]) } // Ask Increase
+            { data: filters.price ? chartData : [] }, // Price line
+            { data: filters.marketBuy ? scatterMarketBuys.map(e => [e.time, e.price, e]) : [] }, // Market Buy
+            { data: filters.marketSell ? scatterMarketSells.map(e => [e.time, e.price, e]) : [] }, // Market Sell
+            { data: filters.newBid ? scatterNewBids.map(e => [e.time, e.price, e]) : [] }, // New Bid
+            { data: filters.newAsk ? scatterNewAsks.map(e => [e.time, e.price, e]) : [] }, // New Ask
+            { data: filters.bidIncrease ? scatterBidIncreases.map(e => [e.time, e.price, e]) : [] }, // Bid Increase
+            { data: filters.askIncrease ? scatterAskIncreases.map(e => [e.time, e.price, e]) : [] } // Ask Increase
         ]
     };
 
@@ -915,6 +1004,62 @@ function setupEventListeners() {
         toggleFullscreen();
     });
 
+    // Sound toggle button
+    const soundToggleBtn = document.getElementById('sound-toggle-btn');
+    soundToggleBtn.addEventListener('click', () => {
+        // Initialize audio context on first user interaction
+        if (!audioContext) {
+            initAudio();
+        }
+
+        soundEnabled = !soundEnabled;
+        soundToggleBtn.textContent = soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF';
+        soundToggleBtn.title = soundEnabled ? 'Disable sound notifications' : 'Enable sound notifications';
+    });
+
+    // Initialize audio context on any user interaction (required by browsers)
+    document.addEventListener('click', () => {
+        if (!audioContext) {
+            initAudio();
+        }
+    }, { once: true });
+
+    // Filter checkboxes
+    document.getElementById('filter-price').addEventListener('change', (e) => {
+        filters.price = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-market-buy').addEventListener('change', (e) => {
+        filters.marketBuy = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-market-sell').addEventListener('change', (e) => {
+        filters.marketSell = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-new-bid').addEventListener('change', (e) => {
+        filters.newBid = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-new-ask').addEventListener('change', (e) => {
+        filters.newAsk = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-bid-increase').addEventListener('change', (e) => {
+        filters.bidIncrease = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-ask-increase').addEventListener('change', (e) => {
+        filters.askIncrease = e.target.checked;
+        updateChart();
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         // ESC key: close modal first, then exit fullscreen
@@ -1014,6 +1159,7 @@ function showEventModal(event, seriesName) {
     // Determine event color and label
     const isMarketBuy = event.event_type === 'market_buy';
     const isMarketSell = event.event_type === 'market_sell';
+    const isMarketOrder = isMarketBuy || isMarketSell;
     const isBid = event.side === 'bid';
     const isAsk = event.side === 'ask';
 
@@ -1061,10 +1207,10 @@ function showEventModal(event, seriesName) {
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">USD Value</div>
                     <div style="color: ${sideColor}; font-size: 1.3rem; font-weight: 700;">$${formatNumber(event.usd_value)}</div>
                 </div>
-                ${event.distance_from_mid_pct !== undefined ? `
+                ${isMarketOrder && event.distance_from_mid_pct !== undefined ? `
                 <div>
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Distance from Mid</div>
-                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct.toFixed(3)}%</div>
+                    <div style="color: ${event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444'}; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</div>
                 </div>
                 ` : ''}
             </div>
