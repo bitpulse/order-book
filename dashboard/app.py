@@ -43,6 +43,307 @@ def whale_monitor():
     return render_template('whale_monitor.html')
 
 
+@app.route('/live')
+def live_dashboard():
+    """Serve the live chart dashboard page"""
+    return render_template('live_chart.html')
+
+
+# ===== Live Dashboard API Endpoints =====
+
+@app.route('/api/live/price-history')
+def get_live_price_history():
+    """Get live price history from InfluxDB"""
+    from influxdb_client import InfluxDBClient
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    symbol = request.args.get('symbol', 'SPX_USDT')
+    lookback = request.args.get('lookback', '1h')
+
+    try:
+        client = InfluxDBClient(
+            url=os.getenv("INFLUXDB_URL"),
+            token=os.getenv("INFLUXDB_TOKEN"),
+            org=os.getenv("INFLUXDB_ORG")
+        )
+        query_api = client.query_api()
+        bucket = os.getenv("INFLUXDB_BUCKET")
+
+        # Query for mid price history
+        query = f'''
+        from(bucket: "{bucket}")
+          |> range(start: -{lookback})
+          |> filter(fn: (r) => r._measurement == "orderbook_price")
+          |> filter(fn: (r) => r.symbol == "{symbol}")
+          |> filter(fn: (r) => r._field == "mid_price")
+          |> aggregateWindow(every: 1s, fn: last, createEmpty: false)
+        '''
+
+        tables = query_api.query(query)
+
+        price_data = []
+        for table in tables:
+            for record in table.records:
+                price_data.append({
+                    'time': record.get_time().isoformat(),
+                    'price': record.get_value()
+                })
+
+        client.close()
+
+        return jsonify({
+            'symbol': symbol,
+            'lookback': lookback,
+            'data': price_data
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/live/whale-events')
+def get_live_whale_events():
+    """Get live whale events from InfluxDB - optimized for incremental updates"""
+    from influxdb_client import InfluxDBClient
+    from dotenv import load_dotenv
+    from datetime import datetime
+
+    load_dotenv()
+
+    symbol = request.args.get('symbol', 'SPX_USDT')
+    lookback = request.args.get('lookback', '30m')
+    min_usd = request.args.get('min_usd', 5000, type=float)
+    last_timestamp = request.args.get('last_timestamp')  # ISO format timestamp
+
+    try:
+        client = InfluxDBClient(
+            url=os.getenv("INFLUXDB_URL"),
+            token=os.getenv("INFLUXDB_TOKEN"),
+            org=os.getenv("INFLUXDB_ORG")
+        )
+        query_api = client.query_api()
+        bucket = os.getenv("INFLUXDB_BUCKET")
+
+        # If last_timestamp provided, only fetch newer events (incremental)
+        # Otherwise fetch full history (initial load)
+        if last_timestamp:
+            # Convert ISO timestamp to RFC3339 format for Flux
+            # Handle URL decoding: space back to +, then + to Z
+            start_time = last_timestamp.replace(' 00:00', '+00:00').replace('+00:00', 'Z')
+
+            # Use time() function in Flux to properly parse RFC3339 timestamp
+            query = f'''
+            from(bucket: "{bucket}")
+              |> range(start: time(v: "{start_time}"))
+              |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
+              |> filter(fn: (r) => r.symbol == "{symbol}")
+              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume")
+              |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+              |> filter(fn: (r) => r.usd_value >= {min_usd})
+              |> sort(columns: ["_time"], desc: false)
+            '''
+        else:
+            # Initial load - get historical events
+            query = f'''
+            from(bucket: "{bucket}")
+              |> range(start: -{lookback})
+              |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
+              |> filter(fn: (r) => r.symbol == "{symbol}")
+              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume")
+              |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+              |> filter(fn: (r) => r.usd_value >= {min_usd})
+              |> sort(columns: ["_time"], desc: true)
+              |> limit(n: 100)
+            '''
+
+        tables = query_api.query(query)
+
+        # Parse events from pivoted data
+        events = []
+
+        for table in tables:
+            for record in table.records:
+                event = {
+                    'time': record.get_time().isoformat(),
+                    'event_type': record.values.get('event_type'),
+                    'side': record.values.get('side'),
+                    'price': record.values.get('price'),
+                    'volume': record.values.get('volume'),
+                    'usd_value': record.values.get('usd_value')
+                }
+                events.append(event)
+
+        if last_timestamp:
+            # For incremental updates, sort ascending (oldest first)
+            events.sort(key=lambda x: x['time'])
+        else:
+            # For initial load, sort descending (newest first) and limit
+            events.sort(key=lambda x: x['time'], reverse=True)
+            events = events[:100]
+
+        client.close()
+
+        return jsonify({
+            'symbol': symbol,
+            'lookback': lookback,
+            'events': events,
+            'is_incremental': last_timestamp is not None,
+            'count': len(events)
+        })
+
+    except Exception as e:
+        import traceback
+        error_details = {
+            'error': str(e),
+            'type': type(e).__name__,
+            'traceback': traceback.format_exc()
+        }
+        print(f"Error in whale events API: {error_details}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/live/orderbook')
+def get_live_orderbook():
+    """Get current order book snapshot from InfluxDB"""
+    from influxdb_client import InfluxDBClient
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    symbol = request.args.get('symbol', 'SPX_USDT')
+
+    try:
+        client = InfluxDBClient(
+            url=os.getenv("INFLUXDB_URL"),
+            token=os.getenv("INFLUXDB_TOKEN"),
+            org=os.getenv("INFLUXDB_ORG")
+        )
+        query_api = client.query_api()
+        bucket = os.getenv("INFLUXDB_BUCKET")
+
+        # Query for latest orderbook price data (best bid/ask)
+        query = f'''
+        from(bucket: "{bucket}")
+          |> range(start: -1m)
+          |> filter(fn: (r) => r._measurement == "orderbook_price")
+          |> filter(fn: (r) => r.symbol == "{symbol}")
+          |> last()
+        '''
+
+        tables = query_api.query(query)
+
+        orderbook_data = {
+            'symbol': symbol,
+            'timestamp': None,
+            'best_bid': None,
+            'best_ask': None,
+            'mid_price': None,
+            'spread': None
+        }
+
+        for table in tables:
+            for record in table.records:
+                field = record.get_field()
+                value = record.get_value()
+                time = record.get_time()
+
+                if not orderbook_data['timestamp']:
+                    orderbook_data['timestamp'] = time.isoformat()
+
+                if field == 'best_bid':
+                    orderbook_data['best_bid'] = value
+                elif field == 'best_ask':
+                    orderbook_data['best_ask'] = value
+                elif field == 'mid_price':
+                    orderbook_data['mid_price'] = value
+                elif field == 'spread':
+                    orderbook_data['spread'] = value
+
+        client.close()
+
+        return jsonify(orderbook_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/live/stats')
+def get_live_stats():
+    """Get live statistics from InfluxDB"""
+    from influxdb_client import InfluxDBClient
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    symbol = request.args.get('symbol', 'SPX_USDT')
+    lookback = request.args.get('lookback', '1h')
+
+    try:
+        client = InfluxDBClient(
+            url=os.getenv("INFLUXDB_URL"),
+            token=os.getenv("INFLUXDB_TOKEN"),
+            org=os.getenv("INFLUXDB_ORG")
+        )
+        query_api = client.query_api()
+        bucket = os.getenv("INFLUXDB_BUCKET")
+
+        # Get event counts by type
+        event_query = f'''
+        from(bucket: "{bucket}")
+          |> range(start: -{lookback})
+          |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
+          |> filter(fn: (r) => r.symbol == "{symbol}")
+          |> filter(fn: (r) => r._field == "usd_value")
+          |> group(columns: ["event_type"])
+          |> count()
+        '''
+
+        tables = query_api.query(event_query)
+
+        event_counts = {}
+        total_events = 0
+
+        for table in tables:
+            for record in table.records:
+                event_type = record.values.get('event_type')
+                count = record.get_value()
+                event_counts[event_type] = count
+                total_events += count
+
+        # Get total volume
+        volume_query = f'''
+        from(bucket: "{bucket}")
+          |> range(start: -{lookback})
+          |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
+          |> filter(fn: (r) => r.symbol == "{symbol}")
+          |> filter(fn: (r) => r._field == "usd_value")
+          |> sum()
+        '''
+
+        volume_tables = query_api.query(volume_query)
+        total_volume = 0
+
+        for table in volume_tables:
+            for record in table.records:
+                total_volume = record.get_value()
+                break
+
+        client.close()
+
+        return jsonify({
+            'symbol': symbol,
+            'lookback': lookback,
+            'total_events': total_events,
+            'total_volume': total_volume,
+            'event_counts': event_counts
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/files')
 def list_files():
     """List all available price change JSON files"""

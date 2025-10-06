@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Price Change Analyzer Dashboard</title>
+    <title>Live Price Chart - Order Book Dashboard</title>
 
     <!-- Apache ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -15,142 +15,87 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>Price Change Analyzer Dashboard</h1>
+            <h1>📈 Live Price Chart</h1>
             <div class="header-controls">
-                <button id="new-analysis-btn" class="btn btn-primary">+ New Analysis</button>
-                <select id="file-selector" class="file-selector">
-                    <option value="">Loading files...</option>
+                <select id="symbol-select" class="file-selector">
+                    <option value="SPX_USDT">SPX_USDT</option>
+                    <option value="BANANA_USDT">BANANA_USDT</option>
+                    <option value="BTC_USDT">BTC_USDT</option>
+                    <option value="ETH_USDT">ETH_USDT</option>
                 </select>
+                <select id="lookback-select" class="file-selector">
+                    <option value="5m">5 minutes</option>
+                    <option value="15m">15 minutes</option>
+                    <option value="30m">30 minutes</option>
+                    <option value="1h">1 hour</option>
+                    <option value="3h">3 hours</option>
+                </select>
+                <input type="number" id="min-usd-input" placeholder="Min USD" value="5000" step="1000" class="search-input" style="width: 120px;">
                 <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
-                <a href="/whale-monitor" class="btn btn-link">🐋 Whale Monitor</a>
+                <a href="/" class="btn btn-link">📊 Price Changes</a>
                 <a href="/live" class="btn btn-link">📊 Live Dashboard</a>
             </div>
         </header>
-
-        <!-- New Analysis Modal -->
-        <div id="new-analysis-modal" class="modal" style="display: none;">
-            <div class="modal-content analysis-modal-content">
-                <div class="modal-header">
-                    <h3>Run New Price Change Analysis</h3>
-                    <button class="modal-close" onclick="document.getElementById('new-analysis-modal').style.display='none'">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form id="analysis-form" class="analysis-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="symbol-input">Symbol</label>
-                                <input type="text" id="symbol-input" placeholder="e.g., SPX_USDT" value="SPX_USDT" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="lookback-input">Lookback</label>
-                                <input type="text" id="lookback-input" placeholder="e.g., 3h" value="3h" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="interval-input">Interval</label>
-                                <input type="text" id="interval-input" placeholder="e.g., 10s" value="10s" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="top-input">Top N</label>
-                                <input type="number" id="top-input" placeholder="5" value="5" min="1" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="min-change-input">Min Change %</label>
-                                <input type="number" id="min-change-input" placeholder="0.1" value="0.1" step="0.01" min="0" required>
-                            </div>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-primary btn-large">Run Analysis</button>
-                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-analysis-modal').style.display='none'">Cancel</button>
-                        </div>
-                    </form>
-                    <div id="analysis-status" class="analysis-status" style="display: none;">
-                        <div class="status-spinner"></div>
-                        <div id="status-message">Running analysis...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Main Content -->
         <div class="main-content">
             <!-- Left Panel: Chart and Stats -->
             <div class="chart-panel">
                 <!-- Analysis Info -->
-                <div id="analysis-info" class="analysis-info" style="display: none;">
+                <div id="analysis-info" class="analysis-info">
                     <div class="info-item">
                         <span class="info-icon">📊</span>
-                        <span id="info-symbol" class="info-text">-</span>
+                        <span id="info-symbol" class="info-text">SPX_USDT</span>
                     </div>
                     <div class="info-item">
                         <span class="info-icon">⏱️</span>
-                        <span id="info-interval" class="info-text">-</span>
+                        <span id="info-lookback" class="info-text">Last 5 minutes</span>
                     </div>
                     <div class="info-item">
                         <span class="info-icon">🔍</span>
-                        <span id="info-lookback" class="info-text">-</span>
+                        <span id="info-min-usd" class="info-text">Min: $5,000</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-icon">📈</span>
-                        <span id="info-threshold" class="info-text">-</span>
+                        <span class="info-icon">🔄</span>
+                        <span id="info-status" class="info-text">Live (2s refresh)</span>
                     </div>
                 </div>
 
                 <!-- Stats Summary -->
                 <div id="stats-summary" class="stats-summary">
                     <div class="stat-item">
-                        <span class="stat-label">Rank:</span>
-                        <span id="stat-rank" class="stat-value">-</span>
+                        <span class="stat-label">Current Price:</span>
+                        <span id="stat-current-price" class="stat-value">-</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Change:</span>
-                        <span id="stat-change" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Time:</span>
-                        <span id="stat-time" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Price:</span>
-                        <span id="stat-price" class="stat-value">-</span>
+                        <span id="stat-price-change" class="stat-value">-</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Events:</span>
-                        <span id="stat-events" class="stat-value">-</span>
+                        <span id="stat-total-events" class="stat-value">-</span>
                     </div>
-                    <div class="stat-item stat-export">
-                        <button id="export-interval-btn" class="btn btn-export" title="Export current interval data as JSON">
-                            <span class="export-icon">📥</span>
-                            Export JSON
-                        </button>
+                    <div class="stat-item">
+                        <span class="stat-label">Net Flow:</span>
+                        <span id="stat-net-flow" class="stat-value">-</span>
                     </div>
-                </div>
-
-                <!-- Interval Selector (if multiple intervals in file) -->
-                <div id="interval-selector-container" class="interval-selector-container" style="display: none;">
-                    <label for="interval-selector">Select Interval:</label>
-                    <select id="interval-selector" class="interval-selector">
-                        <option value="">Select an interval...</option>
-                    </select>
+                    <div class="stat-item">
+                        <span class="stat-label">Data Points:</span>
+                        <span id="stat-data-points" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Update:</span>
+                        <span id="stat-last-update" class="stat-value">-</span>
+                    </div>
                 </div>
 
                 <!-- Chart Container -->
                 <div class="chart-wrapper">
                     <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
                     <div id="chart-container" class="chart-container">
-                        <div id="loading" class="loading" style="display: none;">
+                        <div id="loading" class="loading">
                             <div class="spinner"></div>
-                            <p>Loading chart data...</p>
-                        </div>
-                        <div id="zero-state" class="zero-state">
-                            <div class="zero-state-icon">📊</div>
-                            <h3>No Data Selected</h3>
-                            <p>Select a file from the dropdown above to view price change analysis</p>
-                            <p style="margin-top: 1rem; color: #808080; font-size: 0.9rem;">or</p>
-                            <button id="zero-state-new-analysis" class="btn btn-primary" style="margin-top: 1rem;">+ New Analysis</button>
+                            <p>Loading live data...</p>
                         </div>
                     </div>
                 </div>
@@ -162,10 +107,6 @@
                         <div class="legend-item">
                             <span class="legend-marker" style="background: #00c2ff;"></span>
                             <span>Price Line</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-marker" style="background: #ffd60a;"></span>
-                            <span>START/END</span>
                         </div>
                     </div>
                     <div class="legend-section">
@@ -333,22 +274,6 @@
                                     willing to pay premium to get filled NOW (very bullish signal)
                                 </div>
                             </div>
-
-                            <!-- Entered/Left Top -->
-                            <div class="logic-detailed">
-                                <div class="logic-header">
-                                    <span class="logic-type">Entered/Left Top</span>
-                                    <span class="logic-badge logic-badge-technical">Technical</span>
-                                </div>
-                                <div class="logic-condition">
-                                    <strong>Condition:</strong> Price was in historical full book but now appeared/disappeared in top 20 window
-                                </div>
-                                <div class="logic-explanation">
-                                    <strong>Why:</strong> We only track top 20 price levels (API limitation).
-                                    When orders move in/out of this window, it's just a visibility change, not necessarily new market activity.
-                                    Less important - more <em>technical noise</em> than trading signal.
-                                </div>
-                            </div>
                         </div>
 
                         <!-- Additional Metrics -->
@@ -386,59 +311,48 @@
             <!-- Right Panel: Whale Events -->
             <div class="events-panel">
                 <div class="events-header">
-                    <h2>Whale Events</h2>
+                    <h2>Recent Whale Events</h2>
                     <div class="events-filters">
-                        <input type="text" id="event-search" placeholder="Search events..." class="search-input">
                         <select id="event-type-filter" class="filter-select">
                             <option value="">All Types</option>
-                            <option value="new_bid">New Bid</option>
-                            <option value="new_ask">New Ask</option>
-                            <option value="increase">Volume Increase</option>
-                            <option value="decrease">Volume Decrease</option>
                             <option value="market_buy">Market Buy</option>
                             <option value="market_sell">Market Sell</option>
-                            <option value="entered_top">Entered Top</option>
-                            <option value="left_top">Left Top</option>
+                            <option value="bid">Bid Events</option>
+                            <option value="ask">Ask Events</option>
                         </select>
-                        <div class="usd-filter-container">
-                            <label for="min-usd-filter">Min USD:</label>
-                            <input type="number" id="min-usd-filter" placeholder="0" min="0" step="1000" class="usd-filter-input">
-                        </div>
                     </div>
                 </div>
 
                 <!-- Event Statistics -->
                 <div id="event-stats" class="event-stats">
                     <div class="event-stat">
-                        <span class="event-stat-label">Total Events:</span>
-                        <span id="event-stat-total" class="event-stat-value">0</span>
+                        <span class="event-stat-label">Market Buys:</span>
+                        <span id="event-stat-buys" class="event-stat-value">0</span>
                     </div>
                     <div class="event-stat">
-                        <span class="event-stat-label">Total Volume:</span>
-                        <span id="event-stat-volume" class="event-stat-value">$0</span>
+                        <span class="event-stat-label">Market Sells:</span>
+                        <span id="event-stat-sells" class="event-stat-value">0</span>
                     </div>
                     <div class="event-stat">
-                        <span class="event-stat-label">Biggest Whale:</span>
-                        <span id="event-stat-biggest" class="event-stat-value">$0</span>
+                        <span class="event-stat-label">Bid Events:</span>
+                        <span id="event-stat-bids" class="event-stat-value">0</span>
                     </div>
                     <div class="event-stat">
-                        <span class="event-stat-label">Biggest (During):</span>
-                        <span id="event-stat-biggest-during" class="event-stat-value">$0</span>
+                        <span class="event-stat-label">Ask Events:</span>
+                        <span id="event-stat-asks" class="event-stat-value">0</span>
                     </div>
                 </div>
 
-                <!-- Analytical Insights -->
-                <div id="insights-panel" class="insights-panel" style="display: none;">
-                    <div class="insights-header">📊 Analysis</div>
-                    <div id="insights-content" class="insights-content"></div>
+                <!-- Event List -->
+                <div id="event-list" class="whale-events-list" style="max-height: calc(100vh - 400px); overflow-y: auto;">
+                    <!-- Events will be inserted here -->
                 </div>
-
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Price Change Analyzer Dashboard | Powered by <a href="https://www.tradingview.com" target="_blank">TradingView Lightweight Charts</a></p>
+            <p>Live Price Chart Dashboard | Powered by <a href="https://echarts.apache.org" target="_blank">Apache ECharts</a></p>
         </footer>
     </div>
 
@@ -448,18 +362,101 @@
         <button onclick="this.parentElement.style.display='none'">&times;</button>
     </div>
 
-    <!-- Event Details Modal -->
-    <div id="event-details-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-title">Whale Events at Time</h3>
-                <button class="modal-close" onclick="document.getElementById('event-details-modal').style.display='none'">&times;</button>
-            </div>
-            <div id="modal-body" class="modal-body"></div>
-        </div>
-    </div>
+    <!-- Modal Styles -->
+    <style>
+        #event-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            position: relative;
+            background: var(--bg-tertiary);
+            border: 1px solid rgba(0, 255, 163, 0.2);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 255, 163, 0.1);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--green);
+            font-size: 1.5rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #808080;
+            font-size: 2rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .stat-card {
+            padding: 12px;
+            border-radius: 6px;
+        }
+    </style>
 
     <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/live_chart.js') }}"></script>
 </body>
 </html>

@@ -569,6 +569,36 @@ body::after {
     text-shadow: 0 0 10px rgba(159, 168, 218, 0.3);
 }
 
+.zero-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--text-secondary);
+    max-width: 500px;
+    padding: 2rem;
+}
+
+.zero-state-icon {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    animation: float 3s ease-in-out infinite;
+}
+
+.zero-state h3 {
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.zero-state p {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
 .chart-legend {
     background: rgba(17, 17, 17, 0.6);
     backdrop-filter: blur(10px);
