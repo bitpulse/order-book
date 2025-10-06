@@ -23,6 +23,38 @@ let filters = {
     askIncrease: true
 };
 
+// Sound notification state
+let soundEnabled = true;
+let lastEventIds = new Set(); // Track which events we've already played sounds for
+
+// Create audio context for beep sounds
+let audioContext = null;
+function initAudio() {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+// Play beep sound
+function playBeep(frequency, duration) {
+    if (!soundEnabled || !audioContext) return;
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + duration);
+}
+
 // Configuration
 const config = {
     symbol: 'SPX_USDT',
@@ -503,16 +535,50 @@ async function fetchWhaleEvents(incremental = false) {
             return;
         }
 
-        if (data.is_incremental) {
+        const newEvents = data.events || [];
+
+        if (data.is_incremental && newEvents.length > 0) {
+            // Check for new market buy/sell events and play sounds
+            newEvents.forEach(event => {
+                const eventId = `${event.time}_${event.event_type}_${event.price}_${event.volume}`;
+
+                if (!lastEventIds.has(eventId)) {
+                    lastEventIds.add(eventId);
+
+                    // Play sound for market orders
+                    if (event.event_type === 'market_buy') {
+                        playBeep(880, 0.15); // High beep for buy (A5 note)
+                    } else if (event.event_type === 'market_sell') {
+                        playBeep(440, 0.15); // Lower beep for sell (A4 note)
+                    }
+                }
+            });
+
             // Append new events
-            whaleEvents = whaleEvents.concat(data.events || []);
+            whaleEvents = whaleEvents.concat(newEvents);
 
             // Remove old events outside lookback window
             const cutoffTime = new Date(Date.now() - parseLookback(config.lookback));
             whaleEvents = whaleEvents.filter(e => new Date(e.time) > cutoffTime);
+
+            // Clean up old event IDs from tracking set
+            const cutoffTimestamp = cutoffTime.getTime();
+            const validEventIds = new Set();
+            whaleEvents.forEach(e => {
+                const eventId = `${e.time}_${e.event_type}_${e.price}_${e.volume}`;
+                if (new Date(e.time).getTime() > cutoffTimestamp) {
+                    validEventIds.add(eventId);
+                }
+            });
+            lastEventIds = validEventIds;
         } else {
-            // Full reload
-            whaleEvents = data.events || [];
+            // Full reload - rebuild event ID tracking
+            whaleEvents = newEvents;
+            lastEventIds.clear();
+            whaleEvents.forEach(e => {
+                const eventId = `${e.time}_${e.event_type}_${e.price}_${e.volume}`;
+                lastEventIds.add(eventId);
+            });
         }
 
         // Update last timestamp
@@ -926,6 +992,26 @@ function setupEventListeners() {
     document.getElementById('fullscreen-btn').addEventListener('click', () => {
         toggleFullscreen();
     });
+
+    // Sound toggle button
+    const soundToggleBtn = document.getElementById('sound-toggle-btn');
+    soundToggleBtn.addEventListener('click', () => {
+        // Initialize audio context on first user interaction
+        if (!audioContext) {
+            initAudio();
+        }
+
+        soundEnabled = !soundEnabled;
+        soundToggleBtn.textContent = soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF';
+        soundToggleBtn.title = soundEnabled ? 'Disable sound notifications' : 'Enable sound notifications';
+    });
+
+    // Initialize audio context on any user interaction (required by browsers)
+    document.addEventListener('click', () => {
+        if (!audioContext) {
+            initAudio();
+        }
+    }, { once: true });
 
     // Filter checkboxes
     document.getElementById('filter-price').addEventListener('change', (e) => {
