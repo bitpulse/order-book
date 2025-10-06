@@ -77,9 +77,23 @@ async function initChart() {
 
     // Detect user zoom/pan interactions
     chart.on('datazoom', function(params) {
-        // Mark that user has manually interacted with zoom/pan
-        userHasZoomed = true;
-        console.log('User zoomed/panned - disabling auto-follow');
+        // Check if user is viewing the most recent data (right edge)
+        const option = chart.getOption();
+        const dataZoom = option.dataZoom[0];
+
+        // If the end is at or near 100% (viewing latest data), allow auto-follow
+        // Otherwise, user is viewing historical data - lock the view
+        if (dataZoom && dataZoom.end !== undefined) {
+            if (dataZoom.end >= 95) {
+                // User is at the right edge - allow auto-follow
+                userHasZoomed = false;
+                console.log('User at right edge - enabling auto-follow');
+            } else {
+                // User is viewing historical data - lock view
+                userHasZoomed = true;
+                console.log('User viewing history - disabling auto-follow');
+            }
+        }
     });
 
     // Also detect mousewheel zoom
