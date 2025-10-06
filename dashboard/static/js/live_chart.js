@@ -477,12 +477,23 @@ function formatTooltip(params) {
         // Check if this is an event with metadata (third element in array)
         if (param.data && param.data[2] && param.data[2].originalEvent) {
             const event = param.data[2].originalEvent;
+            const isMarketOrder = event.event_type === 'market_buy' || event.event_type === 'market_sell';
+
             html += `
                 <div style="border-left: 3px solid ${color}; padding-left: 8px; margin: 8px 0;">
                     <div style="font-weight: bold; color: ${color}; margin-bottom: 4px;">${param.seriesName}</div>
                     <div style="margin: 2px 0;"><strong>Price:</strong> $${event.price.toFixed(6)}</div>
                     <div style="margin: 2px 0;"><strong>Volume:</strong> ${event.volume.toFixed(4)}</div>
                     <div style="margin: 2px 0;"><strong>USD Value:</strong> $${event.usd_value.toLocaleString()}</div>
+            `;
+
+            // Show distance from mid for market orders
+            if (isMarketOrder && event.distance_from_mid_pct !== undefined) {
+                const distanceColor = event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444';
+                html += `<div style="margin: 2px 0;"><strong>Distance from Mid:</strong> <span style="color: ${distanceColor};">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</span></div>`;
+            }
+
+            html += `
                     <div style="margin: 2px 0; color: #00ffa3; font-size: 0.85rem;">Click for details</div>
                 </div>
             `;
@@ -1148,6 +1159,7 @@ function showEventModal(event, seriesName) {
     // Determine event color and label
     const isMarketBuy = event.event_type === 'market_buy';
     const isMarketSell = event.event_type === 'market_sell';
+    const isMarketOrder = isMarketBuy || isMarketSell;
     const isBid = event.side === 'bid';
     const isAsk = event.side === 'ask';
 
@@ -1195,10 +1207,10 @@ function showEventModal(event, seriesName) {
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">USD Value</div>
                     <div style="color: ${sideColor}; font-size: 1.3rem; font-weight: 700;">$${formatNumber(event.usd_value)}</div>
                 </div>
-                ${event.distance_from_mid_pct !== undefined ? `
+                ${isMarketOrder && event.distance_from_mid_pct !== undefined ? `
                 <div>
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Distance from Mid</div>
-                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct.toFixed(3)}%</div>
+                    <div style="color: ${event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444'}; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</div>
                 </div>
                 ` : ''}
             </div>

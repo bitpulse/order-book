@@ -139,7 +139,7 @@ def get_live_whale_events():
               |> range(start: time(v: "{start_time}"))
               |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
               |> filter(fn: (r) => r.symbol == "{symbol}")
-              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume")
+              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume" or r._field == "distance_from_mid_pct")
               |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
               |> filter(fn: (r) => r.usd_value >= {min_usd})
               |> sort(columns: ["_time"], desc: false)
@@ -151,7 +151,7 @@ def get_live_whale_events():
               |> range(start: -{lookback})
               |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
               |> filter(fn: (r) => r.symbol == "{symbol}")
-              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume")
+              |> filter(fn: (r) => r._field == "usd_value" or r._field == "price" or r._field == "volume" or r._field == "distance_from_mid_pct")
               |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
               |> filter(fn: (r) => r.usd_value >= {min_usd})
               |> sort(columns: ["_time"], desc: true)
@@ -171,7 +171,8 @@ def get_live_whale_events():
                     'side': record.values.get('side'),
                     'price': record.values.get('price'),
                     'volume': record.values.get('volume'),
-                    'usd_value': record.values.get('usd_value')
+                    'usd_value': record.values.get('usd_value'),
+                    'distance_from_mid_pct': record.values.get('distance_from_mid_pct')
                 }
                 events.append(event)
 
