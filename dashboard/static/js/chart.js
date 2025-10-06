@@ -9,6 +9,8 @@ let minUsdFilter = 0; // Global filter for minimum USD value
 document.addEventListener('DOMContentLoaded', async () => {
     await loadFileList();
     setupEventListeners();
+    // Hide loading spinner initially (show zero state instead)
+    showLoading(false);
 });
 
 // Load available data files
@@ -128,6 +130,9 @@ function showIntervalSelector(intervals) {
 // Load specific interval data
 function loadInterval(intervalData) {
     currentInterval = intervalData;
+
+    // Hide zero state and show chart
+    showZeroState(false);
 
     // Update stats
     updateStats(intervalData);
@@ -1309,6 +1314,14 @@ function setupEventListeners() {
         document.getElementById('new-analysis-modal').style.display = 'flex';
     });
 
+    // Zero state new analysis button
+    const zeroStateBtn = document.getElementById('zero-state-new-analysis');
+    if (zeroStateBtn) {
+        zeroStateBtn.addEventListener('click', () => {
+            document.getElementById('new-analysis-modal').style.display = 'flex';
+        });
+    }
+
     // Analysis form submit
     document.getElementById('analysis-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1439,8 +1452,29 @@ function filterEvents(searchTerm, eventType) {
 // Show/hide loading indicator
 function showLoading(show) {
     const loading = document.getElementById('loading');
+    const zeroState = document.getElementById('zero-state');
+
     if (loading) {
         loading.style.display = show ? 'flex' : 'none';
+    }
+
+    // Hide zero state when loading
+    if (zeroState && show) {
+        zeroState.style.display = 'none';
+    }
+}
+
+function showZeroState(show) {
+    const zeroState = document.getElementById('zero-state');
+    const loading = document.getElementById('loading');
+
+    if (zeroState) {
+        zeroState.style.display = show ? 'block' : 'none';
+    }
+
+    // Hide loading when showing zero state
+    if (loading && show) {
+        loading.style.display = 'none';
     }
 }
 

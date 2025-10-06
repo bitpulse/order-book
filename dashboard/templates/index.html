@@ -141,9 +141,16 @@
                 <div class="chart-wrapper">
                     <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
                     <div id="chart-container" class="chart-container">
-                        <div id="loading" class="loading">
+                        <div id="loading" class="loading" style="display: none;">
                             <div class="spinner"></div>
                             <p>Loading chart data...</p>
+                        </div>
+                        <div id="zero-state" class="zero-state">
+                            <div class="zero-state-icon">📊</div>
+                            <h3>No Data Selected</h3>
+                            <p>Select a file from the dropdown above to view price change analysis</p>
+                            <p style="margin-top: 1rem; color: #808080; font-size: 0.9rem;">or</p>
+                            <button id="zero-state-new-analysis" class="btn btn-primary" style="margin-top: 1rem;">+ New Analysis</button>
                         </div>
                     </div>
                 </div>
