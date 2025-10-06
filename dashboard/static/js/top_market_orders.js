@@ -531,6 +531,11 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
         const bidIncreasesAll = [...bidIncreases, ...askDecreases]; // Support building
         const askIncreasesAll = [...askIncreases, ...bidDecreases]; // Resistance building
 
+        // Calculate GLOBAL min/max USD across ALL events for consistent sizing
+        const allUsdValues = events.map(e => e.usd_value || 0);
+        const globalMinUsd = allUsdValues.length > 0 ? Math.min(...allUsdValues) : 0;
+        const globalMaxUsd = allUsdValues.length > 0 ? Math.max(...allUsdValues) : 0;
+
         // Create series for each category with EXACT live chart colors
         const categories = [
             { name: 'Market Buy', events: marketBuys, color: '#00c2ff', symbol: 'circle', filterKey: 'marketBuy' },
@@ -544,11 +549,6 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
         categories.forEach(({ name, events: typeEvents, color, symbol, filterKey }) => {
             // Skip if filtered out or no events
             if (!filters[filterKey] || typeEvents.length === 0) return;
-
-            // Get USD value range for size scaling
-            const usdValues = typeEvents.map(e => e.usd_value || 0);
-            const minUsd = Math.min(...usdValues);
-            const maxUsd = Math.max(...usdValues);
 
             // Create data points with collision handling
             const timeOffsets = new Map();
@@ -565,16 +565,26 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
                     timeOffsets.set(timeKey, 1);
                 }
 
-                // Calculate marker size based on USD value (square root scaling for proportional sizes)
-                const minSize = period === 'during' ? 6 : 3;
-                const maxSize = period === 'during' ? 30 : 15;
-                let size = minSize;
+                // Calculate marker size based on USD value (EXACT same as live_chart.js)
+                // Use GLOBAL min/max so all events are sized relative to each other
+                const baseSize = 12;
+                const minSize = 8;
+                const maxSize = 24;
+                let size;
 
-                if (maxUsd > minUsd) {
-                    // Square root scaling: visually proportional (area grows linearly with value)
-                    const normalizedValue = (Math.sqrt(event.usd_value) - Math.sqrt(minUsd)) /
-                                          (Math.sqrt(maxUsd) - Math.sqrt(minUsd));
+                if (globalMaxUsd === globalMinUsd) {
+                    // All values are the same
+                    size = baseSize;
+                } else {
+                    // Logarithmic scaling for better distribution (matches live_chart.js lines 686-700)
+                    const normalizedValue = (Math.log(event.usd_value + 1) - Math.log(globalMinUsd + 1)) /
+                                          (Math.log(globalMaxUsd + 1) - Math.log(globalMinUsd + 1));
                     size = minSize + (maxSize - minSize) * normalizedValue;
+                }
+
+                // Adjust size for period (make before/after slightly smaller)
+                if (period !== 'during') {
+                    size = size * 0.75;
                 }
 
                 // Show USD label for large events
@@ -919,6 +929,35 @@ function setupEventListeners() {
         filters.askIncrease = e.target.checked;
         if (currentInterval) loadWhaleEvents(currentInterval);
     });
+
+    // Keyboard shortcuts (matching live_chart.js)
+    document.addEventListener('keydown', (e) => {
+        // ESC key: close modal first, then exit fullscreen
+        if (e.key === 'Escape') {
+            // First check if any modal is open
+            const newAnalysisModal = document.getElementById('new-analysis-modal');
+            const eventDetailsModal = document.getElementById('event-details-modal');
+
+            if (newAnalysisModal && newAnalysisModal.style.display === 'flex') {
+                newAnalysisModal.style.display = 'none';
+            } else if (eventDetailsModal && eventDetailsModal.style.display === 'flex') {
+                eventDetailsModal.style.display = 'none';
+            } else {
+                // If no modal, exit fullscreen if active
+                const wrapper = document.querySelector('.chart-wrapper');
+                if (wrapper.classList.contains('fullscreen')) {
+                    toggleFullscreen();
+                }
+            }
+        }
+        // F for fullscreen toggle
+        if (e.key === 'f' || e.key === 'F') {
+            // Only if not typing in an input field
+            if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+                toggleFullscreen();
+            }
+        }
+    });
 }
 
 // Run new whale activity analysis
@@ -1004,24 +1043,30 @@ function exportInterval(interval) {
     linkElement.click();
 }
 
-// Toggle fullscreen
+// Toggle fullscreen mode for chart (EXACT match with live_chart.js)
 function toggleFullscreen() {
     const wrapper = document.querySelector('.chart-wrapper');
+    const btn = document.getElementById('fullscreen-btn');
 
-    if (!document.fullscreenElement) {
-        wrapper.requestFullscreen().catch(err => {
-            console.error('Fullscreen error:', err);
-        });
+    if (wrapper.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        wrapper.classList.remove('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Toggle Fullscreen';
     } else {
-        document.exitFullscreen();
+        // Enter fullscreen
+        wrapper.classList.add('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Exit Fullscreen';
     }
 
-    // Resize chart after transition
-    setTimeout(() => {
-        if (chart) {
+    // Resize chart to fit new container size
+    if (chart) {
+        // Use longer timeout to ensure CSS transition completes
+        setTimeout(() => {
             chart.resize();
-        }
-    }, 350);
+        }, 350);
+    }
 }
 
 // Show/hide loading spinner
