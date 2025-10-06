@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Orders Dashboard - Whale Buy/Sell Analysis</title>
+    <title>Whale Activity Dashboard - All Event Types Analysis</title>
 
     <!-- Apache ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -15,7 +15,7 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>🐋 Market Orders Dashboard</h1>
+            <h1>🐋 Whale Activity Dashboard</h1>
             <div class="header-controls">
                 <button id="new-analysis-btn" class="btn btn-primary">+ New Analysis</button>
                 <select id="file-selector" class="file-selector">
@@ -23,7 +23,10 @@
                 </select>
                 <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
                 <a href="/" class="btn btn-link">📈 Price Changes</a>
-                <a href="/whale-monitor" class="btn btn-link">🐋 Whale Monitor</a>
+                <a href="/top-market-orders" class="btn btn-link">🎯 Top Market Orders</a>
+                <a href="/market-orders-intervals" class="btn btn-link">⏱️ Market Orders Intervals</a>
+                <a href="/whale-activity" class="btn btn-link">🐋 Whale Activity</a>
+                <a href="/whale-monitor" class="btn btn-link">👁️ Whale Monitor</a>
                 <a href="/live" class="btn btn-link">📊 Live Dashboard</a>
             </div>
         </header>
@@ -32,7 +35,7 @@
         <div id="new-analysis-modal" class="modal" style="display: none;">
             <div class="modal-content analysis-modal-content">
                 <div class="modal-header">
-                    <h3>Run New Market Orders Analysis</h3>
+                    <h3>Run New Whale Activity Analysis</h3>
                     <button class="modal-close" onclick="document.getElementById('new-analysis-modal').style.display='none'">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -49,38 +52,27 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="top-input">Top N Orders</label>
-                                <input type="number" id="top-input" placeholder="50" value="50" min="1" max="200" required>
-                                <small style="color: #808080; font-size: 0.85rem;">Number of largest orders to show</small>
+                                <label for="interval-input">Interval (seconds)</label>
+                                <input type="number" id="interval-input" placeholder="60" value="60" min="1" max="3600" required>
+                                <small style="color: #808080; font-size: 0.85rem;">Time window to group market orders</small>
                             </div>
                             <div class="form-group">
-                                <label for="min-usd-input">Min USD Value</label>
-                                <input type="number" id="min-usd-input" placeholder="10000" value="10000" step="1000" min="0" required>
+                                <label for="top-input">Top N Intervals</label>
+                                <input type="number" id="top-input" placeholder="10" value="10" min="1" max="50" required>
                             </div>
                         </div>
                         <div class="form-row">
+                            <div class="form-group">
+                                <label for="min-usd-input">Min USD Value</label>
+                                <input type="number" id="min-usd-input" placeholder="50000" value="50000" step="1000" min="0" required>
+                            </div>
                             <div class="form-group">
                                 <label for="sort-by-input">Sort By</label>
                                 <select id="sort-by-input">
-                                    <option value="size">USD Size (Largest First)</option>
-                                    <option value="distance">Distance from Mid</option>
-                                    <option value="time">Time (Most Recent)</option>
+                                    <option value="volume">Total Volume (USD)</option>
+                                    <option value="imbalance">Order Flow Imbalance</option>
+                                    <option value="count">Event Count</option>
                                 </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="max-distance-input">Max Distance from Mid (%)</label>
-                                <input type="number" id="max-distance-input" placeholder="Optional (e.g., 1.0)" step="0.1" min="0">
-                                <small style="color: #808080; font-size: 0.85rem;">Leave empty for no limit</small>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="min-distance-input">Min Distance from Mid (%)</label>
-                                <input type="number" id="min-distance-input" placeholder="Optional (e.g., 0.1)" step="0.1" min="0">
-                                <small style="color: #808080; font-size: 0.85rem;">Leave empty for no limit</small>
-                            </div>
-                            <div class="form-group">
-                                <!-- Empty placeholder for grid alignment -->
                             </div>
                         </div>
                         <div class="form-actions">
@@ -264,10 +256,10 @@
                         <div class="data-flow-section">
                             <div class="data-flow-title">🔍 Detection Algorithm</div>
                             <div class="data-flow-detail">
-                                <strong>Sliding Window:</strong> 1-second sliding step over historical data
+                                <strong>Sliding Window:</strong> Adaptive sliding step over historical data
                             </div>
                             <div class="data-flow-detail">
-                                <strong>Aggregation:</strong> Group whale events within each time window (interval)
+                                <strong>Aggregation:</strong> Group all whale events (market & limit orders) within each time window
                             </div>
                             <div class="data-flow-detail">
                                 <strong>Filtering:</strong> Keep only intervals with total USD volume ≥ threshold
@@ -311,7 +303,7 @@
                                 <strong>BEFORE:</strong> 3× interval duration before the spike (blue, 30% opacity)
                             </div>
                             <div class="data-flow-detail">
-                                <strong>DURING:</strong> The identified whale activity interval (full opacity, labeled)
+                                <strong>DURING:</strong> The identified high-activity interval (full opacity, labeled)
                             </div>
                             <div class="data-flow-detail">
                                 <strong>AFTER:</strong> 3× interval duration after the spike (red, 30% opacity)
@@ -398,6 +390,6 @@
     </div>
 
     <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='js/whale_actions.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/whale_activity.js') }}"></script>
 </body>
 </html>

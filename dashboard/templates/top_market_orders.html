@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Orders Dashboard - Whale Buy/Sell Analysis</title>
+    <title>Top Market Orders Dashboard - Whale Buy/Sell Analysis</title>
 
     <!-- Apache ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -15,7 +15,7 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>🐋 Market Orders Dashboard</h1>
+            <h1>🐋 Top Market Orders Dashboard</h1>
             <div class="header-controls">
                 <button id="new-analysis-btn" class="btn btn-primary">+ New Analysis</button>
                 <select id="file-selector" class="file-selector">
@@ -23,7 +23,10 @@
                 </select>
                 <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
                 <a href="/" class="btn btn-link">📈 Price Changes</a>
-                <a href="/whale-monitor" class="btn btn-link">🐋 Whale Monitor</a>
+                <a href="/top-market-orders" class="btn btn-link">🎯 Top Market Orders</a>
+                <a href="/market-orders-intervals" class="btn btn-link">⏱️ Market Orders Intervals</a>
+                <a href="/whale-activity" class="btn btn-link">🐋 Whale Activity</a>
+                <a href="/whale-monitor" class="btn btn-link">👁️ Whale Monitor</a>
                 <a href="/live" class="btn btn-link">📊 Live Dashboard</a>
             </div>
         </header>
@@ -398,6 +401,6 @@
     </div>
 
     <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='js/whale_actions.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/top_market_orders.js') }}"></script>
 </body>
 </html>

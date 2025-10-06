@@ -12,10 +12,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLoading(false);
 });
 
-// Load available whale activity data files
+// Load available top market orders data files
 async function loadFileList() {
     try {
-        const response = await fetch('/api/whale-files');
+        const response = await fetch('/api/top-market-orders-files');
         const data = await response.json();
 
         const selector = document.getElementById('file-selector');
@@ -45,7 +45,7 @@ async function loadDataFile(filename) {
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/whale-data/${filename}`);
+        const response = await fetch(`/api/top-market-orders-data/${filename}`);
         let data = await response.json();
 
         console.log('Loaded whale activity data:', data);
@@ -54,58 +54,24 @@ async function loadDataFile(filename) {
             throw new Error(data.error);
         }
 
-        // Handle JSON format with metadata
+        // Handle JSON format with metadata (intervals format)
         let intervals = data.intervals || [];
-        let orders = data.orders || [];
         let metadata = data.metadata;
 
-        console.log('Intervals:', intervals);
-        console.log('Orders:', orders);
+        console.log('Loaded intervals:', intervals.length);
         console.log('Metadata:', metadata);
 
-        // Detect which format: intervals (old) or orders (new)
-        const isOrderFormat = metadata && metadata.analyzer === 'top_market_orders';
+        currentData = intervals;
+        updateAnalysisInfo(filename, intervals, metadata);
 
-        if (isOrderFormat) {
-            // New format: individual orders
-            // Convert to pseudo-interval format for compatibility
-            const pseudoInterval = {
-                rank: 1,
-                symbol: metadata.symbol,
-                start_time: data.start_time,
-                end_time: data.end_time,
-                whale_events: orders,
-                whale_events_before: [],
-                whale_events_after: [],
-                price_data: data.price_data || [],
-                total_usd_volume: metadata.total_buy_volume + metadata.total_sell_volume,
-                buy_volume: metadata.total_buy_volume,
-                sell_volume: metadata.total_sell_volume,
-                event_count: orders.length,
-                order_flow_imbalance: metadata.buy_count && metadata.sell_count ?
-                    (metadata.total_buy_volume - metadata.total_sell_volume) / (metadata.total_buy_volume + metadata.total_sell_volume) : 0,
-                extended_start: data.start_time,
-                extended_end: data.end_time
-            };
-
-            currentData = [pseudoInterval];
-            updateAnalysisInfo(filename, [pseudoInterval], metadata);
-            document.getElementById('interval-selector-container').style.display = 'none';
-            loadInterval(pseudoInterval);
+        if (intervals.length > 1) {
+            showIntervalSelector(intervals);
         } else {
-            // Old format: intervals
-            currentData = intervals;
-            updateAnalysisInfo(filename, intervals, metadata);
+            document.getElementById('interval-selector-container').style.display = 'none';
+        }
 
-            if (intervals.length > 1) {
-                showIntervalSelector(intervals);
-            } else {
-                document.getElementById('interval-selector-container').style.display = 'none';
-            }
-
-            if (intervals.length > 0) {
-                loadInterval(intervals[0]);
-            }
+        if (intervals.length > 0) {
+            loadInterval(intervals[0]);
         }
 
         showLoading(false);
@@ -141,9 +107,14 @@ function showIntervalSelector(intervals) {
         const option = document.createElement('option');
         option.value = index;
         const startTime = new Date(interval.start_time).toLocaleTimeString();
-        const imbalance = interval.order_flow_imbalance || 0;
-        const imbalanceStr = (imbalance * 100).toFixed(0);
-        option.textContent = `#${interval.rank} - $${(interval.total_usd_volume || 0).toLocaleString()} (${imbalanceStr > 0 ? '+' : ''}${imbalanceStr}%) @ ${startTime}`;
+
+        // Get the main order event type
+        const mainEvent = interval.whale_events && interval.whale_events[0];
+        const eventType = mainEvent ? mainEvent.event_type : '';
+        const eventSymbol = eventType === 'market_buy' ? '▲' : eventType === 'market_sell' ? '▼' : '●';
+        const eventLabel = eventType === 'market_buy' ? 'BUY' : eventType === 'market_sell' ? 'SELL' : '';
+
+        option.textContent = `#${interval.rank} ${eventSymbol} ${eventLabel} $${(interval.total_usd_volume || 0).toLocaleString()} @ ${startTime}`;
         selector.appendChild(option);
     });
 
@@ -187,9 +158,14 @@ function updateStats(data) {
     flowElem.textContent = `${(imbalance * 100).toFixed(0)}%`;
     flowElem.className = 'stat-value ' + (imbalance > 0.1 ? 'positive' : imbalance < -0.1 ? 'negative' : 'neutral');
 
-    const startTime = new Date(data.start_time).toLocaleTimeString();
-    const endTime = new Date(data.end_time).toLocaleTimeString();
-    document.getElementById('stat-time').textContent = `${startTime} → ${endTime}`;
+    // Show the exact order time
+    const mainEvent = data.whale_events && data.whale_events[0];
+    if (mainEvent) {
+        const orderTime = new Date(mainEvent.time).toLocaleTimeString();
+        document.getElementById('stat-time').textContent = orderTime;
+    } else {
+        document.getElementById('stat-time').textContent = '-';
+    }
 
     // Apply USD filter to event counts
     const filteredDuring = filterWhaleEventsByUsd(data.whale_events || []);
@@ -312,58 +288,7 @@ function loadPriceData(data) {
         z: 1
     });
 
-    // START marker
-    series.push({
-        name: 'START',
-        type: 'scatter',
-        data: [[new Date(data.start_time), startPrice]],
-        symbolSize: 16,
-        itemStyle: {
-            color: '#ffd60a',
-            shadowBlur: 10,
-            shadowColor: 'rgba(255, 214, 10, 0.5)',
-            borderColor: '#333',
-            borderWidth: 2
-        },
-        label: {
-            show: true,
-            formatter: '▼ START',
-            position: 'top',
-            color: '#ffd60a',
-            fontSize: 11,
-            fontWeight: 'bold',
-            distance: 8
-        },
-        z: 10
-    });
-
-    // END marker
-    const endPrice = data.price_data.find(p => new Date(p.time) >= new Date(data.end_time))?.mid_price || data.price_data[data.price_data.length - 1]?.mid_price;
-    series.push({
-        name: 'END',
-        type: 'scatter',
-        data: [[new Date(data.end_time), endPrice]],
-        symbolSize: 16,
-        itemStyle: {
-            color: '#ffd60a',
-            shadowBlur: 10,
-            shadowColor: 'rgba(255, 214, 10, 0.5)',
-            borderColor: '#333',
-            borderWidth: 2
-        },
-        label: {
-            show: true,
-            formatter: '▲ END',
-            position: 'top',
-            color: '#ffd60a',
-            fontSize: 11,
-            fontWeight: 'bold',
-            distance: 8
-        },
-        z: 10
-    });
-
-    // SPIKE marker
+    // SPIKE marker (skip START/END for individual orders)
     series.push({
         name: 'SPIKE',
         type: 'scatter',
@@ -824,7 +749,7 @@ function showSingleEventModal(event, period) {
         </div>
     `;
 
-    modal.style.display = 'block';
+    modal.style.display = 'flex';
 }
 
 // Setup event listeners
@@ -841,12 +766,12 @@ function setupEventListeners() {
 
     // New analysis button
     document.getElementById('new-analysis-btn').addEventListener('click', () => {
-        document.getElementById('new-analysis-modal').style.display = 'block';
+        document.getElementById('new-analysis-modal').style.display = 'flex';
     });
 
     // Zero state button
     document.getElementById('zero-state-new-analysis').addEventListener('click', () => {
-        document.getElementById('new-analysis-modal').style.display = 'block';
+        document.getElementById('new-analysis-modal').style.display = 'flex';
     });
 
     // Analysis form

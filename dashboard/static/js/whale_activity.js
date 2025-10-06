@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Load available whale activity data files
 async function loadFileList() {
     try {
-        const response = await fetch('/api/whale-files');
+        const response = await fetch('/api/whale-activity-files');
         const data = await response.json();
 
         const selector = document.getElementById('file-selector');
@@ -45,7 +45,7 @@ async function loadDataFile(filename) {
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/whale-data/${filename}`);
+        const response = await fetch(`/api/whale-activity-data/${filename}`);
         let data = await response.json();
 
         console.log('Loaded whale activity data:', data);
@@ -898,22 +898,12 @@ async function runAnalysis() {
         const params = {
             symbol: document.getElementById('symbol-input').value,
             lookback: document.getElementById('lookback-input').value,
+            interval: parseInt(document.getElementById('interval-input').value),
             top: parseInt(document.getElementById('top-input').value),
             min_usd: parseFloat(document.getElementById('min-usd-input').value),
             sort_by: document.getElementById('sort-by-input').value,
-            analyzer_type: 'top_market_orders'  // Individual orders, not intervals
+            analyzer_type: 'whale_events'  // Use whale_events_analyzer.py (all event types)
         };
-
-        // Optional distance filters
-        const maxDistanceInput = document.getElementById('max-distance-input');
-        const minDistanceInput = document.getElementById('min-distance-input');
-
-        if (maxDistanceInput && maxDistanceInput.value) {
-            params.max_distance = parseFloat(maxDistanceInput.value);
-        }
-        if (minDistanceInput && minDistanceInput.value) {
-            params.min_distance = parseFloat(minDistanceInput.value);
-        }
 
         const response = await fetch('/api/run-whale-analysis', {
             method: 'POST',

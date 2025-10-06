@@ -12,10 +12,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLoading(false);
 });
 
-// Load available whale activity data files
+// Load available market orders intervals data files
 async function loadFileList() {
     try {
-        const response = await fetch('/api/whale-files');
+        const response = await fetch('/api/market-orders-intervals-files');
         const data = await response.json();
 
         const selector = document.getElementById('file-selector');
@@ -45,7 +45,7 @@ async function loadDataFile(filename) {
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/whale-data/${filename}`);
+        const response = await fetch(`/api/market-orders-intervals-data/${filename}`);
         let data = await response.json();
 
         console.log('Loaded whale activity data:', data);
@@ -892,28 +892,18 @@ async function runAnalysis() {
 
     form.style.display = 'none';
     statusDiv.style.display = 'block';
-    statusMsg.textContent = 'Running whale activity analysis...';
+    statusMsg.textContent = 'Running market orders interval analysis...';
 
     try {
         const params = {
             symbol: document.getElementById('symbol-input').value,
             lookback: document.getElementById('lookback-input').value,
+            interval: parseInt(document.getElementById('interval-input').value),
             top: parseInt(document.getElementById('top-input').value),
             min_usd: parseFloat(document.getElementById('min-usd-input').value),
             sort_by: document.getElementById('sort-by-input').value,
-            analyzer_type: 'top_market_orders'  // Individual orders, not intervals
+            analyzer_type: 'market_orders'  // Use market_orders_analyzer.py
         };
-
-        // Optional distance filters
-        const maxDistanceInput = document.getElementById('max-distance-input');
-        const minDistanceInput = document.getElementById('min-distance-input');
-
-        if (maxDistanceInput && maxDistanceInput.value) {
-            params.max_distance = parseFloat(maxDistanceInput.value);
-        }
-        if (minDistanceInput && minDistanceInput.value) {
-            params.min_distance = parseFloat(minDistanceInput.value);
-        }
 
         const response = await fetch('/api/run-whale-analysis', {
             method: 'POST',
