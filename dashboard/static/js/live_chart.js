@@ -12,6 +12,17 @@ let whaleEvents = [];
 let userHasZoomed = false; // Track if user manually zoomed/panned
 let initialDataZoom = null; // Store initial zoom state
 
+// Filter state
+let filters = {
+    price: true,
+    marketBuy: true,
+    marketSell: true,
+    newBid: true,
+    newAsk: true,
+    bidIncrease: true,
+    askIncrease: true
+};
+
 // Configuration
 const config = {
     symbol: 'SPX_USDT',
@@ -665,15 +676,16 @@ function updateChart() {
     const currentOption = chart.getOption();
 
     // Prepare update options with all necessary config
+    // Apply filters - hide series data if filter is unchecked
     const updateOptions = {
         series: [
-            { data: chartData }, // Price line
-            { data: scatterMarketBuys.map(e => [e.time, e.price, e]) }, // Market Buy
-            { data: scatterMarketSells.map(e => [e.time, e.price, e]) }, // Market Sell
-            { data: scatterNewBids.map(e => [e.time, e.price, e]) }, // New Bid
-            { data: scatterNewAsks.map(e => [e.time, e.price, e]) }, // New Ask
-            { data: scatterBidIncreases.map(e => [e.time, e.price, e]) }, // Bid Increase
-            { data: scatterAskIncreases.map(e => [e.time, e.price, e]) } // Ask Increase
+            { data: filters.price ? chartData : [] }, // Price line
+            { data: filters.marketBuy ? scatterMarketBuys.map(e => [e.time, e.price, e]) : [] }, // Market Buy
+            { data: filters.marketSell ? scatterMarketSells.map(e => [e.time, e.price, e]) : [] }, // Market Sell
+            { data: filters.newBid ? scatterNewBids.map(e => [e.time, e.price, e]) : [] }, // New Bid
+            { data: filters.newAsk ? scatterNewAsks.map(e => [e.time, e.price, e]) : [] }, // New Ask
+            { data: filters.bidIncrease ? scatterBidIncreases.map(e => [e.time, e.price, e]) : [] }, // Bid Increase
+            { data: filters.askIncrease ? scatterAskIncreases.map(e => [e.time, e.price, e]) : [] } // Ask Increase
         ]
     };
 
@@ -913,6 +925,42 @@ function setupEventListeners() {
     // Fullscreen toggle
     document.getElementById('fullscreen-btn').addEventListener('click', () => {
         toggleFullscreen();
+    });
+
+    // Filter checkboxes
+    document.getElementById('filter-price').addEventListener('change', (e) => {
+        filters.price = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-market-buy').addEventListener('change', (e) => {
+        filters.marketBuy = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-market-sell').addEventListener('change', (e) => {
+        filters.marketSell = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-new-bid').addEventListener('change', (e) => {
+        filters.newBid = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-new-ask').addEventListener('change', (e) => {
+        filters.newAsk = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-bid-increase').addEventListener('change', (e) => {
+        filters.bidIncrease = e.target.checked;
+        updateChart();
+    });
+
+    document.getElementById('filter-ask-increase').addEventListener('change', (e) => {
+        filters.askIncrease = e.target.checked;
+        updateChart();
     });
 
     // Keyboard shortcuts
