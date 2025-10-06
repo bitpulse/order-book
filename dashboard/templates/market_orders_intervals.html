@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Orders Intervals Dashboard - Whale Buy/Sell Analysis</title>
+
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🐋 Market Orders Intervals Dashboard</h1>
+            <div class="header-controls">
+                <button id="new-analysis-btn" class="btn btn-primary">+ New Analysis</button>
+                <select id="file-selector" class="file-selector">
+                    <option value="">Loading files...</option>
+                </select>
+                <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+                <a href="/" class="btn btn-link">📈 Price Changes</a>
+                <a href="/top-market-orders" class="btn btn-link">🎯 Top Market Orders</a>
+                <a href="/market-orders-intervals" class="btn btn-link">⏱️ Market Orders Intervals</a>
+                <a href="/whale-activity" class="btn btn-link">🐋 Whale Activity</a>
+                <a href="/whale-monitor" class="btn btn-link">👁️ Whale Monitor</a>
+                <a href="/live" class="btn btn-link">📊 Live Dashboard</a>
+            </div>
+        </header>
+
+        <!-- New Analysis Modal -->
+        <div id="new-analysis-modal" class="modal" style="display: none;">
+            <div class="modal-content analysis-modal-content">
+                <div class="modal-header">
+                    <h3>Run New Market Orders Intervals Analysis</h3>
+                    <button class="modal-close" onclick="document.getElementById('new-analysis-modal').style.display='none'">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="analysis-form" class="analysis-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="symbol-input">Symbol</label>
+                                <input type="text" id="symbol-input" placeholder="e.g., BANANA_USDT" value="BANANA_USDT" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="lookback-input">Lookback</label>
+                                <input type="text" id="lookback-input" placeholder="e.g., 3h" value="3h" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="interval-input">Interval (seconds)</label>
+                                <input type="number" id="interval-input" placeholder="60" value="60" min="1" max="3600" required>
+                                <small style="color: #808080; font-size: 0.85rem;">Time window to group market orders</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="top-input">Top N Intervals</label>
+                                <input type="number" id="top-input" placeholder="10" value="10" min="1" max="50" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="min-usd-input">Min USD Value</label>
+                                <input type="number" id="min-usd-input" placeholder="50000" value="50000" step="1000" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="sort-by-input">Sort By</label>
+                                <select id="sort-by-input">
+                                    <option value="volume">Total Volume (USD)</option>
+                                    <option value="imbalance">Order Flow Imbalance</option>
+                                    <option value="count">Event Count</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary btn-large">Run Analysis</button>
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-analysis-modal').style.display='none'">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="analysis-status" class="analysis-status" style="display: none;">
+                        <div class="status-spinner"></div>
+                        <div id="status-message">Running market orders interval analysis...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Chart and Stats -->
+            <div class="chart-panel">
+                <!-- Analysis Info -->
+                <div id="analysis-info" class="analysis-info" style="display: none;">
+                    <div class="info-item">
+                        <span class="info-icon">📊</span>
+                        <span id="info-symbol" class="info-text">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">⏱️</span>
+                        <span id="info-interval" class="info-text">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">🔍</span>
+                        <span id="info-lookback" class="info-text">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">💰</span>
+                        <span id="info-threshold" class="info-text">-</span>
+                    </div>
+                </div>
+
+                <!-- Stats Summary -->
+                <div id="stats-summary" class="stats-summary">
+                    <div class="stat-item">
+                        <span class="stat-label">Rank:</span>
+                        <span id="stat-rank" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Volume:</span>
+                        <span id="stat-volume" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Flow:</span>
+                        <span id="stat-flow" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Time:</span>
+                        <span id="stat-time" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Events:</span>
+                        <span id="stat-events" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item stat-export">
+                        <button id="export-interval-btn" class="btn btn-export" title="Export current interval data as JSON">
+                            <span class="export-icon">📥</span>
+                            Export JSON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Order Flow Imbalance Bar -->
+                <div id="imbalance-bar-container" class="imbalance-bar-container" style="display: none;">
+                    <div class="imbalance-header">
+                        <span class="imbalance-label">Order Flow:</span>
+                        <span id="imbalance-value" class="imbalance-value">0%</span>
+                    </div>
+                    <div class="imbalance-bar-wrapper">
+                        <div class="imbalance-bar">
+                            <div id="imbalance-fill" class="imbalance-fill" style="width: 50%; background: #808080;"></div>
+                        </div>
+                        <div class="imbalance-labels">
+                            <span class="imbalance-side sell-side">← SELL</span>
+                            <span class="imbalance-side neutral">NEUTRAL</span>
+                            <span class="imbalance-side buy-side">BUY →</span>
+                        </div>
+                    </div>
+                    <div class="volume-breakdown">
+                        <div class="volume-item buy-volume">
+                            <span class="volume-label">Buy:</span>
+                            <span id="buy-volume-value" class="volume-value">$0</span>
+                        </div>
+                        <div class="volume-item sell-volume">
+                            <span class="volume-label">Sell:</span>
+                            <span id="sell-volume-value" class="volume-value">$0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interval Selector -->
+                <div id="interval-selector-container" class="interval-selector-container" style="display: none;">
+                    <label for="interval-selector">Select Interval:</label>
+                    <select id="interval-selector" class="interval-selector">
+                        <option value="">Select an interval...</option>
+                    </select>
+                </div>
+
+                <!-- Chart Container -->
+                <div class="chart-wrapper">
+                    <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+                    <div id="chart-container" class="chart-container">
+                        <div id="loading" class="loading" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Loading chart data...</p>
+                        </div>
+                        <div id="zero-state" class="zero-state">
+                            <div class="zero-state-icon">⏱️</div>
+                            <h3>No Data Selected</h3>
+                            <p>Select a file from the dropdown above to view market orders interval analysis</p>
+                            <p style="margin-top: 1rem; color: #808080; font-size: 0.9rem;">or</p>
+                            <button id="zero-state-new-analysis" class="btn btn-primary" style="margin-top: 1rem;">+ New Analysis</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Legend -->
+                <div class="chart-legend">
+                    <div class="legend-section">
+                        <div class="legend-title">Price & Temporal Periods</div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #00c2ff;"></span>
+                            <span>Price Line</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: rgba(0, 194, 255, 0.3);"></span>
+                            <span>BEFORE Period (30% opacity)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: rgba(255, 59, 105, 0.3);"></span>
+                            <span>AFTER Period (30% opacity)</span>
+                        </div>
+                    </div>
+                    <div class="legend-section">
+                        <div class="legend-title">Market Orders (Definitive)</div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #00c2ff;"></span>
+                            <span>Market Buy</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #ff00ff;"></span>
+                            <span>Market Sell</span>
+                        </div>
+                    </div>
+                    <div class="legend-section">
+                        <div class="legend-title">Limit Orders</div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-triangle" style="border-bottom-color: #00ff88;"></span>
+                            <span>New Bid Orders</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-triangle-down" style="border-top-color: #ff4444;"></span>
+                            <span>New Ask Orders</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-diamond" style="background: #88cc88;"></span>
+                            <span>Volume Increase (Muted)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-diamond" style="background: #cc8888;"></span>
+                            <span>Volume Decrease (Muted)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Documentation -->
+                <details class="data-flow-info">
+                    <summary class="data-flow-summary">
+                        <span class="data-flow-icon">⏱️</span>
+                        Market Orders Intervals Analysis Methodology
+                        <span class="data-flow-toggle">▼</span>
+                    </summary>
+                    <div class="data-flow-content">
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">🔍 Detection Algorithm</div>
+                            <div class="data-flow-detail">
+                                <strong>Time Windows:</strong> Fixed interval duration (e.g., 60s) to group market orders
+                            </div>
+                            <div class="data-flow-detail">
+                                <strong>Aggregation:</strong> Sum all market buy/sell orders within each interval
+                            </div>
+                            <div class="data-flow-detail">
+                                <strong>Filtering:</strong> Keep only intervals with total USD volume ≥ threshold
+                            </div>
+                            <div class="data-flow-detail">
+                                <strong>Sorting:</strong> Rank by total volume, imbalance, or event count
+                            </div>
+                            <div class="data-flow-detail">
+                                <strong>Context:</strong> Show BEFORE/AFTER periods for impact analysis
+                            </div>
+                        </div>
+
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">📊 Key Metrics</div>
+                            <div class="metric-item">
+                                <span class="metric-name">Total USD Volume:</span>
+                                <span class="metric-source">Sum of all market order USD values in the interval</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-name">Order Flow Imbalance:</span>
+                                <span class="metric-source">(Buy Volume - Sell Volume) / Total Volume × 100%</span>
+                                <div class="metric-note">
+                                    Ranges from -100% (all sells) to +100% (all buys)<br>
+                                    > +10% = Bullish pressure<br>
+                                    < -10% = Bearish pressure
+                                </div>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-name">Event Count:</span>
+                                <span class="metric-source">Number of individual market orders in the interval</span>
+                            </div>
+                        </div>
+
+                        <div class="data-flow-section">
+                            <div class="data-flow-title">🎯 Context Windows</div>
+                            <div class="data-flow-detail">
+                                <strong>BEFORE:</strong> 3× interval duration before the spike (blue, 30% opacity)
+                            </div>
+                            <div class="data-flow-detail">
+                                <strong>DURING:</strong> The identified high-activity interval (full opacity, labeled)
+                            </div>
+                            <div class="data-flow-detail">
+                                <strong>AFTER:</strong> 3× interval duration after the spike (red, 30% opacity)
+                            </div>
+                            <div class="metric-note">
+                                Context windows help identify causality patterns and follow-through effects
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Right Panel: Whale Events -->
+            <div class="events-panel">
+                <div class="events-header">
+                    <h2>Market Orders</h2>
+                    <div class="events-filters">
+                        <input type="text" id="event-search" placeholder="Search events..." class="search-input">
+                        <select id="event-type-filter" class="filter-select">
+                            <option value="">All Types</option>
+                            <option value="market_buy">Market Buy</option>
+                            <option value="market_sell">Market Sell</option>
+                        </select>
+                        <div class="usd-filter-container">
+                            <label for="min-usd-filter">Min USD:</label>
+                            <input type="number" id="min-usd-filter" placeholder="0" min="0" step="1000" class="usd-filter-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Event Statistics -->
+                <div id="event-stats" class="event-stats">
+                    <div class="event-stat">
+                        <span class="event-stat-label">Total Events:</span>
+                        <span id="event-stat-total" class="event-stat-value">0</span>
+                    </div>
+                    <div class="event-stat">
+                        <span class="event-stat-label">Total Volume:</span>
+                        <span id="event-stat-volume" class="event-stat-value">$0</span>
+                    </div>
+                    <div class="event-stat">
+                        <span class="event-stat-label">Market Orders:</span>
+                        <span id="event-stat-market" class="event-stat-value">0</span>
+                    </div>
+                    <div class="event-stat">
+                        <span class="event-stat-label">Biggest Whale:</span>
+                        <span id="event-stat-biggest" class="event-stat-value">$0</span>
+                    </div>
+                </div>
+
+                <!-- Analytical Insights -->
+                <div id="insights-panel" class="insights-panel" style="display: none;">
+                    <div class="insights-header">📊 Analysis</div>
+                    <div id="insights-content" class="insights-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Market Orders Intervals Dashboard | Data from MEXC Futures Order Book</p>
+        </footer>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="error-toast" class="error-toast" style="display: none;">
+        <span id="error-message"></span>
+        <button onclick="this.parentElement.style.display='none'">&times;</button>
+    </div>
+
+    <!-- Event Details Modal -->
+    <div id="event-details-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Market Order Details</h3>
+                <button class="modal-close" onclick="document.getElementById('event-details-modal').style.display='none'">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/market_orders_intervals.js') }}"></script>
+</body>
+</html>

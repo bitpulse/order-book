@@ -31,10 +31,29 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/top-market-orders')
+def top_market_orders():
+    """Serve the top market orders analysis page"""
+    return render_template('top_market_orders.html')
+
+
+@app.route('/market-orders-intervals')
+def market_orders_intervals():
+    """Serve the market orders intervals analysis page"""
+    return render_template('market_orders_intervals.html')
+
+
+@app.route('/whale-activity')
+def whale_activity():
+    """Serve the whale activity analysis page (all event types)"""
+    return render_template('whale_activity.html')
+
+
 @app.route('/whale-actions')
 def whale_actions():
-    """Serve the whale actions analysis page"""
-    return render_template('whale_actions.html')
+    """Redirect old whale-actions to top-market-orders"""
+    from flask import redirect
+    return redirect('/top-market-orders')
 
 
 @app.route('/whale-monitor')
@@ -416,14 +435,61 @@ def get_stats():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/whale-files')
-def list_whale_files():
-    """List all available whale activity JSON files"""
+@app.route('/api/top-market-orders-files')
+def list_top_market_orders_files():
+    """List ONLY top_market_orders_* JSON files"""
     try:
         if not DATA_DIR.exists():
             return jsonify({'files': [], 'error': 'Data directory not found'})
 
-        # Find all whale_activity_*.json files
+        files = []
+        for file_path in DATA_DIR.glob('top_market_orders_*.json'):
+            file_stat = file_path.stat()
+            files.append({
+                'filename': file_path.name,
+                'size': file_stat.st_size,
+                'modified': file_stat.st_mtime
+            })
+
+        files.sort(key=lambda x: x['modified'], reverse=True)
+
+        return jsonify({'files': files})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/market-orders-intervals-files')
+def list_market_orders_intervals_files():
+    """List ONLY market_orders_* JSON files (intervals, not individual orders)"""
+    try:
+        if not DATA_DIR.exists():
+            return jsonify({'files': [], 'error': 'Data directory not found'})
+
+        files = []
+        for file_path in DATA_DIR.glob('market_orders_*.json'):
+            file_stat = file_path.stat()
+            files.append({
+                'filename': file_path.name,
+                'size': file_stat.st_size,
+                'modified': file_stat.st_mtime
+            })
+
+        files.sort(key=lambda x: x['modified'], reverse=True)
+
+        return jsonify({'files': files})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whale-activity-files')
+def list_whale_activity_files():
+    """List ONLY whale_activity_* JSON files (all event types)"""
+    try:
+        if not DATA_DIR.exists():
+            return jsonify({'files': [], 'error': 'Data directory not found'})
+
         files = []
         for file_path in DATA_DIR.glob('whale_activity_*.json'):
             file_stat = file_path.stat()
@@ -432,6 +498,33 @@ def list_whale_files():
                 'size': file_stat.st_size,
                 'modified': file_stat.st_mtime
             })
+
+        files.sort(key=lambda x: x['modified'], reverse=True)
+
+        return jsonify({'files': files})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whale-files')
+def list_whale_files():
+    """List all available whale activity AND market orders JSON files (LEGACY - kept for backward compatibility)"""
+    try:
+        if not DATA_DIR.exists():
+            return jsonify({'files': [], 'error': 'Data directory not found'})
+
+        # Find all whale_activity_*, market_orders_*, and top_market_orders_* files
+        files = []
+        patterns = ['whale_activity_*.json', 'market_orders_*.json', 'top_market_orders_*.json']
+        for pattern in patterns:
+            for file_path in DATA_DIR.glob(pattern):
+                file_stat = file_path.stat()
+                files.append({
+                    'filename': file_path.name,
+                    'size': file_stat.st_size,
+                    'modified': file_stat.st_mtime
+                })
 
         # Sort by modification time (newest first)
         files.sort(key=lambda x: x['modified'], reverse=True)
@@ -442,12 +535,85 @@ def list_whale_files():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/top-market-orders-data/<filename>')
+def get_top_market_orders_data(filename):
+    """Serve a specific top_market_orders_* JSON file"""
+    try:
+        # Security: only allow top_market_orders_* files
+        if not (filename.startswith('top_market_orders_') and filename.endswith('.json')):
+            return jsonify({'error': 'Invalid filename'}), 400
+
+        file_path = DATA_DIR / filename
+
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+
+        return jsonify(data)
+
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Invalid JSON file'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/market-orders-intervals-data/<filename>')
+def get_market_orders_intervals_data(filename):
+    """Serve a specific market_orders_* JSON file (intervals)"""
+    try:
+        # Security: only allow market_orders_* files
+        if not (filename.startswith('market_orders_') and filename.endswith('.json')):
+            return jsonify({'error': 'Invalid filename'}), 400
+
+        file_path = DATA_DIR / filename
+
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+
+        return jsonify(data)
+
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Invalid JSON file'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whale-activity-data/<filename>')
+def get_whale_activity_data(filename):
+    """Serve a specific whale_activity_* JSON file (all event types)"""
+    try:
+        # Security: only allow whale_activity_* files
+        if not (filename.startswith('whale_activity_') and filename.endswith('.json')):
+            return jsonify({'error': 'Invalid filename'}), 400
+
+        file_path = DATA_DIR / filename
+
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+
+        return jsonify(data)
+
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Invalid JSON file'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/whale-data/<filename>')
 def get_whale_data(filename):
-    """Serve a specific whale activity JSON file"""
+    """Serve a specific whale activity OR market orders JSON file (LEGACY - kept for backward compatibility)"""
     try:
-        # Security: only allow whale_activity_*.json files
-        if not filename.startswith('whale_activity_') or not filename.endswith('.json'):
+        # Security: only allow whale_activity_*, market_orders_*, or top_market_orders_* files
+        allowed_prefixes = ('whale_activity_', 'market_orders_', 'top_market_orders_')
+        if not (any(filename.startswith(prefix) for prefix in allowed_prefixes) and filename.endswith('.json')):
             return jsonify({'error': 'Invalid filename'}), 400
 
         file_path = DATA_DIR / filename
@@ -537,7 +703,7 @@ def run_analysis():
 
 @app.route('/api/run-whale-analysis', methods=['POST'])
 def run_whale_analysis():
-    """Run whale events analyzer with provided parameters"""
+    """Run whale events analyzer OR market orders analyzer"""
     import subprocess
     import sys
     from datetime import datetime
@@ -551,24 +717,54 @@ def run_whale_analysis():
         top = data.get('top', 10)
         min_usd = data.get('min_usd', 10000)
         sort_by = data.get('sort_by', 'volume')
+        analyzer_type = data.get('analyzer_type', 'top_market_orders')  # 'top_market_orders', 'market_orders', or 'all_events'
+        max_distance = data.get('max_distance')
+        min_distance = data.get('min_distance')
 
-        # Build command
-        script_path = LIVE_DIR / 'whale_events_analyzer.py'
+        # Choose analyzer script
+        if analyzer_type == 'top_market_orders':
+            script_path = LIVE_DIR / 'top_market_orders_analyzer.py'
+            file_prefix = 'top_market_orders'
+        elif analyzer_type == 'market_orders':
+            script_path = LIVE_DIR / 'market_orders_analyzer.py'
+            file_prefix = 'market_orders'
+        else:
+            script_path = LIVE_DIR / 'whale_events_analyzer.py'
+            file_prefix = 'whale_activity'
 
         if not script_path.exists():
             return jsonify({'error': f'Analyzer script not found: {script_path}'}), 404
 
-        cmd = [
-            sys.executable,
-            str(script_path),
-            '--symbol', symbol,
-            '--lookback', lookback,
-            '--interval', interval,
-            '--top', str(top),
-            '--min-usd', str(min_usd),
-            '--sort-by', sort_by,
-            '--output', 'json'
-        ]
+        # Build command based on analyzer type
+        if analyzer_type == 'top_market_orders':
+            # No interval needed for individual orders
+            cmd = [
+                sys.executable,
+                str(script_path),
+                '--symbol', symbol,
+                '--lookback', lookback,
+                '--top', str(top),
+                '--min-usd', str(min_usd),
+                '--sort-by', sort_by,
+                '--output', 'json'
+            ]
+            if max_distance is not None:
+                cmd.extend(['--max-distance', str(max_distance)])
+            if min_distance is not None:
+                cmd.extend(['--min-distance', str(min_distance)])
+        else:
+            # Interval-based analyzers
+            cmd = [
+                sys.executable,
+                str(script_path),
+                '--symbol', symbol,
+                '--lookback', lookback,
+                '--interval', interval,
+                '--top', str(top),
+                '--min-usd', str(min_usd),
+                '--sort-by', sort_by,
+                '--output', 'json'
+            ]
 
         # Run analyzer
         process = subprocess.Popen(
@@ -587,13 +783,13 @@ def run_whale_analysis():
             return jsonify({'error': f'Analysis failed: {error_msg}'}), 500
 
         # Find the newly created file
-        files = sorted(DATA_DIR.glob(f'whale_activity_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+        files = sorted(DATA_DIR.glob(f'{file_prefix}_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
 
         if files:
             newest_file = files[0]
             return jsonify({
                 'success': True,
-                'message': 'Whale analysis completed successfully',
+                'message': f'{analyzer_type.replace("_", " ").title()} analysis completed successfully',
                 'filename': newest_file.name,
                 'output': stdout.decode('utf-8') if stdout else ''
             })
