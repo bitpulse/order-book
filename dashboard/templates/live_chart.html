@@ -4,206 +4,191 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Price Chart - Order Book Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <style>
-        body {
-            background-color: #0d1117;
-            color: #c9d1d9;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-        }
-        .navbar {
-            background-color: #161b22 !important;
-            border-bottom: 1px solid #30363d;
-        }
-        .navbar-brand, .nav-link {
-            color: #c9d1d9 !important;
-        }
-        .card {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            margin-bottom: 1rem;
-        }
-        .stat-card {
-            padding: 1rem;
-            border-radius: 6px;
-            background-color: #0d1117;
-            border: 1px solid #30363d;
-        }
-        .stat-label {
-            color: #8b949e;
-            font-size: 0.875rem;
-            margin-bottom: 0.25rem;
-        }
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-        .positive {
-            color: #3fb950;
-        }
-        .negative {
-            color: #f85149;
-        }
-        .neutral {
-            color: #58a6ff;
-        }
-        #chartContainer {
-            height: 500px;
-            position: relative;
-        }
-        .event-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .event-item {
-            padding: 0.5rem;
-            margin-bottom: 0.5rem;
-            border-radius: 4px;
-            background-color: #0d1117;
-            border-left: 3px solid #30363d;
-            font-size: 0.875rem;
-        }
-        .event-buy {
-            border-left-color: #58a6ff;
-        }
-        .event-sell {
-            border-left-color: #c69;
-        }
-        .event-bid {
-            border-left-color: #3fb950;
-        }
-        .event-ask {
-            border-left-color: #f85149;
-        }
-    </style>
+
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">📊 Order Book Dashboard</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Price Changes</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/whale-actions">Whale Actions</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/whale-monitor">Whale Monitor</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/live">Live Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/live-chart">Live Chart</a>
-                    </li>
-                </ul>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>📈 Live Price Chart</h1>
+            <div class="header-controls">
+                <select id="symbol-select" class="file-selector">
+                    <option value="SPX_USDT">SPX_USDT</option>
+                    <option value="BANANA_USDT">BANANA_USDT</option>
+                    <option value="BTC_USDT">BTC_USDT</option>
+                    <option value="ETH_USDT">ETH_USDT</option>
+                </select>
+                <select id="lookback-select" class="file-selector">
+                    <option value="5m">5 minutes</option>
+                    <option value="15m">15 minutes</option>
+                    <option value="30m">30 minutes</option>
+                    <option value="1h">1 hour</option>
+                    <option value="3h">3 hours</option>
+                </select>
+                <input type="number" id="min-usd-input" placeholder="Min USD" value="5000" step="1000" class="search-input" style="width: 120px;">
+                <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+                <a href="/" class="btn btn-link">📊 Price Changes</a>
+                <a href="/live" class="btn btn-link">📊 Live Dashboard</a>
             </div>
-        </div>
-    </nav>
+        </header>
 
-    <div class="container-fluid mt-4">
-        <!-- Controls -->
-        <div class="row mb-3">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <label for="symbolSelect" class="form-label">Symbol</label>
-                                <select id="symbolSelect" class="form-select">
-                                    <option value="SPX_USDT">SPX_USDT</option>
-                                    <option value="BANANA_USDT">BANANA_USDT</option>
-                                    <option value="BTC_USDT">BTC_USDT</option>
-                                    <option value="ETH_USDT">ETH_USDT</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="lookbackSelect" class="form-label">Time Range</label>
-                                <select id="lookbackSelect" class="form-select">
-                                    <option value="5m">5 minutes</option>
-                                    <option value="15m">15 minutes</option>
-                                    <option value="30m">30 minutes</option>
-                                    <option value="1h">1 hour</option>
-                                    <option value="3h">3 hours</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="minUsdInput" class="form-label">Min USD</label>
-                                <input type="number" id="minUsdInput" class="form-control" value="5000" step="1000">
-                            </div>
-                            <div class="col-md-3 d-flex align-items-end">
-                                <button id="refreshBtn" class="btn btn-primary w-100">Refresh Now</button>
-                            </div>
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Chart and Stats -->
+            <div class="chart-panel">
+                <!-- Analysis Info -->
+                <div id="analysis-info" class="analysis-info">
+                    <div class="info-item">
+                        <span class="info-icon">📊</span>
+                        <span id="info-symbol" class="info-text">SPX_USDT</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">⏱️</span>
+                        <span id="info-lookback" class="info-text">Last 5 minutes</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">🔍</span>
+                        <span id="info-min-usd" class="info-text">Min: $5,000</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">🔄</span>
+                        <span id="info-status" class="info-text">Live (2s refresh)</span>
+                    </div>
+                </div>
+
+                <!-- Stats Summary -->
+                <div id="stats-summary" class="stats-summary">
+                    <div class="stat-item">
+                        <span class="stat-label">Current Price:</span>
+                        <span id="stat-current-price" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Change:</span>
+                        <span id="stat-price-change" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Events:</span>
+                        <span id="stat-total-events" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Net Flow:</span>
+                        <span id="stat-net-flow" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Data Points:</span>
+                        <span id="stat-data-points" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Update:</span>
+                        <span id="stat-last-update" class="stat-value">-</span>
+                    </div>
+                </div>
+
+                <!-- Chart Container -->
+                <div class="chart-wrapper">
+                    <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+                    <div id="chart-container" class="chart-container">
+                        <div id="loading" class="loading">
+                            <div class="spinner"></div>
+                            <p>Loading live data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Legend -->
+                <div class="chart-legend">
+                    <div class="legend-section">
+                        <div class="legend-title">Price & Markers</div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #00c2ff;"></span>
+                            <span>Price Line</span>
+                        </div>
+                    </div>
+                    <div class="legend-section">
+                        <div class="legend-title">Market Orders</div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #00c2ff;"></span>
+                            <span>Market Buy</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker" style="background: #c69;"></span>
+                            <span>Market Sell</span>
+                        </div>
+                    </div>
+                    <div class="legend-section">
+                        <div class="legend-title">Limit Orders</div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-triangle" style="border-bottom-color: #00ff88;"></span>
+                            <span>Bid Events</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-marker legend-triangle-down" style="border-top-color: #ff4444;"></span>
+                            <span>Ask Events</span>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Stats -->
-        <div class="row mb-3">
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <div class="stat-label">Current Price</div>
-                    <div class="stat-value" id="currentPrice">-</div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <div class="stat-label">Price Change</div>
-                    <div class="stat-value" id="priceChange">-</div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <div class="stat-label">Total Events</div>
-                    <div class="stat-value neutral" id="totalEvents">-</div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <div class="stat-label">Net Market Flow</div>
-                    <div class="stat-value" id="netFlow">-</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Chart -->
-        <div class="row mb-3">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Price Chart with Whale Events</h5>
-                        <div id="chartContainer">
-                            <canvas id="priceChart"></canvas>
-                        </div>
+            <!-- Right Panel: Whale Events -->
+            <div class="events-panel">
+                <div class="events-header">
+                    <h2>Recent Whale Events</h2>
+                    <div class="events-filters">
+                        <select id="event-type-filter" class="filter-select">
+                            <option value="">All Types</option>
+                            <option value="market_buy">Market Buy</option>
+                            <option value="market_sell">Market Sell</option>
+                            <option value="bid">Bid Events</option>
+                            <option value="ask">Ask Events</option>
+                        </select>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Recent Events -->
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Recent Large Events</h5>
-                        <div id="eventList" class="event-list"></div>
+                <!-- Event Statistics -->
+                <div id="event-stats" class="event-stats">
+                    <div class="event-stat">
+                        <span class="event-stat-label">Market Buys:</span>
+                        <span id="event-stat-buys" class="event-stat-value">0</span>
                     </div>
+                    <div class="event-stat">
+                        <span class="event-stat-label">Market Sells:</span>
+                        <span id="event-stat-sells" class="event-stat-value">0</span>
+                    </div>
+                    <div class="event-stat">
+                        <span class="event-stat-label">Bid Events:</span>
+                        <span id="event-stat-bids" class="event-stat-value">0</span>
+                    </div>
+                    <div class="event-stat">
+                        <span class="event-stat-label">Ask Events:</span>
+                        <span id="event-stat-asks" class="event-stat-value">0</span>
+                    </div>
+                </div>
+
+                <!-- Event List -->
+                <div id="event-list" class="whale-events-list" style="max-height: calc(100vh - 400px); overflow-y: auto;">
+                    <!-- Events will be inserted here -->
                 </div>
             </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Live Price Chart Dashboard | Powered by <a href="https://echarts.apache.org" target="_blank">Apache ECharts</a></p>
+        </footer>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Error Toast -->
+    <div id="error-toast" class="error-toast" style="display: none;">
+        <span id="error-message"></span>
+        <button onclick="this.parentElement.style.display='none'">&times;</button>
+    </div>
+
+    <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/live_chart.js') }}"></script>
 </body>
 </html>
