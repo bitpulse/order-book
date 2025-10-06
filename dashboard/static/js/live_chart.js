@@ -8,6 +8,10 @@ let lastUpdateTime = null;
 let priceData = [];
 let whaleEvents = [];
 
+// User interaction tracking
+let userHasZoomed = false; // Track if user manually zoomed/panned
+let initialDataZoom = null; // Store initial zoom state
+
 // Configuration
 const config = {
     symbol: 'SPX_USDT',
@@ -71,6 +75,38 @@ async function initChart() {
         chartContainer.style.cursor = 'default';
     });
 
+    // Detect user zoom/pan interactions
+    chart.on('datazoom', function(params) {
+        // Mark that user has manually interacted with zoom/pan
+        userHasZoomed = true;
+        console.log('User zoomed/panned - disabling auto-follow');
+    });
+
+    // Also detect mousewheel zoom
+    chartContainer.addEventListener('wheel', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            // User is zooming with Ctrl+wheel
+            userHasZoomed = true;
+        }
+    });
+
+    // Detect drag/pan
+    let isDragging = false;
+    chartContainer.addEventListener('mousedown', function() {
+        isDragging = true;
+    });
+    chartContainer.addEventListener('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+        }
+    });
+    chartContainer.addEventListener('mousemove', function(e) {
+        if (isDragging && e.buttons === 1) {
+            // User is panning
+            userHasZoomed = true;
+        }
+    });
+
     // Handle window resize
     window.addEventListener('resize', () => {
         chart.resize();
@@ -118,7 +154,11 @@ function getChartOption() {
             {
                 type: 'inside',
                 start: 0,
-                end: 100
+                end: 100,
+                zoomLock: false,
+                moveOnMouseMove: true,
+                moveOnMouseWheel: true,
+                preventDefaultMouseMove: true
             },
             {
                 type: 'slider',
@@ -141,7 +181,8 @@ function getChartOption() {
                     shadowBlur: 8,
                     shadowColor: 'rgba(0, 194, 255, 0.5)'
                 },
-                textStyle: { color: '#b0b0b0' }
+                textStyle: { color: '#b0b0b0' },
+                zoomLock: false
             }
         ],
         xAxis: {
@@ -606,8 +647,11 @@ function updateChart() {
     const scatterBidIncreases = prepareWhaleScatterData(bidIncreasesAll);
     const scatterAskIncreases = prepareWhaleScatterData(askIncreasesAll);
 
-    // Update chart using the same data structure as chart.js: [time, price, metadata]
-    chart.setOption({
+    // Get current option state
+    const currentOption = chart.getOption();
+
+    // Prepare update options with all necessary config
+    const updateOptions = {
         series: [
             { data: chartData }, // Price line
             { data: scatterMarketBuys.map(e => [e.time, e.price, e]) }, // Market Buy
@@ -617,6 +661,56 @@ function updateChart() {
             { data: scatterBidIncreases.map(e => [e.time, e.price, e]) }, // Bid Increase
             { data: scatterAskIncreases.map(e => [e.time, e.price, e]) } // Ask Increase
         ]
+    };
+
+    // If user has manually zoomed/panned, preserve their exact zoom state
+    if (userHasZoomed) {
+        const currentDataZoom = currentOption.dataZoom || [];
+        // Lock the dataZoom to current view - use startValue/endValue (absolute time) instead of start/end (percentage)
+        updateOptions.dataZoom = currentDataZoom.map(dz => {
+            const dzCopy = {
+                type: dz.type,
+                xAxisIndex: dz.xAxisIndex,
+                filterMode: 'none' // Important: Don't filter data, just zoom view
+            };
+
+            // Use absolute time values to lock the view
+            if (dz.startValue !== undefined) {
+                dzCopy.startValue = dz.startValue;
+            }
+            if (dz.endValue !== undefined) {
+                dzCopy.endValue = dz.endValue;
+            }
+
+            // Copy other properties for slider
+            if (dz.type === 'slider') {
+                dzCopy.backgroundColor = dz.backgroundColor;
+                dzCopy.dataBackground = dz.dataBackground;
+                dzCopy.selectedDataBackground = dz.selectedDataBackground;
+                dzCopy.fillerColor = dz.fillerColor;
+                dzCopy.borderColor = dz.borderColor;
+                dzCopy.handleStyle = dz.handleStyle;
+                dzCopy.textStyle = dz.textStyle;
+                dzCopy.zoomLock = false;
+            } else {
+                // Inside zoom properties
+                dzCopy.zoomLock = false;
+                dzCopy.moveOnMouseMove = true;
+                dzCopy.moveOnMouseWheel = true;
+                dzCopy.preventDefaultMouseMove = true;
+            }
+
+            return dzCopy;
+        });
+
+        console.log('Preserving zoom with values:', updateOptions.dataZoom);
+    }
+
+    // Update chart with merge mode (notMerge: false preserves other options)
+    chart.setOption(updateOptions, {
+        notMerge: false,
+        lazyUpdate: false,
+        silent: true // Silent to prevent triggering datazoom event
     });
 }
 
@@ -775,6 +869,7 @@ function setupEventListeners() {
     document.getElementById('symbol-select').addEventListener('change', (e) => {
         config.symbol = e.target.value;
         lastUpdateTime = null;
+        userHasZoomed = false; // Reset zoom tracking
         refreshData(false);
     });
 
@@ -782,6 +877,7 @@ function setupEventListeners() {
     document.getElementById('lookback-select').addEventListener('change', (e) => {
         config.lookback = e.target.value;
         lastUpdateTime = null;
+        userHasZoomed = false; // Reset zoom tracking
         refreshData(false);
     });
 
@@ -789,12 +885,14 @@ function setupEventListeners() {
     document.getElementById('min-usd-input').addEventListener('change', (e) => {
         config.minUsd = parseFloat(e.target.value) || 5000;
         lastUpdateTime = null;
+        userHasZoomed = false; // Reset zoom tracking
         refreshData(false);
     });
 
-    // Refresh button
+    // Refresh button - resets zoom and follows live data
     document.getElementById('refresh-btn').addEventListener('click', () => {
         lastUpdateTime = null;
+        userHasZoomed = false; // Reset zoom tracking to re-enable auto-follow
         refreshData(false);
     });
 
