@@ -18,19 +18,26 @@ const config = {
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', async () => {
-    await initChart();
-    setupEventListeners();
+    try {
+        showLoading(true);
 
-    // Load initial data
-    await refreshData(false);
+        await initChart();
+        setupEventListeners();
 
-    // Set up auto-refresh
-    updateInterval = setInterval(() => {
-        refreshData(true);
-    }, config.refreshInterval);
+        // Load initial data and wait for it to complete
+        await refreshData(false);
 
-    // Hide loading
-    showLoading(false);
+        // Set up auto-refresh
+        updateInterval = setInterval(() => {
+            refreshData(true);
+        }, config.refreshInterval);
+    } catch (error) {
+        console.error('Error initializing dashboard:', error);
+        showError('Failed to initialize dashboard: ' + error.message);
+    } finally {
+        // Hide loading only after data is loaded
+        showLoading(false);
+    }
 });
 
 // Initialize ECharts
@@ -793,17 +800,62 @@ function setupEventListeners() {
 
     // Fullscreen toggle
     document.getElementById('fullscreen-btn').addEventListener('click', () => {
-        const wrapper = document.querySelector('.chart-wrapper');
-        if (!document.fullscreenElement) {
-            wrapper.requestFullscreen().then(() => {
-                chart.resize();
-            });
-        } else {
-            document.exitFullscreen().then(() => {
-                chart.resize();
-            });
+        toggleFullscreen();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // ESC key: close modal first, then exit fullscreen
+        if (e.key === 'Escape') {
+            // First check if any modal is open
+            const modal = document.getElementById('event-modal');
+            const isModalOpen = modal && modal.style.display === 'flex';
+
+            if (isModalOpen) {
+                // Close the modal
+                modal.style.display = 'none';
+            } else {
+                // If no modal, exit fullscreen if active
+                const wrapper = document.querySelector('.chart-wrapper');
+                if (wrapper.classList.contains('fullscreen')) {
+                    toggleFullscreen();
+                }
+            }
+        }
+        // F for fullscreen toggle
+        if (e.key === 'f' || e.key === 'F') {
+            // Only if not typing in an input field
+            if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+                toggleFullscreen();
+            }
         }
     });
+}
+
+// Toggle fullscreen mode for chart
+function toggleFullscreen() {
+    const wrapper = document.querySelector('.chart-wrapper');
+    const btn = document.getElementById('fullscreen-btn');
+
+    if (wrapper.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        wrapper.classList.remove('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Toggle Fullscreen';
+    } else {
+        // Enter fullscreen
+        wrapper.classList.add('fullscreen');
+        btn.textContent = '⛶';
+        btn.title = 'Exit Fullscreen';
+    }
+
+    // Resize chart to fit new container size
+    if (chart) {
+        // Use longer timeout to ensure CSS transition completes
+        setTimeout(() => {
+            chart.resize();
+        }, 350);
+    }
 }
 
 // Show/hide loading
