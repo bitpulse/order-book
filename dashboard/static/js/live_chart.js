@@ -46,8 +46,9 @@ async function initChart() {
     chart.on('click', function(params) {
         // Only handle clicks on scatter series (whale events)
         if (params.componentType === 'series' && params.seriesType === 'scatter') {
-            if (params.data && params.data.eventData) {
-                showEventModal(params.data.eventData, params.seriesName);
+            const eventData = params.data[2]; // Third element contains metadata
+            if (eventData && eventData.originalEvent) {
+                showEventModal(eventData.originalEvent, params.seriesName);
             }
         }
     });
@@ -169,6 +170,7 @@ function getChartOption() {
             }
         },
         series: [
+            // Price line
             {
                 name: 'Price',
                 type: 'line',
@@ -185,93 +187,106 @@ function getChartOption() {
                             { offset: 1, color: 'rgba(0, 194, 255, 0)' }
                         ]
                     }
-                }
+                },
+                z: 1
             },
+            // DEFINITIVE EVENTS (Bright colors) - High certainty of whale action
+            // Market Buy - Aggressive buy order executed immediately
             {
                 name: 'Market Buy',
                 type: 'scatter',
                 data: [],
                 symbol: 'circle',
                 symbolSize: function(data) {
-                    // Use the symbolSize from data if available
-                    return data.symbolSize || 12;
+                    return data[2]?.size || 12;
                 },
                 itemStyle: {
-                    color: '#00c2ff',
-                    shadowBlur: 10,
-                    shadowColor: 'rgba(0, 194, 255, 0.5)'
-                },
-                emphasis: {
-                    scale: 1.3,
-                    itemStyle: {
-                        shadowBlur: 20,
-                        shadowColor: 'rgba(0, 194, 255, 0.8)'
+                    color: function(params) {
+                        return params.data[2]?.color || '#00c2ff';
                     }
-                }
+                },
+                z: 10
             },
+            // Market Sell - Aggressive sell order executed immediately
             {
                 name: 'Market Sell',
                 type: 'scatter',
                 data: [],
                 symbol: 'circle',
                 symbolSize: function(data) {
-                    return data.symbolSize || 12;
+                    return data[2]?.size || 12;
                 },
                 itemStyle: {
-                    color: '#cc6699',
-                    shadowBlur: 10,
-                    shadowColor: 'rgba(204, 102, 153, 0.5)'
-                },
-                emphasis: {
-                    scale: 1.3,
-                    itemStyle: {
-                        shadowBlur: 20,
-                        shadowColor: 'rgba(204, 102, 153, 0.8)'
+                    color: function(params) {
+                        return params.data[2]?.color || '#ff00ff';
                     }
-                }
+                },
+                z: 10
             },
+            // New Bid - Fresh buy order placed (never seen this price before)
             {
-                name: 'Bid Event',
+                name: 'New Bid',
                 type: 'scatter',
                 data: [],
                 symbol: 'triangle',
                 symbolSize: function(data) {
-                    return data.symbolSize || 10;
+                    return data[2]?.size || 10;
                 },
                 itemStyle: {
-                    color: '#00ff88',
-                    shadowBlur: 8,
-                    shadowColor: 'rgba(0, 255, 136, 0.4)'
-                },
-                emphasis: {
-                    scale: 1.3,
-                    itemStyle: {
-                        shadowBlur: 16,
-                        shadowColor: 'rgba(0, 255, 136, 0.7)'
+                    color: function(params) {
+                        return params.data[2]?.color || '#00ff88';
                     }
-                }
+                },
+                z: 9
             },
+            // New Ask - Fresh sell order placed (never seen this price before)
             {
-                name: 'Ask Event',
+                name: 'New Ask',
                 type: 'scatter',
                 data: [],
                 symbol: 'triangle',
-                symbolRotate: 180,
                 symbolSize: function(data) {
-                    return data.symbolSize || 10;
+                    return data[2]?.size || 10;
                 },
                 itemStyle: {
-                    color: '#ff4444',
-                    shadowBlur: 8,
-                    shadowColor: 'rgba(255, 68, 68, 0.4)'
-                },
-                emphasis: {
-                    scale: 1.3,
-                    itemStyle: {
-                        shadowBlur: 16,
-                        shadowColor: 'rgba(255, 68, 68, 0.7)'
+                    color: function(params) {
+                        return params.data[2]?.color || '#ff4444';
                     }
-                }
+                },
+                z: 9
+            },
+            // AMBIGUOUS EVENTS (Muted colors) - Could be modifications, cancellations, or fills
+            // Bid Increase / Ask Decrease - Potential support building
+            {
+                name: 'Bid Increase',
+                type: 'scatter',
+                data: [],
+                symbol: 'diamond',
+                symbolSize: function(data) {
+                    return data[2]?.size || 8;
+                },
+                itemStyle: {
+                    color: function(params) {
+                        return params.data[2]?.color || '#88cc88';
+                    }
+                },
+                z: 6
+            },
+            // Ask Increase / Bid Decrease - Potential resistance building
+            {
+                name: 'Ask Increase',
+                type: 'scatter',
+                data: [],
+                symbol: 'diamond',
+                symbolSize: function(data) {
+                    return data[2]?.size || 8;
+                },
+                itemStyle: {
+                    color: function(params) {
+                        return params.data[2]?.color || '#cc8888';
+                    }
+                },
+                z: 6
             }
         ]
     };
@@ -288,9 +303,9 @@ function formatTooltip(params) {
         const value = param.value[1];
         const color = param.color;
 
-        // Check if this is an event with metadata
-        if (param.data && param.data.eventData) {
-            const event = param.data.eventData;
+        // Check if this is an event with metadata (third element in array)
+        if (param.data && param.data[2] && param.data[2].originalEvent) {
+            const event = param.data[2].originalEvent;
             html += `
                 <div style="border-left: 3px solid ${color}; padding-left: 8px; margin: 8px 0;">
                     <div style="font-weight: bold; color: ${color}; margin-bottom: 4px;">${param.seriesName}</div>
@@ -386,25 +401,90 @@ function parseLookback(lookback) {
     }
 }
 
-// Calculate symbol size based on USD value
-function calculateSymbolSize(usdValue) {
-    // Logarithmic scale for better visual representation
-    // Min size: 8, Max size: 30
-    const minSize = 8;
-    const maxSize = 30;
-    const minUsd = config.minUsd;
-    const maxUsd = 100000; // Cap at 100k for sizing
+// Prepare whale event scatter data (matching chart.js pattern)
+function prepareWhaleScatterData(events) {
+    if (!events || events.length === 0) return [];
 
-    if (usdValue <= minUsd) return minSize;
-    if (usdValue >= maxUsd) return maxSize;
+    // Sort by time
+    const sortedEvents = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
 
-    // Logarithmic scale
-    const logValue = Math.log(usdValue);
-    const logMin = Math.log(minUsd);
-    const logMax = Math.log(maxUsd);
-    const scale = (logValue - logMin) / (logMax - logMin);
+    // Find min and max USD values for scaling
+    const usdValues = sortedEvents.map(e => e.usd_value);
+    const minUsd = Math.min(...usdValues);
+    const maxUsd = Math.max(...usdValues);
 
-    return minSize + scale * (maxSize - minSize);
+    return sortedEvents.map(event => {
+        const isMarketBuy = event.event_type === 'market_buy';
+        const isMarketSell = event.event_type === 'market_sell';
+        const isNewBid = event.event_type === 'new_bid';
+        const isNewAsk = event.event_type === 'new_ask';
+        const isIncrease = event.event_type === 'increase';
+        const isDecrease = event.event_type === 'decrease';
+        const isBid = event.side === 'bid' || event.event_type.includes('bid');
+        const isAsk = event.side === 'ask' || event.event_type.includes('ask');
+
+        let color, symbol;
+
+        // DEFINITIVE EVENTS - Bright colors
+        if (isMarketBuy) {
+            color = '#00c2ff'; // Bright cyan/blue
+            symbol = 'circle';
+        } else if (isMarketSell) {
+            color = '#ff00ff'; // Bright magenta/pink
+            symbol = 'circle';
+        } else if (isNewBid || (isBid && !isIncrease && !isDecrease)) {
+            color = '#00ff88'; // Bright green
+            symbol = 'triangle';
+        } else if (isNewAsk || (isAsk && !isIncrease && !isDecrease)) {
+            color = '#ff4444'; // Bright red
+            symbol = 'triangle';
+        }
+        // AMBIGUOUS EVENTS - Muted colors (volume changes)
+        else if (isIncrease && isBid) {
+            color = '#88cc88'; // Muted green (potential support)
+            symbol = 'diamond';
+        } else if (isIncrease && isAsk) {
+            color = '#cc8888'; // Muted red (potential resistance)
+            symbol = 'diamond';
+        } else if (isDecrease && isBid) {
+            color = '#cc8888'; // Muted red (support weakening)
+            symbol = 'diamond';
+        } else if (isDecrease && isAsk) {
+            color = '#88cc88'; // Muted green (resistance weakening)
+            symbol = 'diamond';
+        } else {
+            // Fallback for other event types
+            color = '#ffaa00'; // Orange (unknown)
+            symbol = 'circle';
+        }
+
+        // Calculate size based on USD value (logarithmic scale)
+        const baseSize = 12;
+        const minSize = 8;
+        const maxSize = 24;
+
+        let size;
+        if (maxUsd === minUsd) {
+            // All values are the same
+            size = baseSize;
+        } else {
+            // Logarithmic scaling for better distribution
+            const normalizedValue = (Math.log(event.usd_value + 1) - Math.log(minUsd + 1)) /
+                                   (Math.log(maxUsd + 1) - Math.log(minUsd + 1));
+            size = minSize + (maxSize - minSize) * normalizedValue;
+        }
+
+        const eventTime = new Date(event.time);
+
+        return {
+            time: eventTime,
+            price: event.price,
+            color: color,
+            symbol: symbol,
+            size: size,
+            originalEvent: event
+        };
+    });
 }
 
 // Update chart with latest data
@@ -414,49 +494,40 @@ function updateChart() {
     // Prepare price data
     const chartData = priceData.map(p => [new Date(p.time), p.price]);
 
-    // Categorize events
-    const marketBuys = whaleEvents.filter(e => e.event_type === 'market_buy' || e.side === 'buy');
-    const marketSells = whaleEvents.filter(e => e.event_type === 'market_sell' || e.side === 'sell');
-    const bidEvents = whaleEvents.filter(e => e.side === 'bid');
-    const askEvents = whaleEvents.filter(e => e.side === 'ask');
+    // Categorize events by type
+    const marketBuys = whaleEvents.filter(e => e.event_type === 'market_buy');
+    const marketSells = whaleEvents.filter(e => e.event_type === 'market_sell');
+    const newBids = whaleEvents.filter(e => e.event_type === 'new_bid' || (e.side === 'bid' && !e.event_type.includes('increase') && !e.event_type.includes('decrease')));
+    const newAsks = whaleEvents.filter(e => e.event_type === 'new_ask' || (e.side === 'ask' && !e.event_type.includes('increase') && !e.event_type.includes('decrease')));
 
-    // Sort by USD value and take top events
-    const topMarketBuys = marketBuys.sort((a, b) => b.usd_value - a.usd_value).slice(0, 10);
-    const topMarketSells = marketSells.sort((a, b) => b.usd_value - a.usd_value).slice(0, 10);
-    const topBids = bidEvents.sort((a, b) => b.usd_value - a.usd_value).slice(0, 20);
-    const topAsks = askEvents.sort((a, b) => b.usd_value - a.usd_value).slice(0, 20);
+    // Volume changes (ambiguous events)
+    const bidIncreases = whaleEvents.filter(e => e.event_type === 'increase' && e.side === 'bid');
+    const askIncreases = whaleEvents.filter(e => e.event_type === 'increase' && e.side === 'ask');
+    const askDecreases = whaleEvents.filter(e => e.event_type === 'decrease' && e.side === 'ask');
+    const bidDecreases = whaleEvents.filter(e => e.event_type === 'decrease' && e.side === 'bid');
 
-    // Map events to chart data with actual price, size, and metadata
-    function mapEventsToChart(events) {
-        return events.map(e => {
-            const eventTime = new Date(e.time);
-            // Use the event's actual price (order book price), not mid price
-            const eventPrice = e.price;
+    // Combine for ambiguous categories
+    const bidIncreasesAll = [...bidIncreases, ...askDecreases]; // Support building
+    const askIncreasesAll = [...askIncreases, ...bidDecreases]; // Resistance building
 
-            return {
-                value: [eventTime, eventPrice],
-                symbolSize: calculateSymbolSize(e.usd_value),
-                // Store event data for click handling and tooltips
-                eventData: {
-                    type: e.event_type,
-                    side: e.side,
-                    price: e.price,
-                    volume: e.volume,
-                    usd_value: e.usd_value,
-                    time: e.time
-                }
-            };
-        });
-    }
+    // Prepare scatter data
+    const scatterMarketBuys = prepareWhaleScatterData(marketBuys);
+    const scatterMarketSells = prepareWhaleScatterData(marketSells);
+    const scatterNewBids = prepareWhaleScatterData(newBids);
+    const scatterNewAsks = prepareWhaleScatterData(newAsks);
+    const scatterBidIncreases = prepareWhaleScatterData(bidIncreasesAll);
+    const scatterAskIncreases = prepareWhaleScatterData(askIncreasesAll);
 
-    // Update chart
+    // Update chart using the same data structure as chart.js: [time, price, metadata]
     chart.setOption({
         series: [
-            { data: chartData },
-            { data: mapEventsToChart(topMarketBuys) },
-            { data: mapEventsToChart(topMarketSells) },
-            { data: mapEventsToChart(topBids) },
-            { data: mapEventsToChart(topAsks) }
+            { data: chartData }, // Price line
+            { data: scatterMarketBuys.map(e => [e.time, e.price, e]) }, // Market Buy
+            { data: scatterMarketSells.map(e => [e.time, e.price, e]) }, // Market Sell
+            { data: scatterNewBids.map(e => [e.time, e.price, e]) }, // New Bid
+            { data: scatterNewAsks.map(e => [e.time, e.price, e]) }, // New Ask
+            { data: scatterBidIncreases.map(e => [e.time, e.price, e]) }, // Bid Increase
+            { data: scatterAskIncreases.map(e => [e.time, e.price, e]) } // Ask Increase
         ]
     });
 }
@@ -479,30 +550,64 @@ function updateEventList() {
 
     eventListEl.innerHTML = topEvents.map(e => {
         const time = new Date(e.time).toLocaleTimeString();
-        let eventClass = 'whale-event-item';
         let eventColor = '';
         let eventLabel = '';
+        let eventSymbol = '';
 
-        if (e.event_type === 'market_buy' || e.side === 'buy') {
+        // Match the chart categorization
+        const isMarketBuy = e.event_type === 'market_buy';
+        const isMarketSell = e.event_type === 'market_sell';
+        const isNewBid = e.event_type === 'new_bid';
+        const isNewAsk = e.event_type === 'new_ask';
+        const isIncrease = e.event_type === 'increase';
+        const isDecrease = e.event_type === 'decrease';
+        const isBid = e.side === 'bid';
+        const isAsk = e.side === 'ask';
+
+        if (isMarketBuy) {
             eventColor = '#00c2ff';
-            eventLabel = 'BUY';
-        } else if (e.event_type === 'market_sell' || e.side === 'sell') {
-            eventColor = '#cc6699';
-            eventLabel = 'SELL';
-        } else if (e.side === 'bid') {
+            eventLabel = 'MARKET BUY';
+            eventSymbol = '●';
+        } else if (isMarketSell) {
+            eventColor = '#ff00ff';
+            eventLabel = 'MARKET SELL';
+            eventSymbol = '●';
+        } else if (isNewBid || (isBid && !isIncrease && !isDecrease)) {
             eventColor = '#00ff88';
-            eventLabel = 'BID+';
-        } else if (e.side === 'ask') {
+            eventLabel = 'NEW BID';
+            eventSymbol = '▲';
+        } else if (isNewAsk || (isAsk && !isIncrease && !isDecrease)) {
             eventColor = '#ff4444';
-            eventLabel = 'ASK+';
+            eventLabel = 'NEW ASK';
+            eventSymbol = '▼';
+        } else if (isIncrease && isBid) {
+            eventColor = '#88cc88';
+            eventLabel = 'BID INCREASE';
+            eventSymbol = '◆';
+        } else if (isIncrease && isAsk) {
+            eventColor = '#cc8888';
+            eventLabel = 'ASK INCREASE';
+            eventSymbol = '◆';
+        } else if (isDecrease && isBid) {
+            eventColor = '#cc8888';
+            eventLabel = 'BID DECREASE';
+            eventSymbol = '◆';
+        } else if (isDecrease && isAsk) {
+            eventColor = '#88cc88';
+            eventLabel = 'ASK DECREASE';
+            eventSymbol = '◆';
+        } else {
+            eventColor = '#ffaa00';
+            eventLabel = e.event_type.toUpperCase().replace('_', ' ');
+            eventSymbol = '●';
         }
 
         return `
-            <div class="${eventClass}" style="border-left: 3px solid ${eventColor};">
+            <div class="whale-event-item" style="border-left: 3px solid ${eventColor};">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <span style="color: #808080; font-size: 0.9rem;">${time}</span>
-                        <strong style="margin-left: 1rem; color: ${eventColor};">${eventLabel}</strong>
+                        <strong style="margin-left: 1rem; color: ${eventColor};">${eventSymbol} ${eventLabel}</strong>
                     </div>
                     <div style="text-align: right;">
                         <div style="font-weight: bold;">$${e.usd_value.toLocaleString()}</div>
@@ -523,11 +628,13 @@ function updateStats() {
     const priceChange = currentPrice - firstPrice;
     const priceChangePct = (priceChange / firstPrice) * 100;
 
-    // Calculate market flow
-    const marketBuys = whaleEvents.filter(e => e.event_type === 'market_buy' || e.side === 'buy');
-    const marketSells = whaleEvents.filter(e => e.event_type === 'market_sell' || e.side === 'sell');
-    const bidEvents = whaleEvents.filter(e => e.side === 'bid');
-    const askEvents = whaleEvents.filter(e => e.side === 'ask');
+    // Calculate market flow using proper categorization
+    const marketBuys = whaleEvents.filter(e => e.event_type === 'market_buy');
+    const marketSells = whaleEvents.filter(e => e.event_type === 'market_sell');
+    const newBids = whaleEvents.filter(e => e.event_type === 'new_bid' || (e.side === 'bid' && !e.event_type.includes('increase') && !e.event_type.includes('decrease')));
+    const newAsks = whaleEvents.filter(e => e.event_type === 'new_ask' || (e.side === 'ask' && !e.event_type.includes('increase') && !e.event_type.includes('decrease')));
+    const bidIncreases = whaleEvents.filter(e => e.event_type === 'increase' && e.side === 'bid');
+    const askIncreases = whaleEvents.filter(e => e.event_type === 'increase' && e.side === 'ask');
 
     const buyVolume = marketBuys.reduce((sum, e) => sum + e.usd_value, 0);
     const sellVolume = marketSells.reduce((sum, e) => sum + e.usd_value, 0);
@@ -550,11 +657,11 @@ function updateStats() {
     document.getElementById('stat-data-points').textContent = priceData.length.toLocaleString();
     document.getElementById('stat-last-update').textContent = new Date().toLocaleTimeString();
 
-    // Event stats
+    // Event stats - matching new categorization
     document.getElementById('event-stat-buys').textContent = marketBuys.length;
     document.getElementById('event-stat-sells').textContent = marketSells.length;
-    document.getElementById('event-stat-bids').textContent = bidEvents.length;
-    document.getElementById('event-stat-asks').textContent = askEvents.length;
+    document.getElementById('event-stat-bids').textContent = newBids.length + bidIncreases.length;
+    document.getElementById('event-stat-asks').textContent = newAsks.length + askIncreases.length;
 
     // Update info panel
     document.getElementById('info-symbol').textContent = config.symbol;
@@ -639,8 +746,8 @@ function showError(message) {
     }, 5000);
 }
 
-// Show event detail modal
-function showEventModal(eventData, eventType) {
+// Show event detail modal (matching chart.js styling)
+function showEventModal(event, seriesName) {
     // Create modal if it doesn't exist
     let modal = document.getElementById('event-modal');
     if (!modal) {
@@ -659,59 +766,63 @@ function showEventModal(eventData, eventType) {
         document.body.appendChild(modal);
     }
 
-    // Determine event color
-    let eventColor = '#00c2ff';
-    let eventLabel = eventType;
+    // Determine event color and label
+    const isMarketBuy = event.event_type === 'market_buy';
+    const isMarketSell = event.event_type === 'market_sell';
+    const isBid = event.side === 'bid';
+    const isAsk = event.side === 'ask';
 
-    if (eventData.type === 'market_buy' || eventData.side === 'buy') {
-        eventColor = '#00c2ff';
-        eventLabel = 'Market Buy';
-    } else if (eventData.type === 'market_sell' || eventData.side === 'sell') {
-        eventColor = '#cc6699';
-        eventLabel = 'Market Sell';
-    } else if (eventData.side === 'bid') {
-        eventColor = '#00ff88';
-        eventLabel = 'Bid Event';
-    } else if (eventData.side === 'ask') {
-        eventColor = '#ff4444';
-        eventLabel = 'Ask Event';
+    let sideColor = '#00c2ff';
+    if (isMarketBuy) sideColor = '#00c2ff';
+    else if (isMarketSell) sideColor = '#ff00ff';
+    else if (isBid) sideColor = '#00ff88';
+    else if (isAsk) sideColor = '#ff4444';
+
+    const time = new Date(event.time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+        return num.toFixed(2);
     }
 
-    // Format modal content
+    // Format modal content (matching chart.js exactly)
     const modalBody = document.getElementById('modal-body');
-    const time = new Date(eventData.time);
-
     modalBody.innerHTML = `
-        <div style="border-left: 4px solid ${eventColor}; padding-left: 16px; margin-bottom: 20px;">
-            <h4 style="color: ${eventColor}; margin: 0 0 12px 0;">${eventLabel}</h4>
-            <div style="font-size: 0.9rem; color: #808080;">${time.toLocaleString()}</div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-            <div class="stat-card" style="background: rgba(0, 194, 255, 0.1); border-left: 3px solid #00c2ff;">
-                <div style="color: #808080; font-size: 0.85rem; margin-bottom: 4px;">Price</div>
-                <div style="font-size: 1.5rem; font-weight: bold;">$${eventData.price.toFixed(6)}</div>
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 1.5rem; border-radius: 8px; border-left: 4px solid ${sideColor};">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Event Type</div>
+                    <div style="color: ${sideColor}; font-size: 1.1rem; font-weight: 600; text-transform: uppercase;">${event.event_type.replace('_', ' ')}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Time</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-family: 'Courier New', monospace;">${time}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Price</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">$${event.price.toFixed(6)}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Volume</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${formatNumber(event.volume)}</div>
+                </div>
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">USD Value</div>
+                    <div style="color: ${sideColor}; font-size: 1.3rem; font-weight: 700;">$${formatNumber(event.usd_value)}</div>
+                </div>
+                ${event.distance_from_mid_pct !== undefined ? `
+                <div>
+                    <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Distance from Mid</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct.toFixed(3)}%</div>
+                </div>
+                ` : ''}
             </div>
-
-            <div class="stat-card" style="background: rgba(0, 255, 136, 0.1); border-left: 3px solid #00ff88;">
-                <div style="color: #808080; font-size: 0.85rem; margin-bottom: 4px;">USD Value</div>
-                <div style="font-size: 1.5rem; font-weight: bold;">$${eventData.usd_value.toLocaleString()}</div>
-            </div>
-        </div>
-
-        <div class="stat-card" style="background: rgba(255, 255, 255, 0.05);">
-            <div style="color: #808080; font-size: 0.85rem; margin-bottom: 4px;">Volume</div>
-            <div style="font-size: 1.25rem; font-weight: bold;">${eventData.volume.toFixed(4)} ${config.symbol.split('_')[0]}</div>
-        </div>
-
-        <div style="margin-top: 20px; padding: 12px; background: rgba(0, 255, 163, 0.05); border-radius: 6px; border: 1px solid rgba(0, 255, 163, 0.2);">
-            <div style="font-size: 0.85rem; color: #808080; margin-bottom: 4px;">Event Type</div>
-            <div style="font-weight: 600;">${eventData.type || 'N/A'}</div>
-        </div>
-
-        <div style="margin-top: 20px; padding: 12px; background: rgba(255, 255, 255, 0.02); border-radius: 6px;">
-            <div style="font-size: 0.85rem; color: #808080; margin-bottom: 4px;">Order Side</div>
-            <div style="font-weight: 600; color: ${eventColor};">${(eventData.side || 'N/A').toUpperCase()}</div>
         </div>
     `;
 
