@@ -521,14 +521,15 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
                     timeOffsets.set(timeKey, 1);
                 }
 
-                // Calculate marker size based on USD value (logarithmic scaling)
-                const minSize = period === 'during' ? 8 : 4;
-                const maxSize = period === 'during' ? 24 : 12;
+                // Calculate marker size based on USD value (square root scaling for proportional sizes)
+                const minSize = period === 'during' ? 6 : 3;
+                const maxSize = period === 'during' ? 30 : 15;
                 let size = minSize;
 
                 if (maxUsd > minUsd) {
-                    const normalizedValue = (Math.log(event.usd_value + 1) - Math.log(minUsd + 1)) /
-                                          (Math.log(maxUsd + 1) - Math.log(minUsd + 1));
+                    // Square root scaling: visually proportional (area grows linearly with value)
+                    const normalizedValue = (Math.sqrt(event.usd_value) - Math.sqrt(minUsd)) /
+                                          (Math.sqrt(maxUsd) - Math.sqrt(minUsd));
                     size = minSize + (maxSize - minSize) * normalizedValue;
                 }
 
