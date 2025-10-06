@@ -42,6 +42,27 @@ async function initChart() {
     const option = getChartOption();
     chart.setOption(option);
 
+    // Handle click events on whale events
+    chart.on('click', function(params) {
+        // Only handle clicks on scatter series (whale events)
+        if (params.componentType === 'series' && params.seriesType === 'scatter') {
+            if (params.data && params.data.eventData) {
+                showEventModal(params.data.eventData, params.seriesName);
+            }
+        }
+    });
+
+    // Change cursor on hover over whale events
+    chart.on('mouseover', function(params) {
+        if (params.componentType === 'series' && params.seriesType === 'scatter') {
+            chartContainer.style.cursor = 'pointer';
+        }
+    });
+
+    chart.on('mouseout', function(params) {
+        chartContainer.style.cursor = 'default';
+    });
+
     // Handle window resize
     window.addEventListener('resize', () => {
         chart.resize();
@@ -171,11 +192,21 @@ function getChartOption() {
                 type: 'scatter',
                 data: [],
                 symbol: 'circle',
-                symbolSize: 12,
+                symbolSize: function(data) {
+                    // Use the symbolSize from data if available
+                    return data.symbolSize || 12;
+                },
                 itemStyle: {
                     color: '#00c2ff',
                     shadowBlur: 10,
                     shadowColor: 'rgba(0, 194, 255, 0.5)'
+                },
+                emphasis: {
+                    scale: 1.3,
+                    itemStyle: {
+                        shadowBlur: 20,
+                        shadowColor: 'rgba(0, 194, 255, 0.8)'
+                    }
                 }
             },
             {
@@ -183,11 +214,20 @@ function getChartOption() {
                 type: 'scatter',
                 data: [],
                 symbol: 'circle',
-                symbolSize: 12,
+                symbolSize: function(data) {
+                    return data.symbolSize || 12;
+                },
                 itemStyle: {
                     color: '#cc6699',
                     shadowBlur: 10,
                     shadowColor: 'rgba(204, 102, 153, 0.5)'
+                },
+                emphasis: {
+                    scale: 1.3,
+                    itemStyle: {
+                        shadowBlur: 20,
+                        shadowColor: 'rgba(204, 102, 153, 0.8)'
+                    }
                 }
             },
             {
@@ -195,11 +235,20 @@ function getChartOption() {
                 type: 'scatter',
                 data: [],
                 symbol: 'triangle',
-                symbolSize: 10,
+                symbolSize: function(data) {
+                    return data.symbolSize || 10;
+                },
                 itemStyle: {
                     color: '#00ff88',
                     shadowBlur: 8,
                     shadowColor: 'rgba(0, 255, 136, 0.4)'
+                },
+                emphasis: {
+                    scale: 1.3,
+                    itemStyle: {
+                        shadowBlur: 16,
+                        shadowColor: 'rgba(0, 255, 136, 0.7)'
+                    }
                 }
             },
             {
@@ -208,11 +257,20 @@ function getChartOption() {
                 data: [],
                 symbol: 'triangle',
                 symbolRotate: 180,
-                symbolSize: 10,
+                symbolSize: function(data) {
+                    return data.symbolSize || 10;
+                },
                 itemStyle: {
                     color: '#ff4444',
                     shadowBlur: 8,
                     shadowColor: 'rgba(255, 68, 68, 0.4)'
+                },
+                emphasis: {
+                    scale: 1.3,
+                    itemStyle: {
+                        shadowBlur: 16,
+                        shadowColor: 'rgba(255, 68, 68, 0.7)'
+                    }
                 }
             }
         ]
@@ -229,12 +287,28 @@ function formatTooltip(params) {
     params.forEach(param => {
         const value = param.value[1];
         const color = param.color;
-        html += `
-            <div style="display: flex; align-items: center; margin: 4px 0;">
-                <span style="display: inline-block; width: 10px; height: 10px; background: ${color}; border-radius: 50%; margin-right: 8px;"></span>
-                <span>${param.seriesName}: <strong>$${value.toFixed(6)}</strong></span>
-            </div>
-        `;
+
+        // Check if this is an event with metadata
+        if (param.data && param.data.eventData) {
+            const event = param.data.eventData;
+            html += `
+                <div style="border-left: 3px solid ${color}; padding-left: 8px; margin: 8px 0;">
+                    <div style="font-weight: bold; color: ${color}; margin-bottom: 4px;">${param.seriesName}</div>
+                    <div style="margin: 2px 0;"><strong>Price:</strong> $${event.price.toFixed(6)}</div>
+                    <div style="margin: 2px 0;"><strong>Volume:</strong> ${event.volume.toFixed(4)}</div>
+                    <div style="margin: 2px 0;"><strong>USD Value:</strong> $${event.usd_value.toLocaleString()}</div>
+                    <div style="margin: 2px 0; color: #00ffa3; font-size: 0.85rem;">Click for details</div>
+                </div>
+            `;
+        } else {
+            // Regular price point
+            html += `
+                <div style="display: flex; align-items: center; margin: 4px 0;">
+                    <span style="display: inline-block; width: 10px; height: 10px; background: ${color}; border-radius: 50%; margin-right: 8px;"></span>
+                    <span>${param.seriesName}: <strong>$${value.toFixed(6)}</strong></span>
+                </div>
+            `;
+        }
     });
 
     return html;
@@ -312,6 +386,27 @@ function parseLookback(lookback) {
     }
 }
 
+// Calculate symbol size based on USD value
+function calculateSymbolSize(usdValue) {
+    // Logarithmic scale for better visual representation
+    // Min size: 8, Max size: 30
+    const minSize = 8;
+    const maxSize = 30;
+    const minUsd = config.minUsd;
+    const maxUsd = 100000; // Cap at 100k for sizing
+
+    if (usdValue <= minUsd) return minSize;
+    if (usdValue >= maxUsd) return maxSize;
+
+    // Logarithmic scale
+    const logValue = Math.log(usdValue);
+    const logMin = Math.log(minUsd);
+    const logMax = Math.log(maxUsd);
+    const scale = (logValue - logMin) / (logMax - logMin);
+
+    return minSize + scale * (maxSize - minSize);
+}
+
 // Update chart with latest data
 function updateChart() {
     if (!chart || priceData.length === 0) return;
@@ -331,24 +426,27 @@ function updateChart() {
     const topBids = bidEvents.sort((a, b) => b.usd_value - a.usd_value).slice(0, 20);
     const topAsks = askEvents.sort((a, b) => b.usd_value - a.usd_value).slice(0, 20);
 
-    // Map events to price points
+    // Map events to chart data with actual price, size, and metadata
     function mapEventsToChart(events) {
         return events.map(e => {
             const eventTime = new Date(e.time);
-            // Find closest price point
-            let closestPrice = null;
-            let minDiff = Infinity;
+            // Use the event's actual price (order book price), not mid price
+            const eventPrice = e.price;
 
-            for (const p of priceData) {
-                const diff = Math.abs(new Date(p.time) - eventTime);
-                if (diff < minDiff && diff < 5000) { // Within 5 seconds
-                    minDiff = diff;
-                    closestPrice = p.price;
+            return {
+                value: [eventTime, eventPrice],
+                symbolSize: calculateSymbolSize(e.usd_value),
+                // Store event data for click handling and tooltips
+                eventData: {
+                    type: e.event_type,
+                    side: e.side,
+                    price: e.price,
+                    volume: e.volume,
+                    usd_value: e.usd_value,
+                    time: e.time
                 }
-            }
-
-            return closestPrice ? [eventTime, closestPrice] : null;
-        }).filter(p => p !== null);
+            };
+        });
     }
 
     // Update chart
@@ -539,6 +637,86 @@ function showError(message) {
     setTimeout(() => {
         toast.style.display = 'none';
     }, 5000);
+}
+
+// Show event detail modal
+function showEventModal(eventData, eventType) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('event-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'event-modal';
+        modal.innerHTML = `
+            <div class="modal-backdrop" onclick="document.getElementById('event-modal').style.display='none'"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">Whale Event Details</h3>
+                    <button class="modal-close" onclick="document.getElementById('event-modal').style.display='none'">&times;</button>
+                </div>
+                <div class="modal-body" id="modal-body"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Determine event color
+    let eventColor = '#00c2ff';
+    let eventLabel = eventType;
+
+    if (eventData.type === 'market_buy' || eventData.side === 'buy') {
+        eventColor = '#00c2ff';
+        eventLabel = 'Market Buy';
+    } else if (eventData.type === 'market_sell' || eventData.side === 'sell') {
+        eventColor = '#cc6699';
+        eventLabel = 'Market Sell';
+    } else if (eventData.side === 'bid') {
+        eventColor = '#00ff88';
+        eventLabel = 'Bid Event';
+    } else if (eventData.side === 'ask') {
+        eventColor = '#ff4444';
+        eventLabel = 'Ask Event';
+    }
+
+    // Format modal content
+    const modalBody = document.getElementById('modal-body');
+    const time = new Date(eventData.time);
+
+    modalBody.innerHTML = `
+        <div style="border-left: 4px solid ${eventColor}; padding-left: 16px; margin-bottom: 20px;">
+            <h4 style="color: ${eventColor}; margin: 0 0 12px 0;">${eventLabel}</h4>
+            <div style="font-size: 0.9rem; color: #808080;">${time.toLocaleString()}</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+            <div class="stat-card" style="background: rgba(0, 194, 255, 0.1); border-left: 3px solid #00c2ff;">
+                <div style="color: #808080; font-size: 0.85rem; margin-bottom: 4px;">Price</div>
+                <div style="font-size: 1.5rem; font-weight: bold;">$${eventData.price.toFixed(6)}</div>
+            </div>
+
+            <div class="stat-card" style="background: rgba(0, 255, 136, 0.1); border-left: 3px solid #00ff88;">
+                <div style="color: #808080; font-size: 0.85rem; margin-bottom: 4px;">USD Value</div>
+                <div style="font-size: 1.5rem; font-weight: bold;">$${eventData.usd_value.toLocaleString()}</div>
+            </div>
+        </div>
+
+        <div class="stat-card" style="background: rgba(255, 255, 255, 0.05);">
+            <div style="color: #808080; font-size: 0.85rem; margin-bottom: 4px;">Volume</div>
+            <div style="font-size: 1.25rem; font-weight: bold;">${eventData.volume.toFixed(4)} ${config.symbol.split('_')[0]}</div>
+        </div>
+
+        <div style="margin-top: 20px; padding: 12px; background: rgba(0, 255, 163, 0.05); border-radius: 6px; border: 1px solid rgba(0, 255, 163, 0.2);">
+            <div style="font-size: 0.85rem; color: #808080; margin-bottom: 4px;">Event Type</div>
+            <div style="font-weight: 600;">${eventData.type || 'N/A'}</div>
+        </div>
+
+        <div style="margin-top: 20px; padding: 12px; background: rgba(255, 255, 255, 0.02); border-radius: 6px;">
+            <div style="font-size: 0.85rem; color: #808080; margin-bottom: 4px;">Order Side</div>
+            <div style="font-weight: 600; color: ${eventColor};">${(eventData.side || 'N/A').toUpperCase()}</div>
+        </div>
+    `;
+
+    // Show modal
+    modal.style.display = 'flex';
 }
 
 // Cleanup on page unload
