@@ -9,7 +9,12 @@ import json
 from flask import Flask, render_template, jsonify, send_from_directory, request
 from flask_cors import CORS
 from pathlib import Path
-from dashboard.config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
+
+# Import config - handle both local and Docker paths
+try:
+    from dashboard.config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
+except ModuleNotFoundError:
+    from config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for development
