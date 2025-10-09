@@ -60,7 +60,7 @@ const config = {
     symbol: 'SPX_USDT',
     lookback: '5m',
     minUsd: 5000,
-    refreshInterval: 200 // 200ms (5 updates per second)
+    refreshInterval: 1000 // 1000ms (1 update per second)
 };
 
 // Initialize dashboard
