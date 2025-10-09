@@ -68,6 +68,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         showLoading(true);
 
+        // Load symbols configuration first
+        await loadSymbols();
+
         await initChart();
         setupEventListeners();
 
@@ -86,6 +89,43 @@ document.addEventListener('DOMContentLoaded', async () => {
         showLoading(false);
     }
 });
+
+// Load symbols from API
+async function loadSymbols() {
+    try {
+        const response = await fetch('/api/config/symbols');
+        if (!response.ok) throw new Error('Failed to load symbols');
+
+        const data = await response.json();
+        const symbolSelect = document.getElementById('symbol-select');
+
+        // Clear existing options
+        symbolSelect.innerHTML = '';
+
+        // Add symbols from API
+        data.symbols.forEach(symbol => {
+            const option = document.createElement('option');
+            option.value = symbol;
+            option.textContent = symbol;
+            if (symbol === data.default) {
+                option.selected = true;
+                config.symbol = symbol;
+            }
+            symbolSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading symbols:', error);
+        // Fallback to hardcoded symbols
+        const symbolSelect = document.getElementById('symbol-select');
+        const fallbackSymbols = ['SPX_USDT', 'BANANA_USDT', 'DOGE_USDT', 'FLOKI_USDT', 'MOODENG_USDT'];
+        fallbackSymbols.forEach(symbol => {
+            const option = document.createElement('option');
+            option.value = symbol;
+            option.textContent = symbol;
+            symbolSelect.appendChild(option);
+        });
+    }
+}
 
 // Initialize ECharts
 async function initChart() {

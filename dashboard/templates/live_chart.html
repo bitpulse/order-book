@@ -18,11 +18,7 @@
             <h1>📈 Live Price Chart</h1>
             <div class="header-controls">
                 <select id="symbol-select" class="file-selector">
-                    <option value="SPX_USDT">SPX_USDT</option>
-                    <option value="BANANA_USDT">BANANA_USDT</option>
-                    <option value="DOGE_USDT">DOGE_USDT</option>
-                    <option value="FLOKI_USDT">FLOKI_USDT</option>
-                    <option value="MOODENG_USDT">MOODENG_USDT</option>
+                    <!-- Dynamically loaded from API -->
                 </select>
                 <select id="lookback-select" class="file-selector">
                     <option value="5m">5 minutes</option>
@@ -62,7 +58,7 @@
                     </div>
                     <div class="info-item">
                         <span class="info-icon">🔄</span>
-                        <span id="info-status" class="info-text">Live (2s refresh)</span>
+                        <span id="info-status" class="info-text">Live (200ms refresh)</span>
                     </div>
                 </div>
 

@@ -9,6 +9,7 @@ import json
 from flask import Flask, render_template, jsonify, send_from_directory, request
 from flask_cors import CORS
 from pathlib import Path
+from dashboard.config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for development
@@ -70,6 +71,15 @@ def live_dashboard():
 
 # ===== Live Dashboard API Endpoints =====
 
+@app.route('/api/config/symbols')
+def get_symbols():
+    """Get list of monitored symbols"""
+    return jsonify({
+        'symbols': MONITORED_SYMBOLS,
+        'default': DEFAULT_SYMBOL
+    })
+
+
 @app.route('/api/live/price-history')
 def get_live_price_history():
     """Get live price history from InfluxDB"""
@@ -78,7 +88,7 @@ def get_live_price_history():
 
     load_dotenv()
 
-    symbol = request.args.get('symbol', 'SPX_USDT')
+    symbol = request.args.get('symbol', DEFAULT_SYMBOL)
     lookback = request.args.get('lookback', '1h')
 
     try:
@@ -131,7 +141,7 @@ def get_live_whale_events():
 
     load_dotenv()
 
-    symbol = request.args.get('symbol', 'SPX_USDT')
+    symbol = request.args.get('symbol', DEFAULT_SYMBOL)
     lookback = request.args.get('lookback', '30m')
     min_usd = request.args.get('min_usd', 5000, type=float)
     last_timestamp = request.args.get('last_timestamp')  # ISO format timestamp
@@ -232,7 +242,7 @@ def get_live_orderbook():
 
     load_dotenv()
 
-    symbol = request.args.get('symbol', 'SPX_USDT')
+    symbol = request.args.get('symbol', DEFAULT_SYMBOL)
 
     try:
         client = InfluxDBClient(
@@ -297,7 +307,7 @@ def get_live_stats():
 
     load_dotenv()
 
-    symbol = request.args.get('symbol', 'SPX_USDT')
+    symbol = request.args.get('symbol', DEFAULT_SYMBOL)
     lookback = request.args.get('lookback', '1h')
 
     try:
@@ -711,7 +721,7 @@ def run_whale_analysis():
     try:
         data = json.loads(request.data)
 
-        symbol = data.get('symbol', 'BANANA_USDT')
+        symbol = data.get('symbol', DEFAULT_SYMBOL)
         lookback = data.get('lookback', '3h')
         interval = data.get('interval', '30s')
         top = data.get('top', 10)
@@ -860,7 +870,7 @@ def run_whale_monitor():
     try:
         data = json.loads(request.data)
 
-        symbol = data.get('symbol', 'BANANA_USDT')
+        symbol = data.get('symbol', DEFAULT_SYMBOL)
         lookback = data.get('lookback', '3h')
         min_usd = data.get('min_usd', 5000)
         top = data.get('top', 50)
