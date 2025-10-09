@@ -43,10 +43,15 @@ CONTAINER_NAME="tracker-${SYMBOL,,}"  # Convert to lowercase
 # Image name
 IMAGE_NAME="orderbook-tracker"
 
-# Create network if it doesn't exist
-if ! docker network ls | grep -q orderbook-network; then
-    echo -e "${GREEN}Creating Docker network: orderbook-network${NC}"
-    docker network create orderbook-network
+# Determine network name (docker-compose creates with project prefix)
+NETWORK_NAME="order-book_orderbook-network"
+if ! docker network ls | grep -q "$NETWORK_NAME"; then
+    # Fallback to simple name if compose network doesn't exist
+    NETWORK_NAME="orderbook-network"
+    if ! docker network ls | grep -q "$NETWORK_NAME"; then
+        echo -e "${GREEN}Creating Docker network: $NETWORK_NAME${NC}"
+        docker network create $NETWORK_NAME
+    fi
 fi
 
 # Check if InfluxDB container is running
@@ -79,7 +84,7 @@ echo ""
 
 docker run -d \
     --name $CONTAINER_NAME \
-    --network orderbook-network \
+    --network $NETWORK_NAME \
     -v $(pwd)/logs:/app/logs \
     -e INFLUXDB_URL=http://8.176.53.184:8086 \
     -e INFLUXDB_TOKEN=$INFLUXDB_TOKEN \
@@ -98,3 +103,4 @@ echo "  View logs:    docker logs -f $CONTAINER_NAME"
 echo "  Stop tracker: docker stop $CONTAINER_NAME"
 echo "  Remove:       docker rm $CONTAINER_NAME"
 echo "  List all:     docker ps -a | grep tracker"
+
