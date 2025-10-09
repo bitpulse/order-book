@@ -54,13 +54,18 @@ if ! docker network ls | grep -q "$NETWORK_NAME"; then
     fi
 fi
 
-# Check if InfluxDB container is running
-if ! docker ps | grep -q orderbook-influxdb; then
-    echo -e "${YELLOW}Warning: InfluxDB container (orderbook-influxdb) is not running${NC}"
-    echo "Starting InfluxDB with docker-compose..."
-    docker-compose up -d influxdb
-    echo "Waiting for InfluxDB to be ready..."
-    sleep 5
+# Check if using remote or local InfluxDB
+if [[ "$INFLUXDB_URL" == *"localhost"* ]] || [[ "$INFLUXDB_URL" == *"127.0.0.1"* ]] || [[ "$INFLUXDB_URL" == *"influxdb"* ]]; then
+    # Local InfluxDB - check if container is running
+    if ! docker ps | grep -q orderbook-influxdb; then
+        echo -e "${YELLOW}Warning: InfluxDB container (orderbook-influxdb) is not running${NC}"
+        echo "Starting InfluxDB with docker-compose..."
+        docker-compose up -d influxdb
+        echo "Waiting for InfluxDB to be ready..."
+        sleep 5
+    fi
+else
+    echo -e "${GREEN}Using remote InfluxDB: $INFLUXDB_URL${NC}"
 fi
 
 # Build image if it doesn't exist
@@ -86,7 +91,7 @@ docker run -d \
     --name $CONTAINER_NAME \
     --network $NETWORK_NAME \
     -v $(pwd)/logs:/app/logs \
-    -e INFLUXDB_URL=http://8.176.53.184:8086 \
+    -e INFLUXDB_URL=$INFLUXDB_URL \
     -e INFLUXDB_TOKEN=$INFLUXDB_TOKEN \
     -e INFLUXDB_ORG=$INFLUXDB_ORG \
     -e INFLUXDB_BUCKET=$INFLUXDB_BUCKET \
