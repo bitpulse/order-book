@@ -1,467 +1,695 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Price Change Analyzer Dashboard</title>
 
     <!-- Apache ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-</head>
-<body>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/sidebar.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/dashboard.css') }}"
+    />
+  </head>
+  <body>
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-text">Bitpulse</span>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle">
+          <span>✕</span>
+        </button>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Analyzers</div>
+        <a href="/" class="nav-item">
+          <span class="nav-icon">▲</span>
+          <span class="nav-label">Price Changes</span>
+        </a>
+        <a href="/top-market-orders" class="nav-item">
+          <span class="nav-icon">◆</span>
+          <span class="nav-label">Market Orders</span>
+        </a>
+        <a href="/market-orders-intervals" class="nav-item">
+          <span class="nav-icon">■</span>
+          <span class="nav-label">Order Intervals</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Whale Tracking</div>
+        <a href="/whale-activity" class="nav-item">
+          <span class="nav-icon">●</span>
+          <span class="nav-label">Whale Activity</span>
+        </a>
+        <a href="/whale-monitor" class="nav-item">
+          <span class="nav-icon">◉</span>
+          <span class="nav-label">Whale Monitor</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Live Data</div>
+        <a href="/live" class="nav-item">
+          <span class="nav-icon">◆</span>
+          <span class="nav-label">Live Dashboard</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="nav-item" id="connection-status">
+          <span class="nav-icon status-indicator"></span>
+          <span class="nav-label">Connected</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay"></div>
+
     <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <h1>Price Change Analyzer Dashboard</h1>
-            <div class="header-controls">
-                <button id="new-analysis-btn" class="btn btn-primary">+ New Analysis</button>
-                <select id="file-selector" class="file-selector">
-                    <option value="">Loading files...</option>
-                </select>
-                <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
-                <a href="/top-market-orders" class="btn btn-link">🎯 Top Market Orders</a>
-                <a href="/whale-activity" class="btn btn-link">🐋 Whale Activity</a>
-                <a href="/whale-monitor" class="btn btn-link">👁️ Whale Monitor</a>
-                <a href="/live" class="btn btn-link">📊 Live Dashboard</a>
-            </div>
-        </header>
+      <!-- Header -->
+      <header class="header">
+        <h1>Price Change Analyzer</h1>
+        <div class="header-controls">
+          <button id="new-analysis-btn" class="btn btn-primary">
+            + New Analysis
+          </button>
+          <select id="file-selector" class="file-selector">
+            <option value="">Loading files...</option>
+          </select>
+          <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+        </div>
+      </header>
 
-        <!-- New Analysis Modal -->
-        <div id="new-analysis-modal" class="modal" style="display: none;">
-            <div class="modal-content analysis-modal-content">
-                <div class="modal-header">
-                    <h3>Run New Price Change Analysis</h3>
-                    <button class="modal-close" onclick="document.getElementById('new-analysis-modal').style.display='none'">&times;</button>
+      <!-- New Analysis Modal -->
+      <div id="new-analysis-modal" class="modal" style="display: none">
+        <div class="modal-content analysis-modal-content">
+          <div class="modal-header">
+            <h3>Run New Price Change Analysis</h3>
+            <button
+              class="modal-close"
+              onclick="document.getElementById('new-analysis-modal').style.display='none'"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="modal-body">
+            <form id="analysis-form" class="analysis-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="symbol-input">Symbol</label>
+                  <input
+                    type="text"
+                    id="symbol-input"
+                    placeholder="e.g., SPX_USDT"
+                    value="SPX_USDT"
+                    required
+                  />
                 </div>
-                <div class="modal-body">
-                    <form id="analysis-form" class="analysis-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="symbol-input">Symbol</label>
-                                <input type="text" id="symbol-input" placeholder="e.g., SPX_USDT" value="SPX_USDT" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="lookback-input">Lookback</label>
-                                <input type="text" id="lookback-input" placeholder="e.g., 3h" value="3h" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="interval-input">Interval</label>
-                                <input type="text" id="interval-input" placeholder="e.g., 10s" value="10s" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="top-input">Top N</label>
-                                <input type="number" id="top-input" placeholder="5" value="5" min="1" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="min-change-input">Min Change %</label>
-                                <input type="number" id="min-change-input" placeholder="0.1" value="0.1" step="0.01" min="0" required>
-                            </div>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-primary btn-large">Run Analysis</button>
-                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-analysis-modal').style.display='none'">Cancel</button>
-                        </div>
-                    </form>
-                    <div id="analysis-status" class="analysis-status" style="display: none;">
-                        <div class="status-spinner"></div>
-                        <div id="status-message">Running analysis...</div>
-                    </div>
+                <div class="form-group">
+                  <label for="lookback-input">Lookback</label>
+                  <input
+                    type="text"
+                    id="lookback-input"
+                    placeholder="e.g., 3h"
+                    value="3h"
+                    required
+                  />
                 </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="interval-input">Interval</label>
+                  <input
+                    type="text"
+                    id="interval-input"
+                    placeholder="e.g., 10s"
+                    value="10s"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="top-input">Top N</label>
+                  <input
+                    type="number"
+                    id="top-input"
+                    placeholder="5"
+                    value="5"
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="min-change-input">Min Change %</label>
+                  <input
+                    type="number"
+                    id="min-change-input"
+                    placeholder="0.1"
+                    value="0.1"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large">
+                  Run Analysis
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  onclick="document.getElementById('new-analysis-modal').style.display='none'"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+            <div
+              id="analysis-status"
+              class="analysis-status"
+              style="display: none"
+            >
+              <div class="status-spinner"></div>
+              <div id="status-message">Running analysis...</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Left Panel: Chart and Stats -->
+        <div class="chart-panel">
+          <!-- Analysis Info -->
+          <div id="analysis-info" class="analysis-info" style="display: none">
+            <div class="info-item">
+              <span class="info-icon">📊</span>
+              <span id="info-symbol" class="info-text">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">⏱️</span>
+              <span id="info-interval" class="info-text">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">🔍</span>
+              <span id="info-lookback" class="info-text">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">📈</span>
+              <span id="info-threshold" class="info-text">-</span>
+            </div>
+          </div>
+
+          <!-- Stats Summary -->
+          <div id="stats-summary" class="stats-summary">
+            <div class="stat-item">
+              <span class="stat-label">Rank:</span>
+              <span id="stat-rank" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Change:</span>
+              <span id="stat-change" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Time:</span>
+              <span id="stat-time" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Price:</span>
+              <span id="stat-price" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Events:</span>
+              <span id="stat-events" class="stat-value">-</span>
+            </div>
+            <div class="stat-item stat-export">
+              <button
+                id="export-interval-btn"
+                class="btn btn-export"
+                title="Export current interval data as JSON"
+              >
+                <span class="export-icon">📥</span>
+                Export JSON
+              </button>
+            </div>
+          </div>
+
+          <!-- Interval Selector (if multiple intervals in file) -->
+          <div
+            id="interval-selector-container"
+            class="interval-selector-container"
+            style="display: none"
+          >
+            <label for="interval-selector">Select Interval:</label>
+            <select id="interval-selector" class="interval-selector">
+              <option value="">Select an interval...</option>
+            </select>
+          </div>
+
+          <!-- Chart Container -->
+          <div class="chart-wrapper">
+            <button
+              id="fullscreen-btn"
+              class="fullscreen-btn"
+              title="Toggle Fullscreen"
+            >
+              ⛶
+            </button>
+            <div id="chart-container" class="chart-container">
+              <div id="loading" class="loading" style="display: none">
+                <div class="spinner"></div>
+                <p>Loading chart data...</p>
+              </div>
+              <div id="zero-state" class="zero-state">
+                <div class="zero-state-icon">📊</div>
+                <h3>No Data Selected</h3>
+                <p>
+                  Select a file from the dropdown above to view price change
+                  analysis
+                </p>
+                <p style="margin-top: 1rem; color: #808080; font-size: 0.9rem">
+                  or
+                </p>
+                <button
+                  id="zero-state-new-analysis"
+                  class="btn btn-primary"
+                  style="margin-top: 1rem"
+                >
+                  + New Analysis
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart Legend -->
+          <div class="chart-legend">
+            <div class="legend-section">
+              <div class="legend-title">Price & Markers</div>
+              <div class="legend-item">
+                <span class="legend-marker" style="background: #00c2ff"></span>
+                <span>Price Line</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-marker" style="background: #ffd60a"></span>
+                <span>START/END</span>
+              </div>
+            </div>
+            <div class="legend-section">
+              <div class="legend-title">Definitive Events (Bright)</div>
+              <div class="legend-item">
+                <span
+                  class="legend-marker legend-triangle"
+                  style="border-bottom-color: #00ff88"
+                ></span>
+                <span>New Bid Orders</span>
+              </div>
+              <div class="legend-item">
+                <span
+                  class="legend-marker legend-triangle-down"
+                  style="border-top-color: #ff4444"
+                ></span>
+                <span>New Ask Orders</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-marker" style="background: #00c2ff"></span>
+                <span>Market Buy</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-marker" style="background: #ff00ff"></span>
+                <span>Market Sell</span>
+              </div>
+            </div>
+            <div class="legend-section">
+              <div class="legend-title">Volume Changes (Muted)</div>
+              <div class="legend-item">
+                <span
+                  class="legend-marker legend-diamond"
+                  style="background: #88cc88"
+                ></span>
+                <span>Bid Increase / Ask Decrease</span>
+              </div>
+              <div class="legend-item">
+                <span
+                  class="legend-marker legend-diamond"
+                  style="background: #cc8888"
+                ></span>
+                <span>Ask Increase / Bid Decrease</span>
+              </div>
+              <div class="legend-note">
+                Volume changes could be order modifications, cancellations, or
+                partial fills
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Flow Documentation -->
+          <details class="data-flow-info">
+            <summary class="data-flow-summary">
+              <span class="data-flow-icon">📡</span>
+              Data Flow: From MEXC API to Dashboard
+              <span class="data-flow-toggle">▼</span>
+            </summary>
+            <div class="data-flow-content">
+              <!-- API Sources -->
+              <div class="data-flow-section">
+                <div class="data-flow-title">📡 MEXC WebSocket API Sources</div>
+                <div class="data-flow-item">
+                  <code class="api-endpoint">sub.depth.full</code>
+                  <span class="api-description"
+                    >Order Book Updates (Top 20 levels)</span
+                  >
+                </div>
+                <div class="data-flow-detail">
+                  <span class="field-label">Format:</span>
+                  <code>[price, volume, order_count]</code>
+                </div>
+                <div class="data-flow-detail">
+                  <span class="field-label">Fields:</span>
+                  <ul class="field-list">
+                    <li><code>price</code> - Price level</li>
+                    <li><code>volume</code> - Total quantity at this price</li>
+                    <li>
+                      <code>order_count</code> - Number of individual orders
+                    </li>
+                    <li>
+                      <code>version</code> - Sequence number (packet loss
+                      detection)
+                    </li>
+                    <li><code>ts</code> - Timestamp</li>
+                  </ul>
+                </div>
+
+                <div class="data-flow-item" style="margin-top: 0.75rem">
+                  <code class="api-endpoint">sub.deal</code>
+                  <span class="api-description"
+                    >Trade Executions (Market orders)</span
+                  >
+                </div>
+                <div class="data-flow-detail">
+                  <span class="field-label">Fields:</span>
+                  <ul class="field-list">
+                    <li><code>p</code> - Execution price</li>
+                    <li><code>v</code> - Execution volume</li>
+                    <li><code>T</code> - Trade type (1=Buy, 2=Sell)</li>
+                    <li><code>t</code> - Timestamp</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Event Detection Logic -->
+              <div class="data-flow-section">
+                <div class="data-flow-title">
+                  🔄 Event Detection Logic & Classification
+                </div>
+
+                <!-- New Bid/Ask -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">New Bid/Ask</span>
+                    <span class="logic-badge logic-badge-definitive"
+                      >Definitive</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price NOT in previous snapshot
+                    AND NOT in historical full book
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> A completely new price level appeared
+                    that we've never seen before. This means a whale just placed
+                    a fresh order (not moved or modified an existing one). This
+                    is a <em>definitive action</em> showing new intent.
+                  </div>
+                  <div class="logic-example">
+                    <strong>Example:</strong> BTC at $95,000 suddenly shows
+                    $500K bid that wasn't there before → New whale support level
+                  </div>
+                </div>
+
+                <!-- Increase -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Increase</span>
+                    <span class="logic-badge logic-badge-ambiguous"
+                      >Ambiguous</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price exists in previous
+                    snapshot, current volume &gt; previous volume
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> Volume at an existing price went UP.
+                    Could mean: (1) whale added to their position, (2) another
+                    trader joined at same price, or (3) order modification. We
+                    can't distinguish, so it's <em>ambiguous</em> (shown in
+                    muted colors).
+                  </div>
+                  <div class="logic-impact">
+                    <strong>Market Impact:</strong>
+                    Bid Increase = potential support building (muted green) |
+                    Ask Increase = potential resistance building (muted red)
+                  </div>
+                </div>
+
+                <!-- Decrease -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Decrease</span>
+                    <span class="logic-badge logic-badge-ambiguous"
+                      >Ambiguous</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price exists in previous
+                    snapshot, current volume &lt; previous volume
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> Volume at an existing price went DOWN.
+                    Could mean: (1) whale cancelled part of their order, (2)
+                    order got partially filled by market takers, or (3) order
+                    modification. We can't know which, so it's
+                    <em>ambiguous</em> (muted colors).
+                  </div>
+                  <div class="logic-impact">
+                    <strong>Market Impact:</strong>
+                    Bid Decrease = support weakening (muted red) | Ask Decrease
+                    = resistance weakening (muted green)
+                  </div>
+                </div>
+
+                <!-- Market Buy/Sell -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Market Buy/Sell</span>
+                    <span class="logic-badge logic-badge-definitive"
+                      >Definitive</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Source:</strong> Separate trade execution stream
+                    (<code>sub.deal</code>), Type field: 1=Buy, 2=Sell
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> These are
+                    <em>aggressive orders</em> that executed immediately against
+                    the order book. Market Buy = someone bought at ask price
+                    (bullish aggression), Market Sell = someone sold at bid
+                    price (bearish aggression). This is
+                    <em>definitive action</em> with immediate price impact.
+                  </div>
+                  <div class="logic-example">
+                    <strong>Example:</strong> $1M market buy executes → whale
+                    aggressively buying, willing to pay premium to get filled
+                    NOW (very bullish signal)
+                  </div>
+                </div>
+
+                <!-- Entered/Left Top -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Entered/Left Top</span>
+                    <span class="logic-badge logic-badge-technical"
+                      >Technical</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price was in historical full
+                    book but now appeared/disappeared in top 20 window
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> We only track top 20 price levels (API
+                    limitation). When orders move in/out of this window, it's
+                    just a visibility change, not necessarily new market
+                    activity. Less important - more
+                    <em>technical noise</em> than trading signal.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Additional Metrics -->
+              <div class="data-flow-section">
+                <div class="data-flow-title">📊 Derived Metrics</div>
+                <div class="metric-item">
+                  <span class="metric-name">Order Count:</span>
+                  <span class="metric-source"
+                    >Direct from API <code>order_count</code> field</span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Distance from Mid:</span>
+                  <span class="metric-source"
+                    >Calculated:
+                    <code>(price - mid_price) / mid_price × 100%</code></span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">USD Value:</span>
+                  <span class="metric-source"
+                    >Calculated: <code>price × volume</code></span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Level:</span>
+                  <span class="metric-source"
+                    >Position in top 20 (1=best bid/ask)</span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Mid Price:</span>
+                  <span class="metric-source"
+                    >Calculated: <code>(best_bid + best_ask) / 2</code></span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Spread:</span>
+                  <span class="metric-source"
+                    >Calculated: <code>best_ask - best_bid</code></span
+                  >
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Left Panel: Chart and Stats -->
-            <div class="chart-panel">
-                <!-- Analysis Info -->
-                <div id="analysis-info" class="analysis-info" style="display: none;">
-                    <div class="info-item">
-                        <span class="info-icon">📊</span>
-                        <span id="info-symbol" class="info-text">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-icon">⏱️</span>
-                        <span id="info-interval" class="info-text">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-icon">🔍</span>
-                        <span id="info-lookback" class="info-text">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-icon">📈</span>
-                        <span id="info-threshold" class="info-text">-</span>
-                    </div>
-                </div>
-
-                <!-- Stats Summary -->
-                <div id="stats-summary" class="stats-summary">
-                    <div class="stat-item">
-                        <span class="stat-label">Rank:</span>
-                        <span id="stat-rank" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Change:</span>
-                        <span id="stat-change" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Time:</span>
-                        <span id="stat-time" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Price:</span>
-                        <span id="stat-price" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Events:</span>
-                        <span id="stat-events" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item stat-export">
-                        <button id="export-interval-btn" class="btn btn-export" title="Export current interval data as JSON">
-                            <span class="export-icon">📥</span>
-                            Export JSON
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Interval Selector (if multiple intervals in file) -->
-                <div id="interval-selector-container" class="interval-selector-container" style="display: none;">
-                    <label for="interval-selector">Select Interval:</label>
-                    <select id="interval-selector" class="interval-selector">
-                        <option value="">Select an interval...</option>
-                    </select>
-                </div>
-
-                <!-- Chart Container -->
-                <div class="chart-wrapper">
-                    <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
-                    <div id="chart-container" class="chart-container">
-                        <div id="loading" class="loading" style="display: none;">
-                            <div class="spinner"></div>
-                            <p>Loading chart data...</p>
-                        </div>
-                        <div id="zero-state" class="zero-state">
-                            <div class="zero-state-icon">📊</div>
-                            <h3>No Data Selected</h3>
-                            <p>Select a file from the dropdown above to view price change analysis</p>
-                            <p style="margin-top: 1rem; color: #808080; font-size: 0.9rem;">or</p>
-                            <button id="zero-state-new-analysis" class="btn btn-primary" style="margin-top: 1rem;">+ New Analysis</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Chart Legend -->
-                <div class="chart-legend">
-                    <div class="legend-section">
-                        <div class="legend-title">Price & Markers</div>
-                        <div class="legend-item">
-                            <span class="legend-marker" style="background: #00c2ff;"></span>
-                            <span>Price Line</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-marker" style="background: #ffd60a;"></span>
-                            <span>START/END</span>
-                        </div>
-                    </div>
-                    <div class="legend-section">
-                        <div class="legend-title">Definitive Events (Bright)</div>
-                        <div class="legend-item">
-                            <span class="legend-marker legend-triangle" style="border-bottom-color: #00ff88;"></span>
-                            <span>New Bid Orders</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-marker legend-triangle-down" style="border-top-color: #ff4444;"></span>
-                            <span>New Ask Orders</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-marker" style="background: #00c2ff;"></span>
-                            <span>Market Buy</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-marker" style="background: #ff00ff;"></span>
-                            <span>Market Sell</span>
-                        </div>
-                    </div>
-                    <div class="legend-section">
-                        <div class="legend-title">Volume Changes (Muted)</div>
-                        <div class="legend-item">
-                            <span class="legend-marker legend-diamond" style="background: #88cc88;"></span>
-                            <span>Bid Increase / Ask Decrease</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-marker legend-diamond" style="background: #cc8888;"></span>
-                            <span>Ask Increase / Bid Decrease</span>
-                        </div>
-                        <div class="legend-note">
-                            Volume changes could be order modifications, cancellations, or partial fills
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Data Flow Documentation -->
-                <details class="data-flow-info">
-                    <summary class="data-flow-summary">
-                        <span class="data-flow-icon">📡</span>
-                        Data Flow: From MEXC API to Dashboard
-                        <span class="data-flow-toggle">▼</span>
-                    </summary>
-                    <div class="data-flow-content">
-                        <!-- API Sources -->
-                        <div class="data-flow-section">
-                            <div class="data-flow-title">📡 MEXC WebSocket API Sources</div>
-                            <div class="data-flow-item">
-                                <code class="api-endpoint">sub.depth.full</code>
-                                <span class="api-description">Order Book Updates (Top 20 levels)</span>
-                            </div>
-                            <div class="data-flow-detail">
-                                <span class="field-label">Format:</span>
-                                <code>[price, volume, order_count]</code>
-                            </div>
-                            <div class="data-flow-detail">
-                                <span class="field-label">Fields:</span>
-                                <ul class="field-list">
-                                    <li><code>price</code> - Price level</li>
-                                    <li><code>volume</code> - Total quantity at this price</li>
-                                    <li><code>order_count</code> - Number of individual orders</li>
-                                    <li><code>version</code> - Sequence number (packet loss detection)</li>
-                                    <li><code>ts</code> - Timestamp</li>
-                                </ul>
-                            </div>
-
-                            <div class="data-flow-item" style="margin-top: 0.75rem;">
-                                <code class="api-endpoint">sub.deal</code>
-                                <span class="api-description">Trade Executions (Market orders)</span>
-                            </div>
-                            <div class="data-flow-detail">
-                                <span class="field-label">Fields:</span>
-                                <ul class="field-list">
-                                    <li><code>p</code> - Execution price</li>
-                                    <li><code>v</code> - Execution volume</li>
-                                    <li><code>T</code> - Trade type (1=Buy, 2=Sell)</li>
-                                    <li><code>t</code> - Timestamp</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <!-- Event Detection Logic -->
-                        <div class="data-flow-section">
-                            <div class="data-flow-title">🔄 Event Detection Logic & Classification</div>
-
-                            <!-- New Bid/Ask -->
-                            <div class="logic-detailed">
-                                <div class="logic-header">
-                                    <span class="logic-type">New Bid/Ask</span>
-                                    <span class="logic-badge logic-badge-definitive">Definitive</span>
-                                </div>
-                                <div class="logic-condition">
-                                    <strong>Condition:</strong> Price NOT in previous snapshot AND NOT in historical full book
-                                </div>
-                                <div class="logic-explanation">
-                                    <strong>Why:</strong> A completely new price level appeared that we've never seen before.
-                                    This means a whale just placed a fresh order (not moved or modified an existing one).
-                                    This is a <em>definitive action</em> showing new intent.
-                                </div>
-                                <div class="logic-example">
-                                    <strong>Example:</strong> BTC at $95,000 suddenly shows $500K bid that wasn't there before → New whale support level
-                                </div>
-                            </div>
-
-                            <!-- Increase -->
-                            <div class="logic-detailed">
-                                <div class="logic-header">
-                                    <span class="logic-type">Increase</span>
-                                    <span class="logic-badge logic-badge-ambiguous">Ambiguous</span>
-                                </div>
-                                <div class="logic-condition">
-                                    <strong>Condition:</strong> Price exists in previous snapshot, current volume &gt; previous volume
-                                </div>
-                                <div class="logic-explanation">
-                                    <strong>Why:</strong> Volume at an existing price went UP. Could mean: (1) whale added to their position,
-                                    (2) another trader joined at same price, or (3) order modification.
-                                    We can't distinguish, so it's <em>ambiguous</em> (shown in muted colors).
-                                </div>
-                                <div class="logic-impact">
-                                    <strong>Market Impact:</strong>
-                                    Bid Increase = potential support building (muted green) |
-                                    Ask Increase = potential resistance building (muted red)
-                                </div>
-                            </div>
-
-                            <!-- Decrease -->
-                            <div class="logic-detailed">
-                                <div class="logic-header">
-                                    <span class="logic-type">Decrease</span>
-                                    <span class="logic-badge logic-badge-ambiguous">Ambiguous</span>
-                                </div>
-                                <div class="logic-condition">
-                                    <strong>Condition:</strong> Price exists in previous snapshot, current volume &lt; previous volume
-                                </div>
-                                <div class="logic-explanation">
-                                    <strong>Why:</strong> Volume at an existing price went DOWN. Could mean: (1) whale cancelled part of their order,
-                                    (2) order got partially filled by market takers, or (3) order modification.
-                                    We can't know which, so it's <em>ambiguous</em> (muted colors).
-                                </div>
-                                <div class="logic-impact">
-                                    <strong>Market Impact:</strong>
-                                    Bid Decrease = support weakening (muted red) |
-                                    Ask Decrease = resistance weakening (muted green)
-                                </div>
-                            </div>
-
-                            <!-- Market Buy/Sell -->
-                            <div class="logic-detailed">
-                                <div class="logic-header">
-                                    <span class="logic-type">Market Buy/Sell</span>
-                                    <span class="logic-badge logic-badge-definitive">Definitive</span>
-                                </div>
-                                <div class="logic-condition">
-                                    <strong>Source:</strong> Separate trade execution stream (<code>sub.deal</code>), Type field: 1=Buy, 2=Sell
-                                </div>
-                                <div class="logic-explanation">
-                                    <strong>Why:</strong> These are <em>aggressive orders</em> that executed immediately against the order book.
-                                    Market Buy = someone bought at ask price (bullish aggression),
-                                    Market Sell = someone sold at bid price (bearish aggression).
-                                    This is <em>definitive action</em> with immediate price impact.
-                                </div>
-                                <div class="logic-example">
-                                    <strong>Example:</strong> $1M market buy executes → whale aggressively buying,
-                                    willing to pay premium to get filled NOW (very bullish signal)
-                                </div>
-                            </div>
-
-                            <!-- Entered/Left Top -->
-                            <div class="logic-detailed">
-                                <div class="logic-header">
-                                    <span class="logic-type">Entered/Left Top</span>
-                                    <span class="logic-badge logic-badge-technical">Technical</span>
-                                </div>
-                                <div class="logic-condition">
-                                    <strong>Condition:</strong> Price was in historical full book but now appeared/disappeared in top 20 window
-                                </div>
-                                <div class="logic-explanation">
-                                    <strong>Why:</strong> We only track top 20 price levels (API limitation).
-                                    When orders move in/out of this window, it's just a visibility change, not necessarily new market activity.
-                                    Less important - more <em>technical noise</em> than trading signal.
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Additional Metrics -->
-                        <div class="data-flow-section">
-                            <div class="data-flow-title">📊 Derived Metrics</div>
-                            <div class="metric-item">
-                                <span class="metric-name">Order Count:</span>
-                                <span class="metric-source">Direct from API <code>order_count</code> field</span>
-                            </div>
-                            <div class="metric-item">
-                                <span class="metric-name">Distance from Mid:</span>
-                                <span class="metric-source">Calculated: <code>(price - mid_price) / mid_price × 100%</code></span>
-                            </div>
-                            <div class="metric-item">
-                                <span class="metric-name">USD Value:</span>
-                                <span class="metric-source">Calculated: <code>price × volume</code></span>
-                            </div>
-                            <div class="metric-item">
-                                <span class="metric-name">Level:</span>
-                                <span class="metric-source">Position in top 20 (1=best bid/ask)</span>
-                            </div>
-                            <div class="metric-item">
-                                <span class="metric-name">Mid Price:</span>
-                                <span class="metric-source">Calculated: <code>(best_bid + best_ask) / 2</code></span>
-                            </div>
-                            <div class="metric-item">
-                                <span class="metric-name">Spread:</span>
-                                <span class="metric-source">Calculated: <code>best_ask - best_bid</code></span>
-                            </div>
-                        </div>
-                    </div>
-                </details>
+        <!-- Right Panel: Whale Events -->
+        <div class="events-panel">
+          <div class="events-header">
+            <h2>Whale Events</h2>
+            <div class="events-filters">
+              <input
+                type="text"
+                id="event-search"
+                placeholder="Search events..."
+                class="search-input"
+              />
+              <select id="event-type-filter" class="filter-select">
+                <option value="">All Types</option>
+                <option value="new_bid">New Bid</option>
+                <option value="new_ask">New Ask</option>
+                <option value="increase">Volume Increase</option>
+                <option value="decrease">Volume Decrease</option>
+                <option value="market_buy">Market Buy</option>
+                <option value="market_sell">Market Sell</option>
+                <option value="entered_top">Entered Top</option>
+                <option value="left_top">Left Top</option>
+              </select>
+              <div class="usd-filter-container">
+                <label for="min-usd-filter">Min USD:</label>
+                <input
+                  type="number"
+                  id="min-usd-filter"
+                  placeholder="0"
+                  min="0"
+                  step="1000"
+                  class="usd-filter-input"
+                />
+              </div>
             </div>
+          </div>
 
-            <!-- Right Panel: Whale Events -->
-            <div class="events-panel">
-                <div class="events-header">
-                    <h2>Whale Events</h2>
-                    <div class="events-filters">
-                        <input type="text" id="event-search" placeholder="Search events..." class="search-input">
-                        <select id="event-type-filter" class="filter-select">
-                            <option value="">All Types</option>
-                            <option value="new_bid">New Bid</option>
-                            <option value="new_ask">New Ask</option>
-                            <option value="increase">Volume Increase</option>
-                            <option value="decrease">Volume Decrease</option>
-                            <option value="market_buy">Market Buy</option>
-                            <option value="market_sell">Market Sell</option>
-                            <option value="entered_top">Entered Top</option>
-                            <option value="left_top">Left Top</option>
-                        </select>
-                        <div class="usd-filter-container">
-                            <label for="min-usd-filter">Min USD:</label>
-                            <input type="number" id="min-usd-filter" placeholder="0" min="0" step="1000" class="usd-filter-input">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Event Statistics -->
-                <div id="event-stats" class="event-stats">
-                    <div class="event-stat">
-                        <span class="event-stat-label">Total Events:</span>
-                        <span id="event-stat-total" class="event-stat-value">0</span>
-                    </div>
-                    <div class="event-stat">
-                        <span class="event-stat-label">Total Volume:</span>
-                        <span id="event-stat-volume" class="event-stat-value">$0</span>
-                    </div>
-                    <div class="event-stat">
-                        <span class="event-stat-label">Biggest Whale:</span>
-                        <span id="event-stat-biggest" class="event-stat-value">$0</span>
-                    </div>
-                    <div class="event-stat">
-                        <span class="event-stat-label">Biggest (During):</span>
-                        <span id="event-stat-biggest-during" class="event-stat-value">$0</span>
-                    </div>
-                </div>
-
-                <!-- Analytical Insights -->
-                <div id="insights-panel" class="insights-panel" style="display: none;">
-                    <div class="insights-header">📊 Analysis</div>
-                    <div id="insights-content" class="insights-content"></div>
-                </div>
-
+          <!-- Event Statistics -->
+          <div id="event-stats" class="event-stats">
+            <div class="event-stat">
+              <span class="event-stat-label">Total Events:</span>
+              <span id="event-stat-total" class="event-stat-value">0</span>
             </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Total Volume:</span>
+              <span id="event-stat-volume" class="event-stat-value">$0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Biggest Whale:</span>
+              <span id="event-stat-biggest" class="event-stat-value">$0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Biggest (During):</span>
+              <span id="event-stat-biggest-during" class="event-stat-value"
+                >$0</span
+              >
+            </div>
+          </div>
+
+          <!-- Analytical Insights -->
+          <div id="insights-panel" class="insights-panel" style="display: none">
+            <div class="insights-header">📊 Analysis</div>
+            <div id="insights-content" class="insights-content"></div>
+          </div>
         </div>
+      </div>
 
-        <!-- Footer -->
-        <footer class="footer">
-            <p>Price Change Analyzer Dashboard | Powered by <a href="https://www.tradingview.com" target="_blank">TradingView Lightweight Charts</a></p>
-        </footer>
+      <!-- Footer -->
+      <footer class="footer">
+        <p>
+          Price Change Analyzer Dashboard | Powered by
+          <a href="https://www.tradingview.com" target="_blank"
+            >TradingView Lightweight Charts</a
+          >
+        </p>
+      </footer>
     </div>
 
     <!-- Error Toast -->
-    <div id="error-toast" class="error-toast" style="display: none;">
-        <span id="error-message"></span>
-        <button onclick="this.parentElement.style.display='none'">&times;</button>
+    <div id="error-toast" class="error-toast" style="display: none">
+      <span id="error-message"></span>
+      <button onclick="this.parentElement.style.display='none'">&times;</button>
     </div>
 
     <!-- Event Details Modal -->
-    <div id="event-details-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-title">Whale Events at Time</h3>
-                <button class="modal-close" onclick="document.getElementById('event-details-modal').style.display='none'">&times;</button>
-            </div>
-            <div id="modal-body" class="modal-body"></div>
+    <div id="event-details-modal" class="modal" style="display: none">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">Whale Events at Time</h3>
+          <button
+            class="modal-close"
+            onclick="document.getElementById('event-details-modal').style.display='none'"
+          >
+            &times;
+          </button>
         </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
     </div>
 
     <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
-</body>
+  </body>
 </html>
