@@ -13,40 +13,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLoading(false);
 });
 
-// Load available data files
+// Load available analyses from MongoDB
 async function loadFileList() {
     try {
         const response = await fetch('/api/files');
         const data = await response.json();
 
         const selector = document.getElementById('file-selector');
-        selector.innerHTML = '<option value="">Select a file...</option>';
+        selector.innerHTML = '<option value="">Select an analysis...</option>';
 
         if (data.files && data.files.length > 0) {
             data.files.forEach(file => {
                 const option = document.createElement('option');
-                option.value = file.filename;
-                const date = new Date(file.modified * 1000);
-                option.textContent = `${file.filename} (${date.toLocaleString()})`;
+                option.value = file.id;  // Use MongoDB ID instead of filename
+                const date = file.created_at ? new Date(file.created_at) : new Date();
+                const symbol = file.symbol || 'Unknown';
+                option.textContent = `${symbol} - ${date.toLocaleString()} (${file.id.substring(0, 8)}...)`;
                 selector.appendChild(option);
             });
         } else {
-            selector.innerHTML = '<option value="">No files found</option>';
+            selector.innerHTML = '<option value="">No analyses found</option>';
         }
     } catch (error) {
-        console.error('Error loading file list:', error);
-        showError('Failed to load file list: ' + error.message);
+        console.error('Error loading analysis list:', error);
+        showError('Failed to load analyses: ' + error.message);
     }
 }
 
-// Load data from selected file
-async function loadDataFile(filename) {
-    if (!filename) return;
+// Load data from selected analysis
+async function loadDataFile(analysisId) {
+    if (!analysisId) return;
 
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/data/${filename}`);
+        const response = await fetch(`/api/data/${analysisId}`);
         let data = await response.json();
 
         console.log('Loaded data:', data);
@@ -55,25 +56,24 @@ async function loadDataFile(filename) {
             throw new Error(data.error);
         }
 
-        // Handle new JSON format with metadata or old format (array)
-        let intervals, metadata;
+        // Handle MongoDB format: {analysis: {...}, intervals: [...]}
+        let intervals, analysis;
         if (Array.isArray(data)) {
-            // Old format: array of intervals
+            // Legacy format
             intervals = data;
-            metadata = null;
+            analysis = null;
         } else {
-            // New format: {metadata: {...}, intervals: [...]}
             intervals = data.intervals;
-            metadata = data.metadata;
+            analysis = data.analysis;
         }
 
         console.log('Intervals:', intervals);
-        console.log('Metadata:', metadata);
+        console.log('Analysis:', analysis);
 
         currentData = intervals;
 
         // Extract and display analysis metadata
-        updateAnalysisInfo(filename, intervals, metadata);
+        updateAnalysisInfo(analysisId, intervals, analysis);
 
         // If multiple intervals, show selector
         if (intervals.length > 1) {
@@ -96,14 +96,14 @@ async function loadDataFile(filename) {
 }
 
 // Update analysis metadata display
-function updateAnalysisInfo(filename, intervals, metadata) {
+function updateAnalysisInfo(analysisId, intervals, analysis) {
     const infoElement = document.getElementById('analysis-info');
 
-    if (metadata && metadata.symbol && metadata.interval_duration && metadata.threshold_pct != null) {
-        document.getElementById('info-symbol').textContent = metadata.symbol;
-        document.getElementById('info-interval').textContent = metadata.interval_duration;
-        document.getElementById('info-threshold').textContent = `${metadata.threshold_pct.toFixed(3)}%`;
-        document.getElementById('info-count').textContent = intervals.length;
+    if (analysis && analysis.symbol) {
+        document.getElementById('info-symbol').textContent = analysis.symbol || 'N/A';
+        document.getElementById('info-interval').textContent = analysis.interval || 'N/A';
+        document.getElementById('info-lookback').textContent = analysis.lookback || 'N/A';
+        document.getElementById('info-threshold').textContent = analysis.min_change ? `${analysis.min_change}%` : 'N/A';
         infoElement.style.display = 'grid';
     } else {
         infoElement.style.display = 'none';
@@ -1561,12 +1561,14 @@ async function runAnalysis() {
 
         await loadFileList();
 
-        // Select the new file
+        // Select the new analysis by MongoDB ID
         const selector = document.getElementById('file-selector');
-        const option = Array.from(selector.options).find(opt => opt.value === result.filename);
-        if (option) {
-            selector.value = result.filename;
-            await loadDataFile(result.filename);
+        if (result.id) {
+            const option = Array.from(selector.options).find(opt => opt.value === result.id);
+            if (option) {
+                selector.value = result.id;
+                await loadDataFile(result.id);
+            }
         }
 
         // Close modal

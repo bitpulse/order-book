@@ -374,7 +374,12 @@ class WhaleMonitor:
             }
 
         export_data = {
-            **result,
+            'analysis': {
+                'symbol': self.symbol,
+                'lookback': self.lookback,
+                'min_usd': self.min_usd,
+                'timestamp': datetime.now().isoformat()
+            },
             'categories': {
                 cat: [serialize_event(e) for e in events]
                 for cat, events in result['categories'].items()
@@ -396,11 +401,40 @@ class WhaleMonitor:
             ]
         }
 
-        with open(output_file, 'w') as f:
-            json.dump(export_data, f, indent=2)
+        # Save to MongoDB (primary storage)
+        analysis_id = None
+        save_to_file = False
+        try:
+            # Import here to avoid circular dependencies
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from src.mongodb_storage import get_mongodb_storage
 
-        print(f"{GREEN}Exported to: {output_file}{RESET}")
-        return output_file
+            mongo = get_mongodb_storage()
+            if mongo:
+                metadata = {
+                    'filename': os.path.basename(output_file) if output_file else f'whale_monitor_{self.symbol}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
+                    'top_n': self.top_n,
+                    'max_distance': self.max_distance
+                }
+                analysis_id = mongo.save_analysis('whale_monitor', export_data, metadata)
+                print(f"{GREEN}✓ Saved to MongoDB with ID: {analysis_id}{RESET}")
+                mongo.close()
+            else:
+                print(f"{YELLOW}Warning: MongoDB not available, saving to file instead{RESET}")
+                save_to_file = True
+        except Exception as e:
+            print(f"{YELLOW}Warning: Could not save to MongoDB: {e}{RESET}")
+            save_to_file = True
+
+        # Optionally save to JSON file (backup or if MongoDB failed)
+        if save_to_file and output_file:
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            with open(output_file, 'w') as f:
+                json.dump(export_data, f, indent=2)
+            print(f"{GREEN}✓ Backup saved to {output_file}{RESET}")
+
+        return analysis_id
 
     def export_csv(self, result: Dict, output_file: str = None):
         """Export results to CSV file"""

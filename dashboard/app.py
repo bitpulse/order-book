@@ -31,6 +31,83 @@ DATA_DIR = BASE_DIR / 'data'
 LIVE_DIR = BASE_DIR / 'live'
 
 
+def get_analyses_from_mongodb(collection_name, limit=100):
+    """
+    Get analyses from MongoDB only
+    Returns list of analysis metadata
+    """
+    analyses = []
+
+    try:
+        import sys
+        sys.path.insert(0, str(BASE_DIR))
+        from src.mongodb_storage import get_mongodb_storage
+        from datetime import datetime
+
+        mongo = get_mongodb_storage()
+        if mongo:
+            results = mongo.get_analyses(collection_name, limit=limit)
+            for analysis in results:
+                # Handle created_at - could be datetime or string
+                created_at = analysis.get('created_at')
+                if created_at:
+                    if isinstance(created_at, datetime):
+                        created_at_iso = created_at.isoformat()
+                        created_at_ts = created_at.timestamp()
+                    else:
+                        created_at_iso = created_at
+                        try:
+                            created_at_ts = datetime.fromisoformat(created_at.replace('Z', '+00:00')).timestamp()
+                        except:
+                            created_at_ts = 0
+                else:
+                    created_at_iso = None
+                    created_at_ts = 0
+
+                analyses.append({
+                    'id': analysis['_id'],
+                    'filename': analysis.get('metadata', {}).get('filename', 'N/A'),
+                    'symbol': analysis.get('symbol'),
+                    'created_at': created_at_iso,
+                    'created_at_ts': created_at_ts,
+                    'source': 'mongodb'
+                })
+            mongo.close()
+
+            # Sort by creation time (newest first)
+            analyses.sort(key=lambda x: x.get('created_at_ts', 0), reverse=True)
+    except Exception as e:
+        import traceback
+        print(f"MongoDB query failed for {collection_name}: {e}")
+        print(traceback.format_exc())
+
+    return analyses
+
+
+def get_analysis_from_mongodb(collection_name, analysis_id):
+    """
+    Get a specific analysis from MongoDB by ID
+    Returns the analysis data or None
+    """
+    try:
+        import sys
+        sys.path.insert(0, str(BASE_DIR))
+        from src.mongodb_storage import get_mongodb_storage
+
+        mongo = get_mongodb_storage()
+        if mongo:
+            analysis = mongo.get_analysis_by_id(collection_name, analysis_id)
+            mongo.close()
+            if analysis:
+                return analysis['data']
+    except Exception as e:
+        import traceback
+        print(f"MongoDB query failed: {e}")
+        print(traceback.format_exc())
+
+    return None
+
+
 @app.route('/')
 def index():
     """Serve the main dashboard page"""
@@ -381,50 +458,22 @@ def get_live_stats():
 
 @app.route('/api/files')
 def list_files():
-    """List all available price change JSON files"""
+    """List all available price change analyses from MongoDB"""
     try:
-        if not DATA_DIR.exists():
-            return jsonify({'files': [], 'error': 'Data directory not found'})
-
-        # Find all price_changes_*.json files
-        files = []
-        for file_path in DATA_DIR.glob('price_changes_*.json'):
-            file_stat = file_path.stat()
-            files.append({
-                'filename': file_path.name,
-                'size': file_stat.st_size,
-                'modified': file_stat.st_mtime
-            })
-
-        # Sort by modification time (newest first)
-        files.sort(key=lambda x: x['modified'], reverse=True)
-
+        files = get_analyses_from_mongodb('price_changes')
         return jsonify({'files': files})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/data/<filename>')
-def get_data(filename):
-    """Serve a specific price change JSON file"""
+@app.route('/api/data/<analysis_id>')
+def get_data(analysis_id):
+    """Serve a specific price change analysis from MongoDB"""
     try:
-        # Security: only allow price_changes_*.json files
-        if not filename.startswith('price_changes_') or not filename.endswith('.json'):
-            return jsonify({'error': 'Invalid filename'}), 400
-
-        file_path = DATA_DIR / filename
-
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-
-        return jsonify(data)
-
-    except json.JSONDecodeError:
-        return jsonify({'error': 'Invalid JSON file'}), 500
+        data = get_analysis_from_mongodb('price_changes', analysis_id)
+        if data:
+            return jsonify(data)
+        return jsonify({'error': 'Analysis not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -452,72 +501,30 @@ def get_stats():
 
 @app.route('/api/top-market-orders-files')
 def list_top_market_orders_files():
-    """List ONLY top_market_orders_* JSON files"""
+    """List top_market_orders analyses from MongoDB"""
     try:
-        if not DATA_DIR.exists():
-            return jsonify({'files': [], 'error': 'Data directory not found'})
-
-        files = []
-        for file_path in DATA_DIR.glob('top_market_orders_*.json'):
-            file_stat = file_path.stat()
-            files.append({
-                'filename': file_path.name,
-                'size': file_stat.st_size,
-                'modified': file_stat.st_mtime
-            })
-
-        files.sort(key=lambda x: x['modified'], reverse=True)
-
+        files = get_analyses_from_mongodb('top_market_orders')
         return jsonify({'files': files})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/market-orders-intervals-files')
 def list_market_orders_intervals_files():
-    """List ONLY market_orders_* JSON files (intervals, not individual orders)"""
+    """List market_orders intervals analyses from MongoDB"""
     try:
-        if not DATA_DIR.exists():
-            return jsonify({'files': [], 'error': 'Data directory not found'})
-
-        files = []
-        for file_path in DATA_DIR.glob('market_orders_*.json'):
-            file_stat = file_path.stat()
-            files.append({
-                'filename': file_path.name,
-                'size': file_stat.st_size,
-                'modified': file_stat.st_mtime
-            })
-
-        files.sort(key=lambda x: x['modified'], reverse=True)
-
+        files = get_analyses_from_mongodb('market_orders_intervals')
         return jsonify({'files': files})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/whale-activity-files')
 def list_whale_activity_files():
-    """List ONLY whale_activity_* JSON files (all event types)"""
+    """List whale_activity analyses from MongoDB"""
     try:
-        if not DATA_DIR.exists():
-            return jsonify({'files': [], 'error': 'Data directory not found'})
-
-        files = []
-        for file_path in DATA_DIR.glob('whale_activity_*.json'):
-            file_stat = file_path.stat()
-            files.append({
-                'filename': file_path.name,
-                'size': file_stat.st_size,
-                'modified': file_stat.st_mtime
-            })
-
-        files.sort(key=lambda x: x['modified'], reverse=True)
-
+        files = get_analyses_from_mongodb('whale_activity')
         return jsonify({'files': files})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -550,74 +557,38 @@ def list_whale_files():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/top-market-orders-data/<filename>')
-def get_top_market_orders_data(filename):
-    """Serve a specific top_market_orders_* JSON file"""
+@app.route('/api/top-market-orders-data/<analysis_id>')
+def get_top_market_orders_data(analysis_id):
+    """Serve a specific top_market_orders analysis from MongoDB"""
     try:
-        # Security: only allow top_market_orders_* files
-        if not (filename.startswith('top_market_orders_') and filename.endswith('.json')):
-            return jsonify({'error': 'Invalid filename'}), 400
-
-        file_path = DATA_DIR / filename
-
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-
-        return jsonify(data)
-
-    except json.JSONDecodeError:
-        return jsonify({'error': 'Invalid JSON file'}), 500
+        data = get_analysis_from_mongodb('top_market_orders', analysis_id)
+        if data:
+            return jsonify(data)
+        return jsonify({'error': 'Analysis not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/market-orders-intervals-data/<filename>')
-def get_market_orders_intervals_data(filename):
-    """Serve a specific market_orders_* JSON file (intervals)"""
+@app.route('/api/market-orders-intervals-data/<analysis_id>')
+def get_market_orders_intervals_data(analysis_id):
+    """Serve a specific market_orders intervals analysis from MongoDB"""
     try:
-        # Security: only allow market_orders_* files
-        if not (filename.startswith('market_orders_') and filename.endswith('.json')):
-            return jsonify({'error': 'Invalid filename'}), 400
-
-        file_path = DATA_DIR / filename
-
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-
-        return jsonify(data)
-
-    except json.JSONDecodeError:
-        return jsonify({'error': 'Invalid JSON file'}), 500
+        data = get_analysis_from_mongodb('market_orders_intervals', analysis_id)
+        if data:
+            return jsonify(data)
+        return jsonify({'error': 'Analysis not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/whale-activity-data/<filename>')
-def get_whale_activity_data(filename):
-    """Serve a specific whale_activity_* JSON file (all event types)"""
+@app.route('/api/whale-activity-data/<analysis_id>')
+def get_whale_activity_data(analysis_id):
+    """Serve a specific whale_activity analysis from MongoDB"""
     try:
-        # Security: only allow whale_activity_* files
-        if not (filename.startswith('whale_activity_') and filename.endswith('.json')):
-            return jsonify({'error': 'Invalid filename'}), 400
-
-        file_path = DATA_DIR / filename
-
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-
-        return jsonify(data)
-
-    except json.JSONDecodeError:
-        return jsonify({'error': 'Invalid JSON file'}), 500
+        data = get_analysis_from_mongodb('whale_activity', analysis_id)
+        if data:
+            return jsonify(data)
+        return jsonify({'error': 'Analysis not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -696,19 +667,25 @@ def run_analysis():
             error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
             return jsonify({'error': f'Analysis failed: {error_msg}'}), 500
 
-        # Find the newly created file
-        files = sorted(DATA_DIR.glob(f'price_changes_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+        # Extract MongoDB ID from stdout
+        output = stdout.decode('utf-8') if stdout else ''
+        analysis_id = None
 
-        if files:
-            newest_file = files[0]
+        # Look for "MongoDB ID: <id>" in output
+        import re
+        match = re.search(r'MongoDB ID: ([a-f0-9]{24})', output)
+        if match:
+            analysis_id = match.group(1)
+
+        if analysis_id:
             return jsonify({
                 'success': True,
                 'message': 'Analysis completed successfully',
-                'filename': newest_file.name,
-                'output': stdout.decode('utf-8') if stdout else ''
+                'id': analysis_id,
+                'output': output
             })
         else:
-            return jsonify({'error': 'Analysis completed but no output file found'}), 500
+            return jsonify({'error': 'Analysis completed but no MongoDB ID found in output'}), 500
 
     except subprocess.TimeoutExpired:
         return jsonify({'error': 'Analysis timeout (exceeded 5 minutes)'}), 500
@@ -797,19 +774,21 @@ def run_whale_analysis():
             error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
             return jsonify({'error': f'Analysis failed: {error_msg}'}), 500
 
-        # Find the newly created file
-        files = sorted(DATA_DIR.glob(f'{file_prefix}_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+        # Extract MongoDB ID from stdout
+        output = stdout.decode('utf-8') if stdout else ''
+        import re
+        match = re.search(r'MongoDB ID: ([a-f0-9]{24})', output)
 
-        if files:
-            newest_file = files[0]
+        if match:
+            analysis_id = match.group(1)
             return jsonify({
                 'success': True,
                 'message': f'{analyzer_type.replace("_", " ").title()} analysis completed successfully',
-                'filename': newest_file.name,
-                'output': stdout.decode('utf-8') if stdout else ''
+                'id': analysis_id,
+                'output': output
             })
         else:
-            return jsonify({'error': 'Analysis completed but no output file found'}), 500
+            return jsonify({'error': 'Analysis completed but no MongoDB ID found in output'}), 500
 
     except subprocess.TimeoutExpired:
         return jsonify({'error': 'Analysis timeout (exceeded 5 minutes)'}), 500
@@ -819,50 +798,22 @@ def run_whale_analysis():
 
 @app.route('/api/whale-monitor-files')
 def list_whale_monitor_files():
-    """List all available whale monitor JSON files"""
+    """List whale_monitor analyses from MongoDB"""
     try:
-        if not DATA_DIR.exists():
-            return jsonify({'files': [], 'error': 'Data directory not found'})
-
-        # Find all whale_monitor_*.json files
-        files = []
-        for file_path in DATA_DIR.glob('whale_monitor_*.json'):
-            file_stat = file_path.stat()
-            files.append({
-                'filename': file_path.name,
-                'size': file_stat.st_size,
-                'modified': file_stat.st_mtime
-            })
-
-        # Sort by modification time (newest first)
-        files.sort(key=lambda x: x['modified'], reverse=True)
-
+        files = get_analyses_from_mongodb('whale_monitor')
         return jsonify({'files': files})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/whale-monitor-data/<filename>')
-def get_whale_monitor_data(filename):
-    """Serve a specific whale monitor JSON file"""
+@app.route('/api/whale-monitor-data/<analysis_id>')
+def get_whale_monitor_data(analysis_id):
+    """Serve a specific whale monitor analysis from MongoDB"""
     try:
-        # Security: only allow whale_monitor_*.json files
-        if not filename.startswith('whale_monitor_') or not filename.endswith('.json'):
-            return jsonify({'error': 'Invalid filename'}), 400
-
-        file_path = DATA_DIR / filename
-
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-
-        return jsonify(data)
-
-    except json.JSONDecodeError:
-        return jsonify({'error': 'Invalid JSON file'}), 500
+        data = get_analysis_from_mongodb('whale_monitor', analysis_id)
+        if data:
+            return jsonify(data)
+        return jsonify({'error': 'Analysis not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -921,19 +872,21 @@ def run_whale_monitor():
             error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
             return jsonify({'error': f'Monitor failed: {error_msg}'}), 500
 
-        # Find the newly created file
-        files = sorted(DATA_DIR.glob(f'whale_monitor_{symbol}_*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+        # Extract MongoDB ID from stdout
+        output = stdout.decode('utf-8') if stdout else ''
+        import re
+        match = re.search(r'MongoDB ID: ([a-f0-9]{24})', output)
 
-        if files:
-            newest_file = files[0]
+        if match:
+            analysis_id = match.group(1)
             return jsonify({
                 'success': True,
                 'message': 'Whale monitor completed successfully',
-                'filename': newest_file.name,
-                'output': stdout.decode('utf-8') if stdout else ''
+                'id': analysis_id,
+                'output': output
             })
         else:
-            return jsonify({'error': 'Monitor completed but no output file found'}), 500
+            return jsonify({'error': 'Monitor completed but no MongoDB ID found in output'}), 500
 
     except subprocess.TimeoutExpired:
         return jsonify({'error': 'Monitor timeout (exceeded 5 minutes)'}), 500
