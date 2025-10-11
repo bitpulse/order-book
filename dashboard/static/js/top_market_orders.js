@@ -35,28 +35,29 @@ async function loadFileList() {
         if (data.files && data.files.length > 0) {
             data.files.forEach(file => {
                 const option = document.createElement('option');
-                option.value = file.filename;
-                const date = new Date(file.modified * 1000);
-                option.textContent = `${file.filename} (${date.toLocaleString()})`;
+                option.value = file.id;  // Use MongoDB ID
+                const date = file.created_at ? new Date(file.created_at) : new Date();
+                const symbol = file.symbol || 'Unknown';
+                option.textContent = `${symbol} - ${date.toLocaleString()} (${file.id.substring(0, 8)}...)`;
                 selector.appendChild(option);
             });
         } else {
-            selector.innerHTML = '<option value="">No files found</option>';
+            selector.innerHTML = '<option value="">No analyses found</option>';
         }
     } catch (error) {
-        console.error('Error loading file list:', error);
-        showError('Failed to load file list: ' + error.message);
+        console.error('Error loading analysis list:', error);
+        showError('Failed to load analyses: ' + error.message);
     }
 }
 
-// Load data from selected file
-async function loadDataFile(filename) {
-    if (!filename) return;
+// Load data from selected analysis
+async function loadDataFile(analysisId) {
+    if (!analysisId) return;
 
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/top-market-orders-data/${filename}`);
+        const response = await fetch(`/api/top-market-orders-data/${analysisId}`);
         let data = await response.json();
 
         console.log('Loaded whale activity data:', data);

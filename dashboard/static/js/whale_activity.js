@@ -24,9 +24,10 @@ async function loadFileList() {
         if (data.files && data.files.length > 0) {
             data.files.forEach(file => {
                 const option = document.createElement('option');
-                option.value = file.filename;
-                const date = new Date(file.modified * 1000);
-                option.textContent = `${file.filename} (${date.toLocaleString()})`;
+                option.value = file.id;  // Use MongoDB ID
+                const date = file.created_at ? new Date(file.created_at) : new Date();
+                const symbol = file.symbol || 'Unknown';
+                option.textContent = `${symbol} - ${date.toLocaleString()} (${file.id.substring(0, 8)}...)`;
                 selector.appendChild(option);
             });
         } else {
@@ -38,14 +39,14 @@ async function loadFileList() {
     }
 }
 
-// Load data from selected file
-async function loadDataFile(filename) {
-    if (!filename) return;
+// Load data from selected analysis
+async function loadDataFile(analysisId) {
+    if (!analysisId) return;
 
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/whale-activity-data/${filename}`);
+        const response = await fetch(`/api/whale-activity-data/${analysisId}`);
         let data = await response.json();
 
         console.log('Loaded whale activity data:', data);
@@ -922,12 +923,12 @@ async function runAnalysis() {
         // Close modal
         document.getElementById('new-analysis-modal').style.display = 'none';
 
-        // Reload file list and select new file
+        // Reload file list and select new analysis
         await loadFileList();
 
-        if (result.filename) {
-            document.getElementById('file-selector').value = result.filename;
-            await loadDataFile(result.filename);
+        if (result.id) {
+            document.getElementById('file-selector').value = result.id;
+            await loadDataFile(result.id);
         }
 
     } catch (error) {

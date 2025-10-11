@@ -24,52 +24,45 @@ async function loadFileList() {
         if (data.files && data.files.length > 0) {
             data.files.forEach(file => {
                 const option = document.createElement('option');
-                option.value = file.filename;
-                const date = new Date(file.modified * 1000);
-                option.textContent = `${file.filename} (${date.toLocaleString()})`;
+                option.value = file.id;  // Use MongoDB ID
+                const date = file.created_at ? new Date(file.created_at) : new Date();
+                const symbol = file.symbol || 'Unknown';
+                option.textContent = `${symbol} - ${date.toLocaleString()} (${file.id.substring(0, 8)}...)`;
                 selector.appendChild(option);
             });
         } else {
-            selector.innerHTML = '<option value="">No files found</option>';
+            selector.innerHTML = '<option value="">No analyses found</option>';
         }
     } catch (error) {
-        console.error('Error loading file list:', error);
-        showError('Failed to load file list: ' + error.message);
+        console.error('Error loading analysis list:', error);
+        showError('Failed to load analyses: ' + error.message);
     }
 }
 
-// Load data from selected file
-async function loadDataFile(filename) {
-    if (!filename) return;
+// Load data from selected analysis
+async function loadDataFile(analysisId) {
+    if (!analysisId) return;
 
     showLoading(true);
 
     try {
-        const response = await fetch(`/api/market-orders-intervals-data/${filename}`);
+        const response = await fetch(`/api/market-orders-intervals-data/${analysisId}`);
         let data = await response.json();
 
-        console.log('Loaded whale activity data:', data);
+        console.log('Loaded analysis data:', data);
 
         if (data.error) {
             throw new Error(data.error);
         }
 
-        // Handle JSON format with metadata
+        // Handle MongoDB format
         let intervals = data.intervals || [];
         let orders = data.orders || [];
-        let metadata = data.metadata;
-
+        let analysis = data.analysis;
         console.log('Intervals:', intervals);
         console.log('Orders:', orders);
-        console.log('Metadata:', metadata);
+        console.log('Analysis:', analysis);
 
-        // Detect which format: intervals (old) or orders (new)
-        const isOrderFormat = metadata && metadata.analyzer === 'top_market_orders';
-
-        if (isOrderFormat) {
-            // New format: individual orders
-            // Convert to pseudo-interval format for compatibility
-            const pseudoInterval = {
                 rank: 1,
                 symbol: metadata.symbol,
                 start_time: data.start_time,

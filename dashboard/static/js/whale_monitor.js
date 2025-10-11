@@ -29,7 +29,6 @@ function setupEventListeners() {
     document.getElementById('file-selector').addEventListener('change', function() {
         if (this.value) loadWhaleData(this.value);
     });
-
     // Refresh
     document.getElementById('refresh-btn').addEventListener('click', () => loadFileList());
 
@@ -154,23 +153,24 @@ async function loadFileList() {
 
         if (data.files && data.files.length > 0) {
             data.files.forEach(f => {
-                const date = new Date(f.modified * 1000);
                 const opt = document.createElement('option');
-                opt.value = f.filename;
-                opt.textContent = `${f.filename} (${date.toLocaleString()})`;
+                opt.value = f.id;  // Use MongoDB ID
+                const date = f.created_at ? new Date(f.created_at) : new Date();
+                const symbol = f.symbol || 'Unknown';
+                opt.textContent = `${symbol} - ${date.toLocaleString()} (${f.id.substring(0, 8)}...)`;
                 selector.appendChild(opt);
             });
-            selector.value = data.files[0].filename;
-            loadWhaleData(data.files[0].filename);
+            selector.value = data.files[0].id;
+            loadWhaleData(data.files[0].id);
         }
     } catch (err) {
         console.error('Error loading files:', err);
     }
 }
 
-async function loadWhaleData(filename) {
+async function loadWhaleData(analysisId) {
     try {
-        const res = await fetch(`/api/whale-monitor-data/${filename}`);
+        const res = await fetch(`/api/whale-monitor-data/${analysisId}`);
         const data = await res.json();
         currentData = data;
 

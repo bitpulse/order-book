@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     influxdb_org: str = Field(default="bitpulse")
     influxdb_bucket: str = Field(default="orderbook")
 
+    # MongoDB Configuration
+    mongodb_url: str = Field(default="mongodb://localhost:27017")
+    mongodb_database: str = Field(default="orderbook_analytics")
+
     # MEXC Configuration
     mexc_websocket_url: str = Field(default="wss://contract.mexc.com/edge")
 
