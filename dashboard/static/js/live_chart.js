@@ -55,13 +55,29 @@ function playBeep(frequency, duration) {
     oscillator.stop(audioContext.currentTime + duration);
 }
 
+// Get configuration from URL params, localStorage, or defaults
+function getConfig() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return {
+        symbol: urlParams.get('symbol') || localStorage.getItem('live_chart_symbol') || 'SPX_USDT',
+        lookback: urlParams.get('lookback') || localStorage.getItem('live_chart_lookback') || '5m',
+        minUsd: parseFloat(urlParams.get('minUsd') || localStorage.getItem('live_chart_minUsd') || '5000'),
+        refreshInterval: 1000 // 1000ms (1 update per second)
+    };
+}
+
+// Update URL with current config
+function updateURL() {
+    const params = new URLSearchParams();
+    params.set('symbol', config.symbol);
+    params.set('lookback', config.lookback);
+    params.set('minUsd', config.minUsd);
+    const newURL = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', newURL);
+}
+
 // Configuration
-const config = {
-    symbol: 'SPX_USDT',
-    lookback: '5m',
-    minUsd: 5000,
-    refreshInterval: 1000 // 1000ms (1 update per second)
-};
+const config = getConfig();
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', async () => {
@@ -70,6 +86,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Load symbols configuration first
         await loadSymbols();
+
+        // Set UI elements to saved values
+        document.getElementById('lookback-select').value = config.lookback;
+        document.getElementById('min-usd-input').value = config.minUsd;
+
+        // Update URL to reflect current config
+        updateURL();
 
         await initChart();
         setupEventListeners();
@@ -107,9 +130,9 @@ async function loadSymbols() {
             const option = document.createElement('option');
             option.value = symbol;
             option.textContent = symbol;
-            if (symbol === data.default) {
+            // Select saved symbol from localStorage, or default
+            if (symbol === config.symbol) {
                 option.selected = true;
-                config.symbol = symbol;
             }
             symbolSelect.appendChild(option);
         });
@@ -1007,9 +1030,32 @@ async function refreshData(incremental = false) {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Copy symbol button
+    document.getElementById('copy-symbol-btn').addEventListener('click', async () => {
+        const symbolText = document.getElementById('info-symbol').textContent;
+        const copyBtn = document.getElementById('copy-symbol-btn');
+        try {
+            await navigator.clipboard.writeText(symbolText);
+            copyBtn.textContent = '✓';
+            copyBtn.style.background = 'rgba(0, 255, 163, 0.3)';
+            setTimeout(() => {
+                copyBtn.textContent = '📋';
+                copyBtn.style.background = 'rgba(0, 255, 163, 0.1)';
+            }, 1500);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            copyBtn.textContent = '✗';
+            setTimeout(() => {
+                copyBtn.textContent = '📋';
+            }, 1500);
+        }
+    });
+
     // Symbol selector
     document.getElementById('symbol-select').addEventListener('change', (e) => {
         config.symbol = e.target.value;
+        localStorage.setItem('live_chart_symbol', config.symbol);
+        updateURL();
         lastUpdateTime = null;
         userHasZoomed = false; // Reset zoom tracking
         refreshData(false);
@@ -1018,6 +1064,8 @@ function setupEventListeners() {
     // Lookback selector
     document.getElementById('lookback-select').addEventListener('change', (e) => {
         config.lookback = e.target.value;
+        localStorage.setItem('live_chart_lookback', config.lookback);
+        updateURL();
         lastUpdateTime = null;
         userHasZoomed = false; // Reset zoom tracking
         refreshData(false);
@@ -1026,6 +1074,8 @@ function setupEventListeners() {
     // Min USD input
     document.getElementById('min-usd-input').addEventListener('change', (e) => {
         config.minUsd = parseFloat(e.target.value) || 5000;
+        localStorage.setItem('live_chart_minUsd', config.minUsd.toString());
+        updateURL();
         lastUpdateTime = null;
         userHasZoomed = false; // Reset zoom tracking
         refreshData(false);
