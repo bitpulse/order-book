@@ -733,9 +733,8 @@ function prepareWhaleScatterData(events) {
             // All values are the same
             size = baseSize;
         } else {
-            // Logarithmic scaling for better distribution
-            const normalizedValue = (Math.log(event.usd_value + 1) - Math.log(minUsd + 1)) /
-                                   (Math.log(maxUsd + 1) - Math.log(minUsd + 1));
+            // Linear scaling for proportional size difference
+            const normalizedValue = (event.usd_value - minUsd) / (maxUsd - minUsd);
             size = minSize + (maxSize - minSize) * normalizedValue;
         }
 
