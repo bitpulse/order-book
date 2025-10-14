@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO")
     log_file: str = Field(default="logs/orderbook_collector.log")
 
+    # Telegram Configuration
+    telegram_bot_token: Optional[str] = Field(default=None)
+    telegram_chat_id: Optional[str] = Field(default=None)
+
     # Performance
     batch_size: int = Field(default=100)
     batch_timeout: float = Field(default=1.0)

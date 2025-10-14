@@ -33,9 +33,15 @@ from data_models import TradingSignal, PatternDetection
 class AdvancedAnalysisRunner:
     """Main runner for comprehensive order book analysis"""
 
-    def __init__(self):
+    def __init__(self, influx_timeout: int = 120000):
+        """
+        Initialize analysis runner
+
+        Args:
+            influx_timeout: InfluxDB query timeout in milliseconds (default: 120s)
+        """
         # Initialize all modules
-        self.data_extractor = DataExtractor()
+        self.data_extractor = DataExtractor(timeout=influx_timeout)
         self.ofi_calculator = OFICalculator()
         self.iceberg_detector = IcebergDetector()
         self.spoofing_detector = SpoofingDetector()

@@ -18,12 +18,19 @@ from src.config import get_settings
 class DataExtractor:
     """Extract and align order book data from InfluxDB"""
 
-    def __init__(self):
+    def __init__(self, timeout: int = 60000):
+        """
+        Initialize data extractor
+
+        Args:
+            timeout: Query timeout in milliseconds (default: 60000 = 60s)
+        """
         self.settings = get_settings()
         self.client = InfluxDBClient(
             url=self.settings.influxdb_url,
             token=self.settings.influxdb_token,
-            org=self.settings.influxdb_org
+            org=self.settings.influxdb_org,
+            timeout=timeout
         )
         self.query_api = self.client.query_api()
         self.bucket = self.settings.influxdb_bucket
