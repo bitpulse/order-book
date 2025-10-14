@@ -967,6 +967,17 @@ function updateEventList() {
 }
 
 // Update stats
+// Format large numbers with K/M notation
+function formatLargeNumber(value) {
+    if (value >= 1000000) {
+        return '$' + (value / 1000000).toFixed(2) + 'M';
+    } else if (value >= 1000) {
+        return '$' + (value / 1000).toFixed(1) + 'K';
+    } else {
+        return '$' + value.toFixed(0);
+    }
+}
+
 function updateStats() {
     if (priceData.length === 0) return;
 
@@ -987,7 +998,18 @@ function updateStats() {
     const sellVolume = marketSells.reduce((sum, e) => sum + e.usd_value, 0);
     const netFlow = buyVolume - sellVolume;
 
-    // Update DOM
+    // Calculate averages
+    const avgBuy = marketBuys.length > 0 ? buyVolume / marketBuys.length : 0;
+    const avgSell = marketSells.length > 0 ? sellVolume / marketSells.length : 0;
+
+    // Find largest orders
+    const largestBuy = marketBuys.length > 0 ? Math.max(...marketBuys.map(e => e.usd_value)) : 0;
+    const largestSell = marketSells.length > 0 ? Math.max(...marketSells.map(e => e.usd_value)) : 0;
+
+    // Buy/Sell ratio
+    const buySellRatio = sellVolume > 0 ? buyVolume / sellVolume : (buyVolume > 0 ? 999 : 0);
+
+    // Update price info
     document.getElementById('stat-current-price').textContent = '$' + currentPrice.toFixed(6);
 
     const changeEl = document.getElementById('stat-price-change');
@@ -995,13 +1017,39 @@ function updateStats() {
                           ' (' + (priceChange >= 0 ? '+' : '') + priceChangePct.toFixed(2) + '%)';
     changeEl.style.color = priceChange >= 0 ? '#00ffa3' : '#ff3b69';
 
-    document.getElementById('stat-total-events').textContent = whaleEvents.length.toLocaleString();
+    // Update market order stats
+    document.getElementById('stat-avg-buy').textContent = formatLargeNumber(avgBuy);
+    document.getElementById('stat-avg-sell').textContent = formatLargeNumber(avgSell);
+    document.getElementById('stat-largest-buy').textContent = formatLargeNumber(largestBuy);
+    document.getElementById('stat-largest-sell').textContent = formatLargeNumber(largestSell);
+
+    // Update volume stats
+    document.getElementById('stat-buy-volume').textContent = formatLargeNumber(buyVolume);
+    document.getElementById('stat-sell-volume').textContent = formatLargeNumber(sellVolume);
 
     const flowEl = document.getElementById('stat-net-flow');
-    flowEl.textContent = (netFlow >= 0 ? '+' : '') + '$' + netFlow.toLocaleString();
+    flowEl.textContent = (netFlow >= 0 ? '+' : '') + formatLargeNumber(Math.abs(netFlow));
     flowEl.style.color = netFlow >= 0 ? '#00ffa3' : '#ff3b69';
 
-    document.getElementById('stat-data-points').textContent = priceData.length.toLocaleString();
+    // Update buy/sell ratio
+    const ratioEl = document.getElementById('stat-buy-sell-ratio');
+    if (buySellRatio >= 999) {
+        ratioEl.textContent = '∞';
+        ratioEl.style.color = '#00ffa3';
+    } else if (buySellRatio === 0) {
+        ratioEl.textContent = '0';
+        ratioEl.style.color = '#ff3b69';
+    } else {
+        ratioEl.textContent = buySellRatio.toFixed(2);
+        ratioEl.style.color = buySellRatio > 1 ? '#00ffa3' : '#ff3b69';
+    }
+
+    // Update order book stats
+    document.getElementById('stat-new-bids').textContent = newBids.length;
+    document.getElementById('stat-new-asks').textContent = newAsks.length;
+
+    // Update general stats
+    document.getElementById('stat-total-events').textContent = whaleEvents.length.toLocaleString();
     document.getElementById('stat-last-update').textContent = new Date().toLocaleTimeString();
 
     // Event stats - matching new categorization

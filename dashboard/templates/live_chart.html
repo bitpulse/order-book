@@ -144,6 +144,7 @@
 
           <!-- Stats Summary -->
           <div id="stats-summary" class="stats-summary">
+            <!-- Column 1: Price -->
             <div class="stat-item">
               <span class="stat-label">Current Price:</span>
               <span id="stat-current-price" class="stat-value">-</span>
@@ -152,17 +153,61 @@
               <span class="stat-label">Change:</span>
               <span id="stat-price-change" class="stat-value">-</span>
             </div>
+
+            <!-- Column 2: Average Sizes -->
             <div class="stat-item">
-              <span class="stat-label">Events:</span>
-              <span id="stat-total-events" class="stat-value">-</span>
+              <span class="stat-label">Avg Market Buy:</span>
+              <span id="stat-avg-buy" class="stat-value stat-bullish">-</span>
             </div>
+            <div class="stat-item">
+              <span class="stat-label">Avg Market Sell:</span>
+              <span id="stat-avg-sell" class="stat-value stat-bearish">-</span>
+            </div>
+
+            <!-- Column 3: Largest Orders -->
+            <div class="stat-item">
+              <span class="stat-label">Largest Buy:</span>
+              <span id="stat-largest-buy" class="stat-value stat-bullish">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Largest Sell:</span>
+              <span id="stat-largest-sell" class="stat-value stat-bearish">-</span>
+            </div>
+
+            <!-- Column 4: Volume -->
+            <div class="stat-item">
+              <span class="stat-label">Buy Volume:</span>
+              <span id="stat-buy-volume" class="stat-value stat-bullish">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Sell Volume:</span>
+              <span id="stat-sell-volume" class="stat-value stat-bearish">-</span>
+            </div>
+
+            <!-- Column 5: Flow & Ratio -->
             <div class="stat-item">
               <span class="stat-label">Net Flow:</span>
               <span id="stat-net-flow" class="stat-value">-</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Data Points:</span>
-              <span id="stat-data-points" class="stat-value">-</span>
+              <span class="stat-label">Buy/Sell Ratio:</span>
+              <span id="stat-buy-sell-ratio" class="stat-value">-</span>
+            </div>
+
+            <!-- Column 6: Order Book -->
+            <div class="stat-item">
+              <span class="stat-label">New Bids:</span>
+              <span id="stat-new-bids" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">New Asks:</span>
+              <span id="stat-new-asks" class="stat-value">-</span>
+            </div>
+
+            <!-- Column 7: General -->
+            <div class="stat-item">
+              <span class="stat-label">Total Events:</span>
+              <span id="stat-total-events" class="stat-value">-</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">Last Update:</span>
