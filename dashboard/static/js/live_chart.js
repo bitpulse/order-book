@@ -1094,27 +1094,6 @@ async function refreshData(incremental = false) {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Copy symbol button
-    document.getElementById('copy-symbol-btn').addEventListener('click', async () => {
-        const symbolText = document.getElementById('info-symbol').textContent;
-        const copyBtn = document.getElementById('copy-symbol-btn');
-        try {
-            await navigator.clipboard.writeText(symbolText);
-            copyBtn.textContent = '✓';
-            copyBtn.style.background = 'rgba(0, 255, 163, 0.3)';
-            setTimeout(() => {
-                copyBtn.textContent = '📋';
-                copyBtn.style.background = 'rgba(0, 255, 163, 0.1)';
-            }, 1500);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-            copyBtn.textContent = '✗';
-            setTimeout(() => {
-                copyBtn.textContent = '📋';
-            }, 1500);
-        }
-    });
-
     // Symbol selector
     document.getElementById('symbol-select').addEventListener('change', (e) => {
         config.symbol = e.target.value;
