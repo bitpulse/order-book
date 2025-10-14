@@ -23,6 +23,9 @@ let filters = {
     askIncrease: true
 };
 
+// Event list filter
+let eventTypeFilter = ''; // '', 'market_buy', 'market_sell', 'bid', 'ask'
+
 // Sound notification state
 let soundEnabled = true;
 let lastEventIds = new Set(); // Track which events we've already played sounds for
@@ -885,7 +888,20 @@ function updateEventList() {
     if (!eventListEl) return;
 
     // Get all events and sort by time (most recent first)
-    const allEvents = [...whaleEvents].sort((a, b) => new Date(b.time) - new Date(a.time));
+    let allEvents = [...whaleEvents].sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    // Apply filter
+    if (eventTypeFilter) {
+        if (eventTypeFilter === 'market_buy') {
+            allEvents = allEvents.filter(e => e.event_type === 'market_buy');
+        } else if (eventTypeFilter === 'market_sell') {
+            allEvents = allEvents.filter(e => e.event_type === 'market_sell');
+        } else if (eventTypeFilter === 'bid') {
+            allEvents = allEvents.filter(e => e.side === 'bid' || e.event_type.includes('bid'));
+        } else if (eventTypeFilter === 'ask') {
+            allEvents = allEvents.filter(e => e.side === 'ask' || e.event_type.includes('ask'));
+        }
+    }
 
     // Take top 30
     const topEvents = allEvents.slice(0, 30);
@@ -1152,6 +1168,12 @@ function setupEventListeners() {
         soundEnabled = !soundEnabled;
         soundToggleBtn.textContent = soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF';
         soundToggleBtn.title = soundEnabled ? 'Disable sound notifications' : 'Enable sound notifications';
+    });
+
+    // Event type filter
+    document.getElementById('event-type-filter').addEventListener('change', (e) => {
+        eventTypeFilter = e.target.value;
+        updateEventList();
     });
 
     // Initialize audio context on any user interaction (required by browsers)

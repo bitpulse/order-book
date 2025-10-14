@@ -1100,6 +1100,24 @@ details[open] .data-flow-toggle {
     color: var(--text-primary);
 }
 
+/* Whale Events List */
+.whale-events-list {
+    padding: 0.5rem;
+}
+
+.whale-event-item {
+    background: rgba(255, 255, 255, 0.02);
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.whale-event-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateX(4px);
+}
+
 /* Analytical Insights */
 .insights-panel {
     padding: 1.5rem;
