@@ -577,9 +577,8 @@ function createWhaleEventSeries(duringEvents, beforeEvents, afterEvents, interva
                     // All values are the same
                     size = baseSize;
                 } else {
-                    // Logarithmic scaling for better distribution (matches live_chart.js lines 686-700)
-                    const normalizedValue = (Math.log(event.usd_value + 1) - Math.log(globalMinUsd + 1)) /
-                                          (Math.log(globalMaxUsd + 1) - Math.log(globalMinUsd + 1));
+                    // Linear scaling for proportional size difference
+                    const normalizedValue = (event.usd_value - globalMinUsd) / (globalMaxUsd - globalMinUsd);
                     size = minSize + (maxSize - minSize) * normalizedValue;
                 }
 
