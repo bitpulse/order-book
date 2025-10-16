@@ -146,6 +146,10 @@ async function loadInterval(intervalData) {
     // Hide zero state and show chart
     showZeroState(false);
 
+    // Add loading state to stats
+    const statsContainer = document.getElementById('stats-summary');
+    statsContainer.classList.add('loading');
+
     // Check if this is new format (with time_windows) or old format (with embedded data)
     const isNewFormat = intervalData.time_windows && !intervalData.price_data;
 
@@ -173,6 +177,22 @@ function loadIntervalWithEmbeddedData(intervalData) {
 
     // Load whale events
     loadWhaleEvents(intervalData);
+
+    // Update analytics panels (skip hero and enhanced stats - they were removed)
+    const allWhaleEvents = [
+        ...(intervalData.whale_events_before || []),
+        ...(intervalData.whale_events || []),
+        ...(intervalData.whale_events_after || [])
+    ];
+    updateContextCards(intervalData, allWhaleEvents, intervalData.price_data);
+
+    // Update event type statistics panel
+    updateEventStatsPanel(
+        intervalData,
+        intervalData.whale_events_before,
+        intervalData.whale_events,
+        intervalData.whale_events_after
+    );
 }
 
 // Load interval with lazy loading (new format)
@@ -240,18 +260,12 @@ async function loadIntervalWithLazyLoading(intervalData) {
         // Load whale events
         loadWhaleEvents(intervalData);
 
-        // Update hero analytics bar
+        // Update analytics panels (skip hero and enhanced stats - they were removed)
         const allWhaleEvents = [
             ...intervalData.whale_events_before,
             ...intervalData.whale_events,
             ...intervalData.whale_events_after
         ];
-        updateHeroAnalytics(intervalData, allWhaleEvents, intervalData.price_data);
-
-        // Update enhanced stats
-        updateEnhancedStats(intervalData, allWhaleEvents);
-
-        // Update context cards
         updateContextCards(intervalData, allWhaleEvents, intervalData.price_data);
 
         // Update event type statistics panel
@@ -273,6 +287,10 @@ async function loadIntervalWithLazyLoading(intervalData) {
 
 // New function to update stats from pre-computed statistics
 function updateStatsFromStatistics(data) {
+    // Remove loading state
+    const statsContainer = document.getElementById('stats-summary');
+    statsContainer.classList.remove('loading');
+
     document.getElementById('stat-rank').textContent = `#${data.rank}`;
 
     const changeElem = document.getElementById('stat-change');
@@ -284,12 +302,6 @@ function updateStatsFromStatistics(data) {
     document.getElementById('stat-time').textContent = `${startTime} → ${endTime}`;
 
     document.getElementById('stat-price').textContent = `$${data.start_price.toFixed(6)} → $${data.end_price.toFixed(6)}`;
-
-    // Use pre-computed statistics
-    const totalEvents = (data.whale_stats?.before?.count || 0) +
-                       (data.whale_stats?.during?.count || 0) +
-                       (data.whale_stats?.after?.count || 0);
-    document.getElementById('stat-events').textContent = totalEvents;
 }
 
 function showDetailedDataLoading(show) {
@@ -316,6 +328,10 @@ function showDetailedDataLoading(show) {
 
 // Update statistics display
 function updateStats(data) {
+    // Remove loading state
+    const statsContainer = document.getElementById('stats-summary');
+    statsContainer.classList.remove('loading');
+
     document.getElementById('stat-rank').textContent = `#${data.rank}`;
 
     const changeElem = document.getElementById('stat-change');
@@ -327,13 +343,6 @@ function updateStats(data) {
     document.getElementById('stat-time').textContent = `${startTime} → ${endTime}`;
 
     document.getElementById('stat-price').textContent = `$${data.start_price.toFixed(6)} → $${data.end_price.toFixed(6)}`;
-
-    // Apply USD filter to event counts
-    const filteredDuring = filterWhaleEventsByUsd(data.whale_events || []);
-    const filteredBefore = filterWhaleEventsByUsd(data.whale_events_before || []);
-    const filteredAfter = filterWhaleEventsByUsd(data.whale_events_after || []);
-    const totalEvents = filteredDuring.length + filteredBefore.length + filteredAfter.length;
-    document.getElementById('stat-events').textContent = totalEvents;
 }
 
 // Initialize ECharts chart

@@ -1,6 +1,7 @@
 /* Hero Analytics Bar - Market Intelligence Overview */
 
 .hero-analytics-bar {
+    display: none !important; /* Hidden per user request */
     background: linear-gradient(
         135deg,
         rgba(17, 17, 17, 0.95) 0%,

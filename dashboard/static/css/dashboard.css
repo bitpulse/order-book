@@ -305,6 +305,39 @@ body::after {
     gap: 1rem;
 }
 
+/* Reorder elements - Priority Order */
+.analysis-info {
+    order: 1;
+}
+
+#stats-summary {
+    order: 2;
+}
+
+.interval-selector-container {
+    order: 3;
+}
+
+.chart-wrapper, .chart-container {
+    order: 4;
+}
+
+.chart-legend {
+    order: 5;
+}
+
+#hero-analytics-bar {
+    order: 6;
+}
+
+#context-cards-container {
+    order: 7;
+}
+
+#event-type-stats {
+    order: 8;
+}
+
 /* Analysis Info */
 .analysis-info {
     background: rgba(17, 17, 17, 0.6);
@@ -354,12 +387,36 @@ body::after {
     padding: 1.5rem;
     border-radius: 12px;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 1rem;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     position: relative;
     overflow: hidden;
+}
+
+.stats-summary.loading .stat-item {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.02) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(255, 255, 255, 0.02) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+}
+
+.stats-summary.loading .stat-value {
+    opacity: 0.3;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
 }
 
 .stats-summary::before {
