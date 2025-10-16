@@ -135,6 +135,119 @@ class PriceChangeAnalyzer:
 
         return unique_intervals
 
+    def _calculate_volatility(self, prices: List[float]) -> float:
+        """
+        Calculate price volatility (standard deviation normalized by mean)
+
+        Args:
+            prices: List of price values
+
+        Returns:
+            Normalized volatility (0.0 if insufficient data)
+        """
+        if len(prices) < 2:
+            return 0.0
+
+        mean = sum(prices) / len(prices)
+        if mean == 0:
+            return 0.0
+
+        variance = sum((p - mean) ** 2 for p in prices) / len(prices)
+        std_dev = variance ** 0.5
+
+        return std_dev / mean  # Normalized by mean
+
+    def _compute_price_statistics(self, price_data: List[Dict], start_time: datetime, end_time: datetime) -> Dict:
+        """
+        Compute summary statistics for price data instead of storing raw data
+
+        Args:
+            price_data: List of price point dicts
+            start_time: Interval start time
+            end_time: Interval end time
+
+        Returns:
+            Dict with price statistics
+        """
+        if not price_data:
+            return {
+                'total_points': 0,
+                'min_price': 0,
+                'max_price': 0,
+                'avg_price': 0,
+                'volatility': 0,
+                'spike_point': None,
+                'first_price': 0,
+                'last_price': 0
+            }
+
+        prices = [p['mid_price'] for p in price_data]
+
+        # Find spike point (largest absolute price change between consecutive points)
+        max_change = 0
+        spike_point = None
+
+        for i in range(1, len(price_data)):
+            change = abs(price_data[i]['mid_price'] - price_data[i-1]['mid_price'])
+            if change > max_change:
+                max_change = change
+                spike_point = price_data[i]
+
+        return {
+            'total_points': len(price_data),
+            'min_price': min(prices),
+            'max_price': max(prices),
+            'avg_price': sum(prices) / len(prices),
+            'volatility': self._calculate_volatility(prices),
+            'spike_point': {
+                'time': spike_point['time'].isoformat(),
+                'price': spike_point['mid_price']
+            } if spike_point else None,
+            'first_price': price_data[0]['mid_price'],
+            'last_price': price_data[-1]['mid_price']
+        }
+
+    def _compute_whale_statistics(self, whale_events: List[Dict]) -> Dict:
+        """
+        Compute summary statistics for whale events
+
+        Args:
+            whale_events: List of whale event dicts
+
+        Returns:
+            Dict with whale event statistics
+        """
+        if not whale_events:
+            return {
+                'count': 0,
+                'total_usd': 0,
+                'biggest_whale_usd': 0,
+                'by_type': {},
+                'by_side': {}
+            }
+
+        by_type = defaultdict(lambda: {'count': 0, 'total_usd': 0})
+        by_side = defaultdict(lambda: {'count': 0, 'total_usd': 0})
+
+        for event in whale_events:
+            event_type = event.get('event_type', 'unknown')
+            side = event.get('side', 'unknown')
+            usd_value = event.get('usd_value', 0)
+
+            by_type[event_type]['count'] += 1
+            by_type[event_type]['total_usd'] += usd_value
+
+            by_side[side]['count'] += 1
+            by_side[side]['total_usd'] += usd_value
+
+        return {
+            'count': len(whale_events),
+            'total_usd': sum(e.get('usd_value', 0) for e in whale_events),
+            'biggest_whale_usd': max((e.get('usd_value', 0) for e in whale_events), default=0),
+            'by_type': dict(by_type),
+            'by_side': dict(by_side)
+        }
+
     def find_price_changes(self) -> List[Dict]:
         """
         Find intervals with largest price changes
@@ -329,26 +442,26 @@ class PriceChangeAnalyzer:
             interval_duration = change['end_time'] - change['start_time']
 
             # Get price data: before, during, and after the interval
-            # Show 3x interval time before and after for better context analysis
-            context_multiplier = 3
+            # Show 10x interval time before and after for better context analysis
+            context_multiplier = 10
             extended_start = change['start_time'] - interval_duration * context_multiplier
             extended_end = change['end_time'] + interval_duration * context_multiplier
+
+            # Fetch raw data (for statistics computation only, not for storage)
             price_data = self.get_price_data(extended_start, extended_end)
-
-            # Get whale events for the interval only (not the extended period)
             whale_events = self.get_whale_events(change['start_time'], change['end_time'])
-
-            # Also get whale events from before and after for context
             whale_events_before = self.get_whale_events(extended_start, change['start_time'])
             whale_events_after = self.get_whale_events(change['end_time'], extended_end)
 
-            # Aggregate events by type (only for the main interval)
-            event_summary = defaultdict(lambda: {'count': 0, 'total_usd': 0})
-            for event in whale_events:
-                etype = event['event_type']
-                event_summary[etype]['count'] += 1
-                event_summary[etype]['total_usd'] += event['usd_value']
+            # Compute statistics (lightweight, for storage)
+            price_stats = self._compute_price_statistics(price_data, extended_start, extended_end)
+            whale_stats = {
+                'before': self._compute_whale_statistics(whale_events_before),
+                'during': self._compute_whale_statistics(whale_events),
+                'after': self._compute_whale_statistics(whale_events_after)
+            }
 
+            # Store results with references + statistics (not raw data)
             results.append({
                 'rank': i,
                 'start_time': change['start_time'],
@@ -356,13 +469,23 @@ class PriceChangeAnalyzer:
                 'start_price': change['start_price'],
                 'end_price': change['end_price'],
                 'change_pct': change['change_pct'],
-                'price_data': price_data,
-                'whale_events': whale_events,
-                'whale_events_before': whale_events_before,
-                'whale_events_after': whale_events_after,
-                'event_summary': dict(event_summary),
-                'extended_start': extended_start,
-                'extended_end': extended_end
+
+                # Time references for querying raw data on-demand
+                'time_windows': {
+                    'extended_start': extended_start,
+                    'extended_end': extended_end
+                },
+
+                # Pre-computed statistics (no raw data)
+                'price_stats': price_stats,
+                'whale_stats': whale_stats,
+
+                # For backward compatibility and terminal display
+                # (will be removed from MongoDB export but kept for display)
+                '_price_data': price_data,
+                '_whale_events': whale_events,
+                '_whale_events_before': whale_events_before,
+                '_whale_events_after': whale_events_after
             })
 
         return results
@@ -583,41 +706,48 @@ class PriceChangeAnalyzer:
             print(f"{BOLD}Rank #{result['rank']}: {color}{change_pct:+.3f}%{RESET} price change{RESET}")
             print(f"{DIM}Time: {result['start_time']} → {result['end_time']}{RESET}")
             print(f"{DIM}Price: ${result['start_price']:.2f} → ${result['end_price']:.2f}{RESET}")
-            print(f"{DIM}Price data points: {len(result['price_data'])}{RESET}")
+
+            # Use temporary raw data fields for terminal display
+            price_data = result.get('_price_data', [])
+            whale_events_during = result.get('_whale_events', [])
+            whale_stats = result.get('whale_stats', {})
+
+            print(f"{DIM}Price data points: {len(price_data)}{RESET}")
 
             # Draw price chart (only if enough data points for meaningful visualization)
-            if result['price_data'] and len(result['price_data']) >= 10:
+            if price_data and len(price_data) >= 10:
                 print(f"\n{BOLD}Price Movement:{RESET} {DIM}(spike point highlighted with ▲/▼ marker){RESET}")
                 chart_lines = self._draw_mini_chart(
-                    result['price_data'],
+                    price_data,
                     result['start_time'],
                     result['end_time']
                 )
                 for line in chart_lines:
                     print(line)
-            elif result['price_data'] and len(result['price_data']) >= 2:
-                print(f"\n{DIM}Price Movement: {len(result['price_data'])} data points (too few for chart, try larger interval){RESET}")
+            elif price_data and len(price_data) >= 2:
+                print(f"\n{DIM}Price Movement: {len(price_data)} data points (too few for chart, try larger interval){RESET}")
 
-            # Event summary
-            if result['event_summary']:
+            # Event summary (from statistics)
+            if whale_stats and whale_stats.get('during'):
+                during_stats = whale_stats['during']
                 print(f"\n{BOLD}Whale Activity Summary:{RESET}")
-                for event_type, stats in result['event_summary'].items():
+                for event_type, stats in during_stats.get('by_type', {}).items():
                     event_color = self._get_event_color(event_type)
                     print(f"  {event_color}{event_type:15s}{RESET}: {stats['count']:3d} events, "
                           f"${stats['total_usd']:,.0f} total")
 
             # Detailed timeline
-            if result['whale_events']:
-                print(f"\n{BOLD}Event Timeline ({len(result['whale_events'])} events):{RESET}")
-                for event in result['whale_events'][:20]:  # Show first 20
+            if whale_events_during:
+                print(f"\n{BOLD}Event Timeline ({len(whale_events_during)} events):{RESET}")
+                for event in whale_events_during[:20]:  # Show first 20
                     event_color = self._get_event_color(event['event_type'], event.get('side', ''))
                     time_str = event['time'].strftime('%H:%M:%S.%f')[:-3]
                     print(f"  {DIM}{time_str}{RESET} {event_color}{event['event_type']:15s}{RESET} "
                           f"${event['price']:.2f} × {event['volume']:.4f} "
                           f"= ${event['usd_value']:,.0f}")
 
-                if len(result['whale_events']) > 20:
-                    print(f"  {DIM}... and {len(result['whale_events']) - 20} more events{RESET}")
+                if len(whale_events_during) > 20:
+                    print(f"  {DIM}... and {len(whale_events_during) - 20} more events{RESET}")
             else:
                 print(f"\n{DIM}No whale events during this interval{RESET}")
 
@@ -648,37 +778,29 @@ class PriceChangeAnalyzer:
 
     def export_json(self, results: List[Dict], filepath: str = None, save_to_file: bool = False):
         """Export results to MongoDB (and optionally to JSON file for backup)"""
-        # Convert datetime objects to strings
+        # Convert datetime objects to strings and prepare lightweight data structure
         intervals = []
         for result in results:
-            export_result = result.copy()
-            export_result['symbol'] = self.symbol  # Add symbol to each interval
-            export_result['start_time'] = result['start_time'].isoformat()
-            export_result['end_time'] = result['end_time'].isoformat()
-            export_result['extended_start'] = result['extended_start'].isoformat()
-            export_result['extended_end'] = result['extended_end'].isoformat()
+            # Only include statistics and references (not raw data)
+            export_result = {
+                'rank': result['rank'],
+                'symbol': self.symbol,
+                'start_time': result['start_time'].isoformat(),
+                'end_time': result['end_time'].isoformat(),
+                'start_price': result['start_price'],
+                'end_price': result['end_price'],
+                'change_pct': result['change_pct'],
 
-            # Convert price data times (includes before, during, and after)
-            export_result['price_data'] = [
-                {**point, 'time': point['time'].isoformat()}
-                for point in result['price_data']
-            ]
+                # Time references for on-demand data fetching
+                'time_windows': {
+                    'extended_start': result['time_windows']['extended_start'].isoformat(),
+                    'extended_end': result['time_windows']['extended_end'].isoformat()
+                },
 
-            # Convert whale event times
-            export_result['whale_events'] = [
-                {**event, 'time': event['time'].isoformat()}
-                for event in result['whale_events']
-            ]
-
-            export_result['whale_events_before'] = [
-                {**event, 'time': event['time'].isoformat()}
-                for event in result['whale_events_before']
-            ]
-
-            export_result['whale_events_after'] = [
-                {**event, 'time': event['time'].isoformat()}
-                for event in result['whale_events_after']
-            ]
+                # Pre-computed statistics (already serializable, no datetime objects)
+                'price_stats': result['price_stats'],
+                'whale_stats': result['whale_stats']
+            }
 
             intervals.append(export_result)
 

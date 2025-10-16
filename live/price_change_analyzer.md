@@ -277,6 +277,7 @@ orderbook_tracker.py → InfluxDB → price_change_analyzer.py
 3. **Correlate Whale Events:**
    - For each top interval, queries `orderbook_whale_events`
    - Fetches all events within the interval's time range
+   - **Extended Context:** Shows 10x interval time before and after for comprehensive pattern analysis
    - Groups by event type and aggregates USD volume
 
 4. **Display Results:**

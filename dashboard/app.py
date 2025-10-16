@@ -638,6 +638,160 @@ def get_whale_data(filename):
         return jsonify({'error': str(e)}), 500
 
 
+def get_influxdb_client():
+    """
+    Get configured InfluxDB client
+
+    Returns:
+        tuple: (client, query_api) or (None, None) if connection fails
+    """
+    try:
+        from influxdb_client import InfluxDBClient
+
+        influx_url = os.getenv("INFLUXDB_URL", "http://localhost:8086")
+        influx_token = os.getenv("INFLUXDB_TOKEN")
+        influx_org = os.getenv("INFLUXDB_ORG", "trading")
+
+        if not influx_token:
+            print("Warning: INFLUXDB_TOKEN not set")
+            return None, None
+
+        client = InfluxDBClient(
+            url=influx_url,
+            token=influx_token,
+            org=influx_org
+        )
+
+        query_api = client.query_api()
+        return client, query_api
+
+    except Exception as e:
+        print(f"Failed to connect to InfluxDB: {e}")
+        return None, None
+
+
+@app.route('/api/price-data')
+def get_price_data_range():
+    """
+    Fetch raw price data from InfluxDB for a specific time range
+    Used by frontend to load chart data on-demand
+
+    Query params:
+        symbol: Trading symbol (e.g., BTC_USDT)
+        start: Start time (ISO 8601 format)
+        end: End time (ISO 8601 format)
+    """
+    try:
+        symbol = request.args.get('symbol')
+        start = request.args.get('start')
+        end = request.args.get('end')
+
+        if not all([symbol, start, end]):
+            return jsonify({'error': 'Missing required parameters: symbol, start, end'}), 400
+
+        client, query_api = get_influxdb_client()
+        if not client:
+            return jsonify({'error': 'InfluxDB not configured'}), 500
+
+        influx_bucket = os.getenv("INFLUXDB_BUCKET", "trading_data")
+
+        query = f'''
+        from(bucket: "{influx_bucket}")
+          |> range(start: {start}, stop: {end})
+          |> filter(fn: (r) => r._measurement == "orderbook_price")
+          |> filter(fn: (r) => r.symbol == "{symbol}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+
+        result = query_api.query(query)
+
+        price_points = []
+        for table in result:
+            for record in table.records:
+                price_points.append({
+                    'time': record.get_time().isoformat(),
+                    'mid_price': record.values.get('mid_price', 0),
+                    'best_bid': record.values.get('best_bid', 0),
+                    'best_ask': record.values.get('best_ask', 0),
+                    'spread': record.values.get('spread', 0)
+                })
+
+        client.close()
+
+        return jsonify({
+            'price_data': price_points,
+            'count': len(price_points)
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error fetching price data: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whale-events')
+def get_whale_events_range():
+    """
+    Fetch raw whale events from InfluxDB for a specific time range
+    Used by frontend to load event markers on-demand
+
+    Query params:
+        symbol: Trading symbol (e.g., BTC_USDT)
+        start: Start time (ISO 8601 format)
+        end: End time (ISO 8601 format)
+    """
+    try:
+        symbol = request.args.get('symbol')
+        start = request.args.get('start')
+        end = request.args.get('end')
+
+        if not all([symbol, start, end]):
+            return jsonify({'error': 'Missing required parameters: symbol, start, end'}), 400
+
+        client, query_api = get_influxdb_client()
+        if not client:
+            return jsonify({'error': 'InfluxDB not configured'}), 500
+
+        influx_bucket = os.getenv("INFLUXDB_BUCKET", "trading_data")
+
+        query = f'''
+        from(bucket: "{influx_bucket}")
+          |> range(start: {start}, stop: {end})
+          |> filter(fn: (r) => r._measurement == "orderbook_whale_events")
+          |> filter(fn: (r) => r.symbol == "{symbol}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+
+        result = query_api.query(query)
+
+        events = []
+        for table in result:
+            for record in table.records:
+                events.append({
+                    'time': record.get_time().isoformat(),
+                    'event_type': record.values.get('event_type', 'unknown'),
+                    'side': record.values.get('side', 'unknown'),
+                    'price': record.values.get('price', 0),
+                    'volume': record.values.get('volume', 0),
+                    'usd_value': record.values.get('usd_value', 0),
+                    'distance_from_mid_pct': record.values.get('distance_from_mid_pct', 0)
+                })
+
+        client.close()
+
+        return jsonify({
+            'whale_events': events,
+            'count': len(events)
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error fetching whale events: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/run-analysis', methods=['POST'])
 def run_analysis():
     """Run price change analyzer with provided parameters"""
@@ -683,12 +837,25 @@ def run_analysis():
         # Wait for completion (with timeout)
         stdout, stderr = process.communicate(timeout=300)  # 5 minute timeout
 
+        # Decode output for logging
+        output = stdout.decode('utf-8') if stdout else ''
+        error_output = stderr.decode('utf-8') if stderr else ''
+
+        # Log the full output for debugging
+        print(f"=== Analysis Script Output ===")
+        print(f"Return code: {process.returncode}")
+        print(f"STDOUT:\n{output}")
+        print(f"STDERR:\n{error_output}")
+        print(f"==============================")
+
         if process.returncode != 0:
-            error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
-            return jsonify({'error': f'Analysis failed: {error_msg}'}), 500
+            return jsonify({
+                'error': f'Analysis failed with return code {process.returncode}',
+                'stderr': error_output,
+                'stdout': output
+            }), 500
 
         # Extract MongoDB ID from stdout
-        output = stdout.decode('utf-8') if stdout else ''
         analysis_id = None
 
         # Look for "MongoDB ID: <id>" in output
@@ -705,7 +872,12 @@ def run_analysis():
                 'output': output
             })
         else:
-            return jsonify({'error': 'Analysis completed but no MongoDB ID found in output'}), 500
+            return jsonify({
+                'error': 'Analysis completed but no MongoDB ID found in output',
+                'stdout': output,
+                'stderr': error_output,
+                'hint': 'Check if MongoDB connection is working and script is outputting MongoDB ID'
+            }), 500
 
     except subprocess.TimeoutExpired:
         return jsonify({'error': 'Analysis timeout (exceeded 5 minutes)'}), 500

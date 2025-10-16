@@ -140,12 +140,26 @@ function showIntervalSelector(intervals) {
 }
 
 // Load specific interval data
-function loadInterval(intervalData) {
+async function loadInterval(intervalData) {
     currentInterval = intervalData;
 
     // Hide zero state and show chart
     showZeroState(false);
 
+    // Check if this is new format (with time_windows) or old format (with embedded data)
+    const isNewFormat = intervalData.time_windows && !intervalData.price_data;
+
+    if (isNewFormat) {
+        // New format: Fetch data on-demand from InfluxDB
+        await loadIntervalWithLazyLoading(intervalData);
+    } else {
+        // Old format: Use embedded data
+        loadIntervalWithEmbeddedData(intervalData);
+    }
+}
+
+// Load interval with embedded data (old format)
+function loadIntervalWithEmbeddedData(intervalData) {
     // Update stats
     updateStats(intervalData);
 
@@ -159,6 +173,123 @@ function loadInterval(intervalData) {
 
     // Load whale events
     loadWhaleEvents(intervalData);
+}
+
+// Load interval with lazy loading (new format)
+async function loadIntervalWithLazyLoading(intervalData) {
+    // Update stats from pre-computed statistics
+    updateStatsFromStatistics(intervalData);
+
+    // Initialize or update chart
+    if (!chart) {
+        initializeChart();
+    }
+
+    // Show loading indicator
+    showDetailedDataLoading(true);
+
+    try {
+        // Fetch raw price data on-demand from InfluxDB
+        const priceDataResponse = await fetch(`/api/price-data?` + new URLSearchParams({
+            symbol: intervalData.symbol || currentData[0].symbol, // Get symbol from interval or first interval
+            start: intervalData.time_windows.extended_start,
+            end: intervalData.time_windows.extended_end
+        }));
+
+        if (!priceDataResponse.ok) {
+            throw new Error(`Failed to fetch price data: ${priceDataResponse.statusText}`);
+        }
+
+        const priceResult = await priceDataResponse.json();
+
+        // Fetch raw whale events on-demand from InfluxDB
+        const whaleEventsResponse = await fetch(`/api/whale-events?` + new URLSearchParams({
+            symbol: intervalData.symbol || currentData[0].symbol,
+            start: intervalData.time_windows.extended_start,
+            end: intervalData.time_windows.extended_end
+        }));
+
+        if (!whaleEventsResponse.ok) {
+            throw new Error(`Failed to fetch whale events: ${whaleEventsResponse.statusText}`);
+        }
+
+        const whaleResult = await whaleEventsResponse.json();
+
+        // Separate events by period
+        const startTime = new Date(intervalData.start_time).getTime();
+        const endTime = new Date(intervalData.end_time).getTime();
+
+        // Add fetched data to interval (for rendering)
+        intervalData.price_data = priceResult.price_data;
+        intervalData.whale_events_before = whaleResult.whale_events.filter(e =>
+            new Date(e.time).getTime() < startTime
+        );
+        intervalData.whale_events = whaleResult.whale_events.filter(e => {
+            const t = new Date(e.time).getTime();
+            return t >= startTime && t <= endTime;
+        });
+        intervalData.whale_events_after = whaleResult.whale_events.filter(e =>
+            new Date(e.time).getTime() > endTime
+        );
+
+        console.log(`Loaded ${priceResult.price_data.length} price points, ${whaleResult.whale_events.length} whale events`);
+
+        // Load price data into chart
+        loadPriceData(intervalData);
+
+        // Load whale events
+        loadWhaleEvents(intervalData);
+
+        showDetailedDataLoading(false);
+
+    } catch (error) {
+        console.error('Error loading interval details:', error);
+        showError('Failed to load detailed data: ' + error.message);
+        showDetailedDataLoading(false);
+    }
+}
+
+// New function to update stats from pre-computed statistics
+function updateStatsFromStatistics(data) {
+    document.getElementById('stat-rank').textContent = `#${data.rank}`;
+
+    const changeElem = document.getElementById('stat-change');
+    changeElem.textContent = `${data.change_pct.toFixed(3)}%`;
+    changeElem.className = 'stat-value ' + (data.change_pct > 0 ? 'positive' : 'negative');
+
+    const startTime = new Date(data.start_time).toLocaleTimeString();
+    const endTime = new Date(data.end_time).toLocaleTimeString();
+    document.getElementById('stat-time').textContent = `${startTime} → ${endTime}`;
+
+    document.getElementById('stat-price').textContent = `$${data.start_price.toFixed(6)} → $${data.end_price.toFixed(6)}`;
+
+    // Use pre-computed statistics
+    const totalEvents = (data.whale_stats?.before?.count || 0) +
+                       (data.whale_stats?.during?.count || 0) +
+                       (data.whale_stats?.after?.count || 0);
+    document.getElementById('stat-events').textContent = totalEvents;
+}
+
+function showDetailedDataLoading(show) {
+    const chartContainer = document.getElementById('chart-container');
+    let loader = document.getElementById('detail-loader');
+
+    if (show) {
+        if (!loader) {
+            loader = document.createElement('div');
+            loader.id = 'detail-loader';
+            loader.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); ' +
+                                  'background: rgba(0, 0, 0, 0.8); padding: 20px 40px; border-radius: 8px; ' +
+                                  'color: #00ffa3; font-size: 16px; z-index: 1000;';
+            loader.textContent = 'Loading detailed data...';
+            chartContainer.appendChild(loader);
+        }
+        loader.style.display = 'block';
+    } else {
+        if (loader) {
+            loader.style.display = 'none';
+        }
+    }
 }
 
 // Update statistics display
@@ -1587,8 +1718,28 @@ async function runAnalysis() {
 
         const result = await response.json();
 
+        // Log full response for debugging
+        console.log('Analysis response:', result);
+
         if (result.error) {
-            throw new Error(result.error);
+            // Log detailed error information
+            console.error('Analysis error details:', {
+                error: result.error,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                hint: result.hint
+            });
+
+            // Show detailed error message
+            let errorMsg = result.error;
+            if (result.stderr) {
+                errorMsg += `\n\nScript error output:\n${result.stderr}`;
+            }
+            if (result.hint) {
+                errorMsg += `\n\nHint: ${result.hint}`;
+            }
+
+            throw new Error(errorMsg);
         }
 
         // Success - reload file list and select new file
@@ -1615,15 +1766,22 @@ async function runAnalysis() {
 
     } catch (error) {
         console.error('Analysis error:', error);
-        statusMsg.textContent = `Error: ${error.message}`;
+
+        // Show error message (truncate if too long for display)
+        let displayMsg = error.message;
+        if (displayMsg.length > 200) {
+            displayMsg = displayMsg.substring(0, 200) + '... (see console for full error)';
+        }
+
+        statusMsg.textContent = `Error: ${displayMsg}`;
         statusMsg.style.color = 'var(--red)';
 
-        // Reset after showing error
+        // Keep error visible longer (5 seconds instead of 3)
         setTimeout(() => {
             form.style.display = 'block';
             statusDiv.style.display = 'none';
             statusMsg.style.color = 'var(--green)';
-        }, 3000);
+        }, 5000);
     }
 }
 
