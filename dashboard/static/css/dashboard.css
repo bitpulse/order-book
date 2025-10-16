@@ -1720,7 +1720,8 @@ details[open] .data-flow-toggle {
     letter-spacing: 0.5px;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
     padding: 0.75rem 1rem;
     background: rgba(17, 17, 17, 0.8);
     color: var(--text-primary);
@@ -1728,13 +1729,28 @@ details[open] .data-flow-toggle {
     border-radius: 8px;
     font-size: 0.95rem;
     transition: all 0.3s;
+    cursor: pointer;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
     outline: none;
     border-color: var(--green);
     box-shadow: 0 0 0 3px var(--green-glow);
     background: rgba(17, 17, 17, 0.95);
+}
+
+.form-group select option {
+    background: #111111;
+    color: var(--text-primary);
+    padding: 0.5rem;
+}
+
+.form-group select optgroup {
+    background: #0a0a0a;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.85rem;
 }
 
 .form-actions {
