@@ -18,6 +18,19 @@ python live/price_change_analyzer.py --interval 1s --lookback 1h
 # Find movements >0.5% in last 6 hours using 5-second windows
 python live/price_change_analyzer.py --interval 5s --lookback 6h --min-change 0.5 --top 20
 
+# Analyze specific historical time range (reproducible)
+python live/price_change_analyzer.py \
+  --symbol BTC_USDT \
+  --from-time "2025-10-16 14:00:00" \
+  --to-time "2025-10-16 18:00:00" \
+  --interval 1m
+
+# Analyze 4 hours starting from specific time (hybrid mode)
+python live/price_change_analyzer.py \
+  --from-time "2025-10-16 09:30:00" \
+  --lookback 4h \
+  --interval 30s
+
 # Different symbol
 python live/price_change_analyzer.py --symbol ETH_USDT --interval 10s --lookback 12h
 
@@ -118,11 +131,45 @@ None! Defaults to `BTC_USDT`, `24h` lookback, `1m` intervals.
 ```
 Examples: `BTC_USDT`, `ETH_USDT`, `DOGE_USDT`, `WIF_USDT`
 
-**Time Period:**
+**Time Period (Option 1: Relative - from now):**
 ```bash
 --lookback DURATION       # How far back to analyze (default: 24h)
 ```
 Examples: `1h`, `6h`, `12h`, `24h`, `7d`
+
+**Time Period (Option 2: Absolute - specific times):**
+```bash
+--from-time "YYYY-MM-DD HH:MM:SS"  # Start time for analysis
+--to-time "YYYY-MM-DD HH:MM:SS"    # End time for analysis
+```
+Examples:
+- `--from-time "2025-10-16 14:00:00" --to-time "2025-10-16 18:00:00"` (specific 4-hour window)
+- `--from-time "2025-10-16 14:00:00" --lookback 4h` (start at specific time, go forward 4h)
+- `--to-time "2025-10-16 18:00:00" --lookback 4h` (end at specific time, go back 4h)
+
+Supported time formats:
+- ISO 8601: `"2025-10-16T14:00:00Z"`
+- Simple: `"2025-10-16 14:00:00"`
+- Date only: `"2025-10-16"` (assumes 00:00:00 UTC)
+
+**Three Modes of Time Specification:**
+
+1. **Relative Mode (default):** Use `--lookback` only
+   ```bash
+   --lookback 24h  # Analyzes NOW-24h to NOW
+   ```
+
+2. **Absolute Mode:** Use both `--from-time` and `--to-time`
+   ```bash
+   --from-time "2025-10-16 14:00:00" --to-time "2025-10-16 18:00:00"
+   ```
+   Note: If `--lookback` is also specified, it will be ignored with a warning
+
+3. **Hybrid Mode:** Use `--from-time` OR `--to-time` with `--lookback`
+   ```bash
+   --from-time "2025-10-16 14:00:00" --lookback 4h  # 14:00 to 18:00
+   --to-time "2025-10-16 18:00:00" --lookback 4h    # 14:00 to 18:00
+   ```
 
 **Interval Size:**
 ```bash
@@ -150,7 +197,18 @@ python live/price_change_analyzer.py --interval 1s --lookback 1h --min-change 0.
 ```
 **Use case:** See sub-second price spikes and what whale orders triggered them
 
-### 2. Analyze Significant Short-Term Moves
+### 2. Analyze Specific Historical Event
+```bash
+python live/price_change_analyzer.py \
+  --symbol BTC_USDT \
+  --from-time "2025-10-15 14:00:00" \
+  --to-time "2025-10-15 18:00:00" \
+  --interval 1m \
+  --min-change 0.5
+```
+**Use case:** Analyze a specific past event (e.g., market crash, news announcement) with exact time boundaries
+
+### 3. Analyze Significant Short-Term Moves
 ```bash
 python live/price_change_analyzer.py --interval 5s --lookback 6h --min-change 0.2
 ```
@@ -183,7 +241,29 @@ python live/price_change_analyzer.py --symbol DOGE_USDT --interval 1m --output j
 ```
 **Use case:** Compare which asset had most volatile intervals
 
-### 7. LLM-Friendly Export for AI Analysis
+### 7. Reproducible Backtesting
+```bash
+# Run analysis on same time period multiple times
+python live/price_change_analyzer.py \
+  --symbol ETH_USDT \
+  --from-time "2025-10-16 09:00:00" \
+  --to-time "2025-10-16 17:00:00" \
+  --interval 1m
+```
+**Use case:** Test different parameters on exact same historical data for comparison
+
+### 8. Analyze Trading Session (Hybrid Mode)
+```bash
+# Analyze 4 hours starting from market open
+python live/price_change_analyzer.py \
+  --symbol SPX_USDT \
+  --from-time "2025-10-16 09:30:00" \
+  --lookback 4h \
+  --interval 30s
+```
+**Use case:** Study specific trading hours (market open, close, etc.) with flexible time specification
+
+### 9. LLM-Friendly Export for AI Analysis
 ```bash
 python live/price_change_analyzer.py --symbol SPX_USDT --lookback 6h --interval 10s --output json-summary
 ```
@@ -456,7 +536,22 @@ python live/price_change_analyzer.py \
 A: Make sure `orderbook_tracker.py --influx` is running and has collected data for your symbol and time period.
 
 **Q: Can I analyze historical data from weeks ago?**
-A: Yes, as long as the data exists in InfluxDB and hasn't been deleted by retention policies.
+A: Yes, as long as the data exists in InfluxDB and hasn't been deleted by retention policies. Use `--from-time` and `--to-time` to specify exact historical time ranges.
+
+**Q: What's the difference between --lookback and --from-time/--to-time?**
+A:
+- `--lookback`: Relative time from now (e.g., "last 24 hours")
+- `--from-time/--to-time`: Absolute time specification (e.g., specific date/time)
+- You can combine them: `--from-time "2025-10-16 09:00:00" --lookback 4h` analyzes 09:00-13:00
+- Use absolute times for reproducible analysis and backtesting
+
+**Q: Why would I use absolute time ranges instead of lookback?**
+A:
+- **Reproducibility**: Re-run exact same analysis later for comparison
+- **Historical events**: Analyze specific past events (crashes, announcements)
+- **Backtesting**: Test strategies on fixed historical periods
+- **Trading sessions**: Study specific market hours (e.g., 9:30 AM - 4:00 PM)
+- **Data sharing**: Share analysis with exact time boundaries
 
 **Q: What's a good interval size?**
 A: Start with `1m` for general analysis. Use `5s` or `10s` for high-frequency moves. Use `15m` for longer-term patterns.

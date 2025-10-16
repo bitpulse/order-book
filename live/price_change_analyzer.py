@@ -9,6 +9,7 @@ import sys
 import json
 import csv
 import argparse
+import time
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Tuple
 from collections import defaultdict
@@ -31,26 +32,51 @@ DIM = '\033[2m'
 load_dotenv()
 
 
+class ProgressTimer:
+    """Helper class to track elapsed time for operations"""
+    def __init__(self):
+        self.start_time = time.time()
+
+    def elapsed(self) -> float:
+        """Get elapsed time in seconds"""
+        return time.time() - self.start_time
+
+    def elapsed_str(self) -> str:
+        """Get formatted elapsed time string"""
+        elapsed = self.elapsed()
+        if elapsed < 60:
+            return f"{elapsed:.1f}s"
+        else:
+            minutes = int(elapsed // 60)
+            seconds = elapsed % 60
+            return f"{minutes}m {seconds:.1f}s"
+
+
 class PriceChangeAnalyzer:
     """Analyzes price changes and correlates with whale activity"""
 
-    def __init__(self, symbol: str, lookback: str, interval: str,
-                 min_change: float = 0.1, top_n: int = 10):
+    def __init__(self, symbol: str, lookback: str = None, interval: str = '1m',
+                 min_change: float = 0.1, top_n: int = 10,
+                 from_time: str = None, to_time: str = None):
         """
         Initialize the analyzer
 
         Args:
             symbol: Trading pair (e.g., BTC_USDT)
-            lookback: Time period to analyze (e.g., 1h, 24h, 7d)
+            lookback: Time period to analyze (e.g., 1h, 24h, 7d) - optional if from_time/to_time provided
             interval: Window size for price changes (e.g., 1s, 5s, 1m, 5m)
             min_change: Minimum price change % to consider
             top_n: Number of top intervals to return
+            from_time: Start time for analysis (ISO 8601 format) - optional
+            to_time: End time for analysis (ISO 8601 format) - optional
         """
         self.symbol = symbol
         self.lookback = lookback
         self.interval = interval
         self.min_change = min_change
         self.top_n = top_n
+        self.from_time_str = from_time
+        self.to_time_str = to_time
 
         # Initialize InfluxDB client
         self.influx_url = os.getenv("INFLUXDB_URL", "http://localhost:8086")
@@ -97,6 +123,135 @@ class PriceChangeAnalyzer:
             return timedelta(days=value)
         else:
             raise ValueError(f"Invalid lookback unit: {unit}. Use s, m, h, or d")
+
+    def _parse_time_string(self, time_str: str) -> datetime:
+        """
+        Parse time string to timezone-aware UTC datetime object
+
+        Supports formats:
+        - ISO 8601 with Z: "2025-10-15T14:00:00Z"
+        - ISO 8601 with timezone: "2025-10-15T14:00:00+00:00"
+        - Simple datetime: "2025-10-15 14:00:00"
+        - Date only: "2025-10-15" (assumes 00:00:00 UTC)
+
+        Args:
+            time_str: Time string to parse
+
+        Returns:
+            Timezone-aware datetime in UTC
+
+        Raises:
+            ValueError: If time string format is invalid
+        """
+        if not time_str:
+            raise ValueError("Time string cannot be empty")
+
+        # Try ISO 8601 with Z suffix
+        try:
+            dt = datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+            return dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+        # Try ISO 8601 with timezone (fromisoformat handles this)
+        try:
+            dt = datetime.fromisoformat(time_str)
+            # Ensure it's UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
+        except ValueError:
+            pass
+
+        # Try simple datetime format: "YYYY-MM-DD HH:MM:SS"
+        try:
+            dt = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+            return dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+        # Try date only: "YYYY-MM-DD" (assume 00:00:00 UTC)
+        try:
+            dt = datetime.strptime(time_str, '%Y-%m-%d')
+            return dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+        # All formats failed
+        raise ValueError(
+            f"Invalid time format: '{time_str}'. "
+            f"Supported formats: 'YYYY-MM-DD HH:MM:SS', 'YYYY-MM-DD', 'YYYY-MM-DDTHH:MM:SSZ'"
+        )
+
+    def _calculate_time_range(self) -> Tuple[datetime, datetime]:
+        """
+        Calculate start and end times based on parameters
+
+        Priority logic:
+        1. If both from_time and to_time specified: use them
+        2. If only from_time: use from_time + lookback
+        3. If only to_time: use to_time - lookback
+        4. If neither: use NOW - lookback to NOW (current behavior)
+
+        Returns:
+            Tuple of (start_time, end_time) as UTC datetime objects
+
+        Raises:
+            ValueError: If time range is invalid
+        """
+        now = datetime.now(timezone.utc)
+        start_time = None
+        end_time = None
+
+        # Parse from_time if provided
+        if self.from_time_str:
+            start_time = self._parse_time_string(self.from_time_str)
+
+        # Parse to_time if provided
+        if self.to_time_str:
+            end_time = self._parse_time_string(self.to_time_str)
+
+        # Case 1: Both from_time and to_time specified
+        if start_time and end_time:
+            # Warn if lookback is also specified (it will be ignored)
+            if self.lookback:
+                print(f"{YELLOW}Warning: --lookback is ignored when both --from-time and --to-time are specified{RESET}")
+
+        # Case 2: Only from_time specified
+        elif start_time and not end_time:
+            if not self.lookback:
+                raise ValueError("When using --from-time without --to-time, --lookback is required")
+            lookback_delta = self._parse_lookback_to_timedelta(self.lookback)
+            end_time = start_time + lookback_delta
+
+        # Case 3: Only to_time specified
+        elif not start_time and end_time:
+            if not self.lookback:
+                raise ValueError("When using --to-time without --from-time, --lookback is required")
+            lookback_delta = self._parse_lookback_to_timedelta(self.lookback)
+            start_time = end_time - lookback_delta
+
+        # Case 4: Neither from_time nor to_time specified (default behavior)
+        else:
+            if not self.lookback:
+                raise ValueError("Either --lookback or --from-time/--to-time must be specified")
+            lookback_delta = self._parse_lookback_to_timedelta(self.lookback)
+            end_time = now
+            start_time = now - lookback_delta
+
+        # Validation
+        if start_time >= end_time:
+            raise ValueError(f"Start time ({start_time}) must be before end time ({end_time})")
+
+        # Warn if times are in the future
+        if start_time > now:
+            print(f"{YELLOW}Warning: Start time is in the future ({start_time}){RESET}")
+        if end_time > now:
+            print(f"{YELLOW}Warning: End time is in the future ({end_time}){RESET}")
+
+        return start_time, end_time
 
     def _deduplicate_intervals(self, intervals: List[Dict]) -> List[Dict]:
         """
@@ -255,19 +410,28 @@ class PriceChangeAnalyzer:
         Returns:
             List of dicts with: start_time, end_time, start_price, end_price, change_pct
         """
+        timer = ProgressTimer()
         interval_seconds = self._parse_interval_to_seconds(self.interval)
 
-        # Get all price data for the lookback period
-        lookback_time = datetime.now(timezone.utc) - self._parse_lookback_to_timedelta(self.lookback)
-        end_time = datetime.now(timezone.utc)
+        # Calculate time range based on parameters (lookback or from/to times)
+        start_time, end_time = self._calculate_time_range()
 
-        all_price_data = self.get_price_data(lookback_time, end_time)
+        # Show time range in log
+        start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
+        end_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
+        print(f"{DIM}[1/3] Fetching price data from {start_str} to {end_str}...{RESET}")
+
+        all_price_data = self.get_price_data(start_time, end_time)
 
         if not all_price_data:
             print(f"{RED}No price data found for {self.symbol}{RESET}")
             return []
 
+        print(f"{GREEN}✓ Loaded {len(all_price_data):,} price points in {timer.elapsed_str()}{RESET}\n")
+
         # Calculate price changes using sliding window over actual data points
+        print(f"{DIM}[2/3] Scanning for price changes with sliding window...{RESET}")
+        scan_timer = ProgressTimer()
         price_changes = []
         interval_delta = timedelta(seconds=interval_seconds)
 
@@ -276,8 +440,15 @@ class PriceChangeAnalyzer:
 
         i = 0
         end_point_idx = 1  # Track end point position for O(n) performance
+        total_points = len(all_price_data)
+        last_progress_pct = 0
 
         while i < len(all_price_data) - 1:
+            # Show progress every 25%
+            current_progress_pct = int((i / total_points) * 100)
+            if current_progress_pct >= last_progress_pct + 25 and current_progress_pct < 100:
+                print(f"{DIM}  Processing... {current_progress_pct}% ({i:,}/{total_points:,}){RESET}")
+                last_progress_pct = current_progress_pct
             start_point = all_price_data[i]
             start_time = start_point['time']
             target_end_time = start_time + interval_delta
@@ -329,13 +500,21 @@ class PriceChangeAnalyzer:
 
             i = next_i
 
+        print(f"{GREEN}✓ Found {len(price_changes):,} intervals above {self.min_change}% threshold in {scan_timer.elapsed_str()}{RESET}")
+
         # Sort by absolute change
-        price_changes.sort(key=lambda x: x['change_abs'], reverse=True)
+        if price_changes:
+            print(f"{DIM}  Sorting by magnitude...{RESET}")
+            price_changes.sort(key=lambda x: x['change_abs'], reverse=True)
 
         # De-duplicate overlapping intervals
+        print(f"{DIM}  Deduplicating overlapping intervals...{RESET}")
         deduplicated = self._deduplicate_intervals(price_changes)
+        print(f"{GREEN}✓ Deduplication: {len(price_changes):,} → {len(deduplicated):,} unique intervals{RESET}")
 
         # Return top N unique intervals
+        result_count = min(self.top_n, len(deduplicated))
+        print(f"{GREEN}✓ Returning top {result_count} intervals{RESET}\n")
         return deduplicated[:self.top_n]
 
     def get_price_data(self, start_time: datetime, end_time: datetime) -> List[Dict]:
@@ -426,7 +605,21 @@ class PriceChangeAnalyzer:
             List of dicts with price change info, price data, and whale events
         """
         print(f"{CYAN}Analyzing price changes for {self.symbol}...{RESET}")
-        print(f"{DIM}Lookback: {self.lookback}, Interval: {self.interval}, Min change: {self.min_change}%{RESET}\n")
+
+        # Show time configuration
+        if self.from_time_str or self.to_time_str:
+            time_config = []
+            if self.from_time_str:
+                time_config.append(f"from {self.from_time_str}")
+            if self.to_time_str:
+                time_config.append(f"to {self.to_time_str}")
+            if self.lookback and not (self.from_time_str and self.to_time_str):
+                time_config.append(f"({self.lookback})")
+            print(f"{DIM}Time range: {' '.join(time_config)}{RESET}")
+        else:
+            print(f"{DIM}Lookback: {self.lookback}{RESET}")
+
+        print(f"{DIM}Interval: {self.interval}, Min change: {self.min_change}%{RESET}\n")
 
         price_changes = self.find_price_changes()
 
@@ -436,8 +629,19 @@ class PriceChangeAnalyzer:
 
         print(f"{GREEN}Found {len(price_changes)} intervals with significant price changes{RESET}\n")
 
+        print(f"{DIM}[3/3] Analyzing intervals & fetching whale data...{RESET}")
+        analysis_timer = ProgressTimer()
         results = []
+
         for i, change in enumerate(price_changes, 1):
+            # Show progress for every interval (or every 5-10 for large batches)
+            show_progress = (len(price_changes) <= 20) or (i % max(1, len(price_changes) // 20) == 0) or (i == len(price_changes))
+
+            if show_progress:
+                change_sign = '+' if change['change_pct'] > 0 else ''
+                time_str = change['start_time'].strftime('%Y-%m-%d %H:%M:%S')
+                print(f"{DIM}→ [{i}/{len(price_changes)}] Interval #{i}: {time_str} ({change_sign}{change['change_pct']:.2f}%){RESET}")
+
             # Calculate extended time window for context (before and after)
             interval_duration = change['end_time'] - change['start_time']
 
@@ -448,10 +652,15 @@ class PriceChangeAnalyzer:
             extended_end = change['end_time'] + interval_duration * context_multiplier
 
             # Fetch raw data (for statistics computation only, not for storage)
+            fetch_timer = ProgressTimer()
             price_data = self.get_price_data(extended_start, extended_end)
             whale_events = self.get_whale_events(change['start_time'], change['end_time'])
             whale_events_before = self.get_whale_events(extended_start, change['start_time'])
             whale_events_after = self.get_whale_events(change['end_time'], extended_end)
+
+            if show_progress:
+                total_events = len(whale_events) + len(whale_events_before) + len(whale_events_after)
+                print(f"{DIM}  ⤷ Fetched {len(price_data):,} price points, {total_events} whale events ({fetch_timer.elapsed_str()}){RESET}")
 
             # Compute statistics (lightweight, for storage)
             price_stats = self._compute_price_statistics(price_data, extended_start, extended_end)
@@ -488,6 +697,7 @@ class PriceChangeAnalyzer:
                 '_whale_events_after': whale_events_after
             })
 
+        print(f"{GREEN}✓ Analysis complete! Processed {len(results)} intervals in {analysis_timer.elapsed_str()}{RESET}\n")
         return results
 
     def _draw_mini_chart(self, price_data: List[Dict], interval_start: datetime, interval_end: datetime,
@@ -939,21 +1149,42 @@ def parse_args():
         help='Path for JSON/CSV export (auto-generated if not specified)'
     )
 
+    parser.add_argument(
+        '--from-time',
+        type=str,
+        help='Start time for analysis (ISO 8601: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"). If not specified, uses --lookback from now.'
+    )
+
+    parser.add_argument(
+        '--to-time',
+        type=str,
+        help='End time for analysis (ISO 8601: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"). If not specified, uses now or from-time + lookback.'
+    )
+
     return parser.parse_args()
 
 
 def main():
     """Main entry point"""
     args = parse_args()
+    total_timer = ProgressTimer()
 
     try:
+        print(f"{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+        print(f"{CYAN}Price Change Analyzer{RESET}")
+        print(f"{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+        print(f"{DIM}Initializing analyzer for {args.symbol}...{RESET}")
         analyzer = PriceChangeAnalyzer(
             symbol=args.symbol,
             lookback=args.lookback,
             interval=args.interval,
             min_change=args.min_change,
-            top_n=args.top
+            top_n=args.top,
+            from_time=args.from_time,
+            to_time=args.to_time
         )
+        print(f"{GREEN}✓ Connected to InfluxDB{RESET}\n")
 
         results = analyzer.analyze()
 
@@ -964,9 +1195,10 @@ def main():
             analyzer.display_terminal(results)
         elif args.output == 'json':
             # Save to MongoDB (no file creation unless it fails)
+            print(f"{DIM}Saving to MongoDB...{RESET}")
             analysis_id = analyzer.export_json(results)
             if analysis_id:
-                print(f"\n{GREEN}MongoDB ID: {analysis_id}{RESET}")
+                print(f"{GREEN}MongoDB ID: {analysis_id}{RESET}")
         elif args.output == 'csv':
             # Create data directory if it doesn't exist
             data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
@@ -982,11 +1214,17 @@ def main():
 
         analyzer.close()
 
+        print(f"\n{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+        print(f"{GREEN}✓ Complete! Total time: {total_timer.elapsed_str()}{RESET}")
+        print(f"{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Interrupted by user{RESET}")
         sys.exit(0)
     except Exception as e:
         print(f"{RED}Error: {e}{RESET}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
