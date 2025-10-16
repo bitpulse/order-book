@@ -1182,13 +1182,19 @@ function showSingleEventModal(event, period) {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        fractionalSecondDigits: 3
+        hour12: false
     });
 
     const sideColor = event.side === 'bid' ? '#00ff88' : event.side === 'ask' ? '#ff4444' : '#ffaa00';
     const sideIcon = event.side === 'bid' ? '▲' : event.side === 'ask' ? '▼' : '●';
 
-    modalTitle.innerHTML = `${sideIcon} Whale Event Details <span style="color: ${periodColor}; margin-left: 8px;">${periodBadge}</span>`;
+    // Check if this is a market order
+    const isMarketOrder = event.event_type === 'market_buy' || event.event_type === 'market_sell';
+
+    // Determine title color based on period
+    const titleIcon = event.period === 'during' ? '◆' : (event.period === 'before' ? '⬅' : '➡');
+
+    modalTitle.innerHTML = `${titleIcon} Whale Event Details <span style="color: ${periodColor}; margin-left: 8px; font-size: 0.9rem; text-transform: uppercase; font-weight: 600;">${periodBadge}</span>`;
 
     modalBody.innerHTML = `
         <div style="background: rgba(255, 255, 255, 0.03); padding: 1.5rem; border-radius: 8px; border-left: 4px solid ${sideColor};">
@@ -1213,10 +1219,12 @@ function showSingleEventModal(event, period) {
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">USD Value</div>
                     <div style="color: ${sideColor}; font-size: 1.3rem; font-weight: 700;">$${formatNumber(event.usd_value)}</div>
                 </div>
+                ${isMarketOrder && event.distance_from_mid_pct !== undefined ? `
                 <div>
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Distance from Mid</div>
-                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct.toFixed(3)}%</div>
+                    <div style="color: ${event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444'}; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</div>
                 </div>
+                ` : ''}
             </div>
         </div>
     `;
