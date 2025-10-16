@@ -10,10 +10,10 @@ let filters = {
     price: true,
     marketBuy: true,
     marketSell: true,
-    newBid: true,
-    newAsk: true,
-    bidIncrease: true,
-    askIncrease: true
+    newBid: false,
+    newAsk: false,
+    bidIncrease: false,
+    askIncrease: false
 };
 
 // Initialize dashboard on load
@@ -363,22 +363,9 @@ function loadPriceData(data) {
     const whaleScatterDuring = prepareWhaleScatterData(filteredDuring, 'during');
     const whaleScatterAfter = prepareWhaleScatterData(filteredAfter, 'after');
 
-    // Find spike point
+    // Get interval boundaries
     const startTime = new Date(data.start_time);
     const endTime = new Date(data.end_time);
-    let maxChange = 0;
-    let spikePoint = null;
-
-    for (let i = 1; i < chartData.length; i++) {
-        const currentTime = chartData[i].time;
-        if (currentTime >= startTime && currentTime <= endTime) {
-            const change = Math.abs(chartData[i].value - chartData[i - 1].value);
-            if (change > maxChange) {
-                maxChange = change;
-                spikePoint = chartData[i];
-            }
-        }
-    }
 
     // ECharts option
     const option = {
@@ -411,11 +398,32 @@ function loadPriceData(data) {
             shadowBlur: 20,
             shadowColor: 'rgba(0, 255, 163, 0.1)'
         },
+        legend: {
+            show: true,
+            top: '2%',
+            left: 'center',
+            data: ['Price', 'Whale (Before)', 'Whale (During)', 'Whale (After)'],
+            textStyle: {
+                color: '#b0b0b0',
+                fontSize: 12
+            },
+            itemWidth: 20,
+            itemHeight: 12,
+            itemGap: 20,
+            selectedMode: true,
+            inactiveColor: '#404040',
+            selected: {
+                'Price': true,
+                'Whale (Before)': true,
+                'Whale (During)': true,
+                'Whale (After)': true
+            }
+        },
         grid: {
             left: '2%',
             right: '3%',
             bottom: '10%',
-            top: '8%',
+            top: '12%',
             containLabel: true
         },
         dataZoom: [
@@ -568,76 +576,51 @@ function loadPriceData(data) {
                 name: 'START',
                 type: 'scatter',
                 data: [[startTime, data.start_price]],
-                symbolSize: 16,
+                symbolSize: 10,
                 itemStyle: {
                     color: '#ffd60a',
-                    shadowBlur: 10,
-                    shadowColor: 'rgba(255, 214, 10, 0.6)',
-                    borderWidth: 2,
-                    borderColor: 'rgba(255, 214, 10, 0.8)'
+                    shadowBlur: 4,
+                    shadowColor: 'rgba(255, 214, 10, 0.3)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255, 214, 10, 0.5)'
                 },
                 label: {
                     show: true,
-                    formatter: '▼ START',
+                    formatter: 'START',
                     position: 'top',
                     color: '#ffd60a',
-                    fontSize: 11,
-                    fontWeight: 'bold',
-                    shadowBlur: 4,
-                    shadowColor: 'rgba(255, 214, 10, 0.5)'
+                    fontSize: 9,
+                    fontWeight: 'normal',
+                    shadowBlur: 2,
+                    shadowColor: 'rgba(255, 214, 10, 0.3)'
                 },
-                z: 10
+                z: 7
             },
             // END marker
             {
                 name: 'END',
                 type: 'scatter',
                 data: [[endTime, data.end_price]],
-                symbolSize: 16,
+                symbolSize: 10,
                 itemStyle: {
                     color: '#ffd60a',
-                    shadowBlur: 10,
-                    shadowColor: 'rgba(255, 214, 10, 0.6)',
-                    borderWidth: 2,
-                    borderColor: 'rgba(255, 214, 10, 0.8)'
+                    shadowBlur: 4,
+                    shadowColor: 'rgba(255, 214, 10, 0.3)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255, 214, 10, 0.5)'
                 },
                 label: {
                     show: true,
-                    formatter: '▲ END',
+                    formatter: 'END',
                     position: 'top',
                     color: '#ffd60a',
-                    fontSize: 11,
-                    fontWeight: 'bold',
-                    shadowBlur: 4,
-                    shadowColor: 'rgba(255, 214, 10, 0.5)'
+                    fontSize: 9,
+                    fontWeight: 'normal',
+                    shadowBlur: 2,
+                    shadowColor: 'rgba(255, 214, 10, 0.3)'
                 },
-                z: 10
+                z: 7
             },
-            // SPIKE marker
-            spikePoint ? {
-                name: 'SPIKE',
-                type: 'scatter',
-                data: [[spikePoint.time, spikePoint.value]],
-                symbolSize: 22,
-                itemStyle: {
-                    color: spikePoint.value > data.start_price ? '#00ffa3' : '#ff3b69',
-                    shadowBlur: 12,
-                    shadowColor: spikePoint.value > data.start_price ? 'rgba(0, 255, 163, 0.6)' : 'rgba(255, 59, 105, 0.6)',
-                    borderWidth: 2,
-                    borderColor: spikePoint.value > data.start_price ? 'rgba(0, 255, 163, 0.8)' : 'rgba(255, 59, 105, 0.8)'
-                },
-                label: {
-                    show: true,
-                    formatter: '★',
-                    position: spikePoint.value > data.start_price ? 'bottom' : 'top',
-                    fontSize: 18,
-                    fontWeight: 'bold',
-                    color: spikePoint.value > data.start_price ? '#00ffa3' : '#ff3b69',
-                    shadowBlur: 6,
-                    shadowColor: spikePoint.value > data.start_price ? 'rgba(0, 255, 163, 0.6)' : 'rgba(255, 59, 105, 0.6)'
-                },
-                z: 10
-            } : null,
             // Whale events - BEFORE (semi-transparent blue)
             {
                 name: 'Whale (Before)',
@@ -655,7 +638,15 @@ function loadPriceData(data) {
                     return data[2].symbol;
                 },
                 label: {
-                    show: false
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2].label;
+                    },
+                    position: function(params) {
+                        return params.data[2].labelPosition;
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
                 },
                 z: 5
             },
@@ -705,7 +696,15 @@ function loadPriceData(data) {
                     return data[2].symbol;
                 },
                 label: {
-                    show: false
+                    show: true,
+                    formatter: function(params) {
+                        return params.data[2].label;
+                    },
+                    position: function(params) {
+                        return params.data[2].labelPosition;
+                    },
+                    fontSize: 9,
+                    color: '#e0e0e0'
                 },
                 z: 5
             }
@@ -830,10 +829,10 @@ function prepareWhaleScatterData(events, period) {
         }
 
         // Calculate size based on USD value (logarithmic scale for better visualization)
-        // Base size depends on period, then scale by USD value
-        const baseSize = period === 'during' ? 12 : 6;
-        const minSize = period === 'during' ? 8 : 4;
-        const maxSize = period === 'during' ? 24 : 12;
+        // All periods use the same size scale for consistency
+        const baseSize = 12;
+        const minSize = 8;
+        const maxSize = 24;
 
         let size;
         if (maxUsd === minUsd) {
