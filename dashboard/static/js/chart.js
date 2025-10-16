@@ -116,7 +116,7 @@ function updateAnalysisInfo(analysisId, intervals, analysis) {
         document.getElementById('info-interval').textContent = analysis.interval || 'N/A';
         document.getElementById('info-lookback').textContent = analysis.lookback || 'N/A';
         document.getElementById('info-threshold').textContent = analysis.min_change ? `${analysis.min_change}%` : 'N/A';
-        infoElement.style.display = 'grid';
+        infoElement.style.display = 'flex';
     } else {
         infoElement.style.display = 'none';
     }

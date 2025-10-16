@@ -338,46 +338,44 @@ body::after {
     order: 8;
 }
 
-/* Analysis Info */
-.analysis-info {
-    background: rgba(17, 17, 17, 0.6);
-    backdrop-filter: blur(10px);
-    padding: 1rem 1.5rem;
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    display: flex;
-    gap: 2rem;
-    align-items: center;
-    flex-wrap: wrap;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    position: relative;
-    overflow: hidden;
+.data-flow-info {
+    order: 9;
 }
 
-.analysis-info::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: var(--green);
-    box-shadow: 0 0 10px var(--green-glow);
+/* Analysis Info */
+.analysis-info {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+    flex-wrap: nowrap;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+}
+
+.analysis-info:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 .info-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
+    white-space: nowrap;
 }
 
 .info-icon {
-    font-size: 1rem;
+    font-size: 0.85rem;
+    opacity: 0.7;
 }
 
 .info-text {
-    font-size: 0.9rem;
-    color: var(--text-primary);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
@@ -829,29 +827,36 @@ body::after {
 /* Data Flow Documentation */
 .data-flow-info {
     margin-top: 1.5rem;
-    background: rgba(10, 10, 10, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(17, 17, 17, 0.4), rgba(10, 10, 10, 0.6));
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
     overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .data-flow-summary {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
     cursor: pointer;
     user-select: none;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.02);
     transition: all 0.3s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .data-flow-summary:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
+}
+
+details[open] .data-flow-summary {
+    border-bottom-color: rgba(0, 194, 255, 0.2);
 }
 
 .data-flow-icon {
@@ -869,14 +874,19 @@ details[open] .data-flow-toggle {
 }
 
 .data-flow-content {
-    padding: 1rem;
-    font-size: 0.75rem;
-    line-height: 1.6;
+    padding: 1.5rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
     color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.2);
 }
 
 .data-flow-section {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    border-left: 3px solid rgba(0, 194, 255, 0.3);
 }
 
 .data-flow-section:last-child {
@@ -884,36 +894,43 @@ details[open] .data-flow-toggle {
 }
 
 .data-flow-title {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.9rem;
+    font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .data-flow-item {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.5rem;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
 }
 
 .api-endpoint {
     display: inline-block;
-    background: rgba(0, 194, 255, 0.1);
-    color: #00c2ff;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    background: rgba(0, 194, 255, 0.15);
+    color: #00d9ff;
+    padding: 0.4rem 0.7rem;
+    border-radius: 6px;
     font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    border: 1px solid rgba(0, 194, 255, 0.2);
+    border: 1px solid rgba(0, 194, 255, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 194, 255, 0.1);
 }
 
 .api-description {
     color: var(--text-secondary);
-    opacity: 0.8;
+    font-size: 0.85rem;
 }
 
 .data-flow-detail {
