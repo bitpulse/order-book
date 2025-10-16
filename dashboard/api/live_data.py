@@ -5,11 +5,16 @@ Handles live data streaming endpoints for real-time charts
 
 from flask import Blueprint, render_template, jsonify, request
 from services import InfluxDBService
+import os
+import sys
 
-try:
-    from config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
-except ImportError:
-    from dashboard.config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
+# Add dashboard directory to path for Docker environment
+dashboard_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if dashboard_dir not in sys.path:
+    sys.path.insert(0, dashboard_dir)
+
+# Import config from dashboard.config
+from config import MONITORED_SYMBOLS, DEFAULT_SYMBOL
 
 # Create blueprint
 live_data_bp = Blueprint('live_data', __name__)
