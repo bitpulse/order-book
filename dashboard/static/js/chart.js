@@ -5,10 +5,22 @@ let currentData = null;
 let currentInterval = null;
 let minUsdFilter = 0; // Global filter for minimum USD value
 
+// Filter state for legend toggles
+let filters = {
+    price: true,
+    marketBuy: true,
+    marketSell: true,
+    newBid: true,
+    newAsk: true,
+    bidIncrease: true,
+    askIncrease: true
+};
+
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', async () => {
     await loadFileList();
     setupEventListeners();
+    setupFilterListeners();
     // Hide loading spinner initially (show zero state instead)
     showLoading(false);
 });
@@ -381,7 +393,7 @@ function loadPriceData(data) {
         },
         series: [
             // Main price line
-            {
+            filters.price ? {
                 name: 'Price',
                 type: 'line',
                 data: chartData.map(d => [d.time, d.value]),
@@ -419,7 +431,7 @@ function loadPriceData(data) {
                     }
                 },
                 sampling: 'lttb'
-            },
+            } : null,
             // START marker
             {
                 name: 'START',
@@ -586,8 +598,32 @@ function loadPriceData(data) {
 function prepareWhaleScatterData(events, period) {
     if (!events || events.length === 0) return [];
 
+    // Filter events based on legend filters
+    const filteredEvents = events.filter(event => {
+        const isMarketBuy = event.event_type === 'market_buy';
+        const isMarketSell = event.event_type === 'market_sell';
+        const isIncrease = event.event_type === 'increase';
+        const isDecrease = event.event_type === 'decrease';
+        const isBid = event.side === 'bid' || event.event_type.includes('bid');
+        const isAsk = event.side === 'ask' || event.event_type.includes('ask');
+        const isNewBid = !isMarketBuy && !isMarketSell && !isIncrease && !isDecrease && isBid;
+        const isNewAsk = !isMarketBuy && !isMarketSell && !isIncrease && !isDecrease && isAsk;
+
+        // Apply filters
+        if (isMarketBuy && !filters.marketBuy) return false;
+        if (isMarketSell && !filters.marketSell) return false;
+        if (isNewBid && !filters.newBid) return false;
+        if (isNewAsk && !filters.newAsk) return false;
+        if ((isIncrease && isBid) && !filters.bidIncrease) return false;
+        if ((isIncrease && isAsk) && !filters.askIncrease) return false;
+        if ((isDecrease && isBid) && !filters.askIncrease) return false; // bid decrease = resistance building
+        if ((isDecrease && isAsk) && !filters.bidIncrease) return false; // ask decrease = support building
+
+        return true;
+    });
+
     // Sort by time
-    const sortedEvents = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
+    const sortedEvents = [...filteredEvents].sort((a, b) => new Date(a.time) - new Date(b.time));
 
     // Find min and max USD values for scaling
     const usdValues = sortedEvents.map(e => e.usd_value);
@@ -1589,4 +1625,57 @@ async function runAnalysis() {
             statusMsg.style.color = 'var(--green)';
         }, 3000);
     }
+}
+
+// Setup filter checkbox listeners
+function setupFilterListeners() {
+    // Price line toggle
+    document.getElementById('filter-price').addEventListener('change', (e) => {
+        filters.price = e.target.checked;
+        updateChartFilters();
+    });
+
+    // Market Buy toggle
+    document.getElementById('filter-market-buy').addEventListener('change', (e) => {
+        filters.marketBuy = e.target.checked;
+        updateChartFilters();
+    });
+
+    // Market Sell toggle
+    document.getElementById('filter-market-sell').addEventListener('change', (e) => {
+        filters.marketSell = e.target.checked;
+        updateChartFilters();
+    });
+
+    // New Bid toggle
+    document.getElementById('filter-new-bid').addEventListener('change', (e) => {
+        filters.newBid = e.target.checked;
+        updateChartFilters();
+    });
+
+    // New Ask toggle
+    document.getElementById('filter-new-ask').addEventListener('change', (e) => {
+        filters.newAsk = e.target.checked;
+        updateChartFilters();
+    });
+
+    // Bid Increase toggle
+    document.getElementById('filter-bid-increase').addEventListener('change', (e) => {
+        filters.bidIncrease = e.target.checked;
+        updateChartFilters();
+    });
+
+    // Ask Increase toggle
+    document.getElementById('filter-ask-increase').addEventListener('change', (e) => {
+        filters.askIncrease = e.target.checked;
+        updateChartFilters();
+    });
+}
+
+// Update chart based on filter state
+function updateChartFilters() {
+    if (!chart || !currentInterval) return;
+
+    // Reload the data with current filters applied
+    loadPriceData(currentInterval);
 }

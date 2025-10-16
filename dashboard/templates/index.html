@@ -298,22 +298,30 @@
             </div>
           </div>
 
-          <!-- Chart Legend -->
+          <!-- Chart Legend with Filters -->
           <div class="chart-legend">
             <div class="legend-section">
               <div class="legend-title">Price & Markers</div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-price"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span class="legend-marker" style="background: #00c2ff"></span>
                 <span>Price Line</span>
-              </div>
-              <div class="legend-item">
-                <span class="legend-marker" style="background: #ffd60a"></span>
-                <span>START/END</span>
               </div>
             </div>
             <div class="legend-section">
               <div class="legend-title">Definitive Events (Bright)</div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-new-bid"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span
                   class="legend-marker legend-triangle"
                   style="border-bottom-color: #00ff88"
@@ -321,6 +329,12 @@
                 <span>New Bid Orders</span>
               </div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-new-ask"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span
                   class="legend-marker legend-triangle-down"
                   style="border-top-color: #ff4444"
@@ -328,10 +342,22 @@
                 <span>New Ask Orders</span>
               </div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-market-buy"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span class="legend-marker" style="background: #00c2ff"></span>
                 <span>Market Buy</span>
               </div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-market-sell"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span class="legend-marker" style="background: #ff00ff"></span>
                 <span>Market Sell</span>
               </div>
@@ -339,6 +365,12 @@
             <div class="legend-section">
               <div class="legend-title">Volume Changes (Muted)</div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-bid-increase"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span
                   class="legend-marker legend-diamond"
                   style="background: #88cc88"
@@ -346,6 +378,12 @@
                 <span>Bid Increase / Ask Decrease</span>
               </div>
               <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-ask-increase"
+                  checked
+                  style="margin-right: 8px"
+                />
                 <span
                   class="legend-marker legend-diamond"
                   style="background: #cc8888"
