@@ -109,6 +109,10 @@ class OrderBookHistory:
         self.full_bids = {}  # {price: (volume, order_count)}
         self.full_asks = {}
 
+        # Previous full order book state (for detecting truly new orders)
+        self.previous_full_bids = {}
+        self.previous_full_asks = {}
+
         # Previous visible window state (for comparison)
         self.previous_bids = {}
         self.previous_asks = {}
@@ -476,7 +480,7 @@ class OrderBookHistory:
 
             if price not in self.previous_bids:
                 # Bid level appeared in visible window - check if truly new or just moved into view
-                was_in_full_book = price in self.full_bids and self.stats['updates'] > 0
+                was_in_full_book = price in self.previous_full_bids and self.stats['updates'] > 0
 
                 # Calculate distance from mid-price
                 if mid_price > 0:
@@ -646,7 +650,7 @@ class OrderBookHistory:
 
             if price not in self.previous_asks:
                 # Ask level appeared in visible window - check if truly new or just moved into view
-                was_in_full_book = price in self.full_asks and self.stats['updates'] > 0
+                was_in_full_book = price in self.previous_full_asks and self.stats['updates'] > 0
 
                 # Calculate distance from mid-price
                 if mid_price > 0:
@@ -885,6 +889,8 @@ class OrderBookHistory:
         # Update state
         self.previous_bids = current_bids.copy()
         self.previous_asks = current_asks.copy()
+        self.previous_full_bids = self.full_bids.copy()
+        self.previous_full_asks = self.full_asks.copy()
         self.last_best_bid = best_bid
         self.last_best_ask = best_ask
         self.stats['updates'] += 1

@@ -161,20 +161,31 @@ class PriceChangeAnalyzer:
         # Use 1-second sliding window for high resolution
         slide_seconds = 1
 
-        for i in range(0, len(all_price_data) - 1):
+        i = 0
+        end_point_idx = 1  # Track end point position for O(n) performance
+
+        while i < len(all_price_data) - 1:
             start_point = all_price_data[i]
             start_time = start_point['time']
-            end_time = start_time + interval_delta
+            target_end_time = start_time + interval_delta
 
-            # Find the closest price point to the end time
+            # Find the closest price point to the end time (resume from last position)
             end_point = None
-            for j in range(i + 1, len(all_price_data)):
-                if all_price_data[j]['time'] >= end_time:
+            end_point_idx = max(end_point_idx, i + 1)  # Ensure we don't go backwards
+
+            for j in range(end_point_idx, len(all_price_data)):
+                if all_price_data[j]['time'] >= target_end_time:
                     end_point = all_price_data[j]
+                    end_point_idx = j
                     break
 
             if not end_point:
-                continue
+                # No more valid end points, check if we can use the last point
+                if len(all_price_data) > i + 1:
+                    end_point = all_price_data[-1]
+                    end_point_idx = len(all_price_data) - 1
+                else:
+                    break
 
             start_price = start_point['mid_price']
             end_price = end_point['mid_price']
@@ -193,11 +204,17 @@ class PriceChangeAnalyzer:
                         'change_abs': abs(change_pct)
                     })
 
-            # Slide window by moving forward based on slide_seconds
-            # Skip ahead to avoid duplicate overlapping windows
+            # Slide window forward by slide_seconds (actually advance the index now)
+            next_start_time = start_time + timedelta(seconds=slide_seconds)
+            next_i = i + 1
+
+            # Find the first data point at or after next_start_time
             for k in range(i + 1, len(all_price_data)):
-                if (all_price_data[k]['time'] - start_time).total_seconds() >= slide_seconds:
+                if all_price_data[k]['time'] >= next_start_time:
+                    next_i = k
                     break
+
+            i = next_i
 
         # Sort by absolute change
         price_changes.sort(key=lambda x: x['change_abs'], reverse=True)
