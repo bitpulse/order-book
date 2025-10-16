@@ -138,3 +138,21 @@ def run_analysis():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@price_changes_bp.route('/api/delete/<analysis_id>', methods=['DELETE'])
+def delete_analysis(analysis_id):
+    """Delete a price change analysis by ID"""
+    try:
+        success = mongodb_service.delete_analysis('price_changes', analysis_id)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Analysis deleted successfully'
+            })
+        else:
+            return jsonify({'error': 'Analysis not found or could not be deleted'}), 404
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

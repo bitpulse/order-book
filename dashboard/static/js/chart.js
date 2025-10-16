@@ -1504,7 +1504,31 @@ function setupEventListeners() {
 
     // File selector change
     document.getElementById('file-selector').addEventListener('change', (e) => {
+        const deleteBtn = document.getElementById('delete-btn');
+        if (e.target.value) {
+            deleteBtn.style.display = 'inline-block';
+        } else {
+            deleteBtn.style.display = 'none';
+        }
         loadDataFile(e.target.value);
+    });
+
+    // Delete button
+    document.getElementById('delete-btn').addEventListener('click', () => {
+        const selector = document.getElementById('file-selector');
+        const analysisId = selector.value;
+        if (analysisId) {
+            showDeleteConfirmation(analysisId);
+        }
+    });
+
+    // Confirm delete button
+    document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
+        const selector = document.getElementById('file-selector');
+        const analysisId = selector.value;
+        if (analysisId) {
+            await deleteAnalysis(analysisId);
+        }
     });
 
     // Interval selector change
@@ -1844,4 +1868,82 @@ function updateChartFilters() {
 
     // Reload the data with current filters applied
     loadPriceData(currentInterval);
+}
+
+// Show delete confirmation modal
+function showDeleteConfirmation(analysisId) {
+    document.getElementById('delete-modal').style.display = 'flex';
+}
+
+// Delete analysis
+async function deleteAnalysis(analysisId) {
+    const confirmBtn = document.getElementById('confirm-delete-btn');
+    const originalText = confirmBtn.textContent;
+
+    try {
+        // Show loading state
+        confirmBtn.textContent = 'Deleting...';
+        confirmBtn.disabled = true;
+
+        const response = await fetch(`/api/delete/${analysisId}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            // Close modal
+            document.getElementById('delete-modal').style.display = 'none';
+
+            // Clear current data
+            currentData = null;
+            currentInterval = null;
+
+            // Hide delete button
+            document.getElementById('delete-btn').style.display = 'none';
+
+            // Clear chart
+            if (chart) {
+                chart.clear();
+            }
+
+            // Reset file selector
+            const selector = document.getElementById('file-selector');
+            selector.value = '';
+
+            // Show zero state
+            const zeroState = document.getElementById('zero-state');
+            if (zeroState) {
+                zeroState.style.display = 'flex';
+            }
+
+            // Hide analysis info
+            const analysisInfo = document.getElementById('analysis-info');
+            if (analysisInfo) {
+                analysisInfo.style.display = 'none';
+            }
+
+            // Hide interval selector
+            const intervalSelector = document.getElementById('interval-selector-container');
+            if (intervalSelector) {
+                intervalSelector.style.display = 'none';
+            }
+
+            // Reload file list
+            await loadFileList();
+
+            // Show success message
+            console.log('Analysis deleted successfully');
+        } else {
+            throw new Error(result.error || 'Failed to delete analysis');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showError('Failed to delete analysis: ' + error.message);
+    } finally {
+        // Reset button state
+        confirmBtn.textContent = originalText;
+        confirmBtn.disabled = false;
+        document.getElementById('delete-modal').style.display = 'none';
+    }
 }

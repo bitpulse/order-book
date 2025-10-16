@@ -91,6 +91,9 @@
           <select id="file-selector" class="file-selector">
             <option value="">Loading files...</option>
           </select>
+          <button id="delete-btn" class="btn btn-danger" title="Delete selected analysis" style="display: none;">
+            🗑️
+          </button>
           <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
         </div>
       </header>
@@ -759,10 +762,43 @@
       </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" style="display: none">
+      <div class="modal-content delete-modal-content">
+        <div class="modal-header">
+          <h3>Delete Analysis</h3>
+          <button
+            class="modal-close"
+            onclick="document.getElementById('delete-modal').style.display='none'"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 1.5rem;">Are you sure you want to delete this analysis? This action cannot be undone.</p>
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button
+              class="btn btn-secondary"
+              onclick="document.getElementById('delete-modal').style.display='none'"
+            >
+              Cancel
+            </button>
+            <button
+              id="confirm-delete-btn"
+              class="btn btn-danger"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Styles -->
     <style>
       #event-details-modal,
-      #new-analysis-modal {
+      #new-analysis-modal,
+      #delete-modal {
         display: none;
         position: fixed;
         top: 0;
