@@ -40,7 +40,17 @@ def get_analyses_from_mongodb(collection_name, limit=100):
 
     try:
         import sys
-        sys.path.insert(0, str(BASE_DIR))
+        import os
+        # Ensure the parent directory is in path (should contain 'src' folder)
+        parent_dir = str(BASE_DIR)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        # Also add src directory itself for Docker environments
+        src_dir = os.path.join(parent_dir, 'src')
+        if os.path.exists(src_dir) and src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+
         from src.mongodb_storage import get_mongodb_storage
         from datetime import datetime
 
@@ -91,7 +101,17 @@ def get_analysis_from_mongodb(collection_name, analysis_id):
     """
     try:
         import sys
-        sys.path.insert(0, str(BASE_DIR))
+        import os
+        # Ensure the parent directory is in path (should contain 'src' folder)
+        parent_dir = str(BASE_DIR)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        # Also add src directory itself for Docker environments
+        src_dir = os.path.join(parent_dir, 'src')
+        if os.path.exists(src_dir) and src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+
         from src.mongodb_storage import get_mongodb_storage
 
         mongo = get_mongodb_storage()
