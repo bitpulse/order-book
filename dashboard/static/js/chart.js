@@ -1594,28 +1594,95 @@ function setupEventListeners() {
         filterEvents(document.getElementById('event-search').value, e.target.value);
     });
 
-    // USD filter - apply on Enter key
-    document.getElementById('min-usd-filter').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            minUsdFilter = parseFloat(e.target.value) || 0;
-            // Reload the current interval with new filter
-            if (currentInterval) {
-                loadInterval(currentInterval);
+    // USD Filter Management - Get input elements
+    const chartUsdInput = document.getElementById('chart-min-usd-filter');
+    const whaleUsdInput = document.getElementById('min-usd-filter');
+
+    // Helper function to apply USD filter value
+    function applyUsdFilter(value) {
+        minUsdFilter = value;
+
+        // Sync both inputs
+        chartUsdInput.value = value || '';
+        whaleUsdInput.value = value || '';
+
+        // Update visual states
+        updateUsdFilterStatus(value);
+
+        // Reload chart with new filter
+        if (currentInterval) {
+            loadInterval(currentInterval);
+        }
+    }
+
+    // Helper function to update USD filter status display
+    function updateUsdFilterStatus(value) {
+        const statusEl = document.getElementById('usd-filter-status');
+        const inputEl = document.getElementById('chart-min-usd-filter');
+
+        if (value > 0) {
+            statusEl.textContent = `Showing events ≥ $${formatNumber(value)}`;
+            statusEl.classList.add('active');
+            inputEl.classList.add('active');
+        } else {
+            statusEl.textContent = 'Showing all events';
+            statusEl.classList.remove('active');
+            inputEl.classList.remove('active');
+        }
+
+        // Update preset button active states
+        document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+            const btnValue = parseInt(btn.getAttribute('data-value'));
+            if (btnValue === value) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
             }
+        });
+    }
+
+    // USD filter - apply on Enter key (whale events panel)
+    whaleUsdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const value = parseFloat(e.target.value) || 0;
+            applyUsdFilter(value);
         }
     });
 
-    // Also apply on blur (when clicking outside)
-    document.getElementById('min-usd-filter').addEventListener('blur', (e) => {
+    // Also apply on blur (when clicking outside) (whale events panel)
+    whaleUsdInput.addEventListener('blur', (e) => {
         const newValue = parseFloat(e.target.value) || 0;
         if (newValue !== minUsdFilter) {
-            minUsdFilter = newValue;
-            // Reload the current interval with new filter
-            if (currentInterval) {
-                loadInterval(currentInterval);
-            }
+            applyUsdFilter(newValue);
         }
     });
+
+    // Chart USD input - Enter key
+    chartUsdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const value = parseFloat(e.target.value) || 0;
+            applyUsdFilter(value);
+        }
+    });
+
+    // Chart USD input - blur
+    chartUsdInput.addEventListener('blur', (e) => {
+        const value = parseFloat(e.target.value) || 0;
+        if (value !== minUsdFilter) {
+            applyUsdFilter(value);
+        }
+    });
+
+    // Preset buttons
+    document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const value = parseInt(btn.getAttribute('data-value'));
+            applyUsdFilter(value);
+        });
+    });
+
+    // Initialize filter status
+    updateUsdFilterStatus(minUsdFilter);
 
     // Modal close button
     const closeBtn = document.querySelector('.modal-close');

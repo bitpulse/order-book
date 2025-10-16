@@ -1177,6 +1177,108 @@ details[open] .data-flow-toggle {
     box-shadow: 0 0 0 2px var(--green-glow);
 }
 
+/* Chart Legend USD Filter */
+.legend-filter-section {
+    min-width: 250px;
+}
+
+.usd-filter-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.usd-filter-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.usd-filter-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.chart-usd-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: 'Monaco', 'Menlo', monospace;
+    transition: all 0.2s ease;
+}
+
+.chart-usd-input:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.chart-usd-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--green);
+    box-shadow: 0 0 0 2px rgba(0, 255, 163, 0.2);
+}
+
+.chart-usd-input.active {
+    border-color: rgba(0, 194, 255, 0.5);
+    background: rgba(0, 194, 255, 0.05);
+}
+
+.usd-filter-presets {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.usd-preset-btn {
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.usd-preset-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+.usd-preset-btn:active {
+    transform: translateY(0);
+}
+
+.usd-preset-btn.active {
+    background: rgba(0, 194, 255, 0.15);
+    color: #00d9ff;
+    border-color: rgba(0, 194, 255, 0.4);
+    box-shadow: 0 0 8px rgba(0, 194, 255, 0.2);
+}
+
+.usd-filter-status {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    padding: 0.25rem 0;
+}
+
+.usd-filter-status.active {
+    color: #00d9ff;
+    font-weight: 500;
+}
+
 /* Event Stats */
 .event-stats {
     display: grid;

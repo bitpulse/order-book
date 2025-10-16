@@ -668,6 +668,30 @@
                 partial fills
               </div>
             </div>
+            <div class="legend-section legend-filter-section">
+              <div class="legend-title">Filter by Value</div>
+              <div class="usd-filter-wrapper">
+                <div class="usd-filter-input-group">
+                  <span class="usd-filter-label">Min USD:</span>
+                  <input
+                    type="number"
+                    id="chart-min-usd-filter"
+                    placeholder="0"
+                    min="0"
+                    step="1000"
+                    class="chart-usd-input"
+                  />
+                </div>
+                <div class="usd-filter-presets">
+                  <button class="usd-preset-btn" data-value="0">All</button>
+                  <button class="usd-preset-btn" data-value="1000">$1K</button>
+                  <button class="usd-preset-btn" data-value="5000">$5K</button>
+                  <button class="usd-preset-btn" data-value="10000">$10K</button>
+                  <button class="usd-preset-btn" data-value="50000">$50K</button>
+                </div>
+                <div class="usd-filter-status" id="usd-filter-status">Showing all events</div>
+              </div>
+            </div>
           </div>
 
           <!-- Data Flow Documentation -->
