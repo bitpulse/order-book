@@ -34,7 +34,22 @@ python live/price_change_analyzer.py \
 # Different symbol
 python live/price_change_analyzer.py --symbol ETH_USDT --interval 10s --lookback 12h
 
-# Export results to JSON for further analysis
+# Save to MongoDB database (for API dashboard)
+python live/price_change_analyzer.py --save-db
+
+# Display in terminal AND save to MongoDB
+python live/price_change_analyzer.py --interval 1s --lookback 1h --save-db
+
+# Your exact use case: Analyze TAO_USDT and save to database
+python live/price_change_analyzer.py \
+  --symbol TAO_USDT \
+  --lookback 24h \
+  --interval 1m \
+  --top 100 \
+  --min-change 0.1 \
+  --save-db
+
+# Export results to JSON file for further analysis
 python live/price_change_analyzer.py --output json --export-path results.json
 
 # Export to CSV for spreadsheet analysis
@@ -187,6 +202,7 @@ Examples: `1s`, `5s`, `10s`, `30s`, `1m`, `5m`, `15m`, `30m`, `1h`
 ```bash
 --output FORMAT           # terminal, json, json-summary, or csv (default: terminal)
 --export-path PATH        # Custom export file path (auto-generated if not specified)
+--save-db                 # Save results to MongoDB database (works with any output format)
 ```
 
 ## Example Use Cases
@@ -226,22 +242,28 @@ python live/price_change_analyzer.py --interval 15m --lookback 7d --min-change 1
 ```
 **Use case:** Find 15-minute periods with >1% moves over the past week
 
-### 5. Export for Further Analysis
+### 5. Save to MongoDB for API Dashboard
+```bash
+python live/price_change_analyzer.py --interval 1m --lookback 24h --top 100 --save-db
+```
+**Use case:** Populate MongoDB database for the API dashboard to display analysis results
+
+### 6. Export for Further Analysis
 ```bash
 python live/price_change_analyzer.py --interval 5s --lookback 12h --output json
 ```
 **Use case:** Export data as JSON for custom analysis scripts
 
-### 6. Multi-Symbol Comparison
+### 7. Multi-Symbol Comparison
 ```bash
-# Run for multiple symbols
-python live/price_change_analyzer.py --symbol BTC_USDT --interval 1m --output json
-python live/price_change_analyzer.py --symbol ETH_USDT --interval 1m --output json
-python live/price_change_analyzer.py --symbol DOGE_USDT --interval 1m --output json
+# Run for multiple symbols and save to MongoDB
+python live/price_change_analyzer.py --symbol BTC_USDT --interval 1m --save-db
+python live/price_change_analyzer.py --symbol ETH_USDT --interval 1m --save-db
+python live/price_change_analyzer.py --symbol DOGE_USDT --interval 1m --save-db
 ```
 **Use case:** Compare which asset had most volatile intervals
 
-### 7. Reproducible Backtesting
+### 8. Reproducible Backtesting
 ```bash
 # Run analysis on same time period multiple times
 python live/price_change_analyzer.py \
@@ -252,7 +274,7 @@ python live/price_change_analyzer.py \
 ```
 **Use case:** Test different parameters on exact same historical data for comparison
 
-### 8. Analyze Trading Session (Hybrid Mode)
+### 9. Analyze Trading Session (Hybrid Mode)
 ```bash
 # Analyze 4 hours starting from market open
 python live/price_change_analyzer.py \
@@ -263,7 +285,7 @@ python live/price_change_analyzer.py \
 ```
 **Use case:** Study specific trading hours (market open, close, etc.) with flexible time specification
 
-### 9. LLM-Friendly Export for AI Analysis
+### 10. LLM-Friendly Export for AI Analysis
 ```bash
 python live/price_change_analyzer.py --symbol SPX_USDT --lookback 6h --interval 10s --output json-summary
 ```
@@ -364,6 +386,13 @@ orderbook_tracker.py → InfluxDB → price_change_analyzer.py
    - Shows ranked intervals with price change info
    - Summarizes whale activity by type
    - Lists chronological event timeline
+
+5. **Save to MongoDB (Optional):**
+   - Use `--save-db` flag to save results to MongoDB
+   - Stores analysis metadata (symbol, lookback, interval, timestamp)
+   - Saves interval data with statistics (not raw data for efficiency)
+   - Makes results available to API dashboard
+   - Independent of output format (can display in terminal AND save to DB)
 
 ## Output Format Details
 
@@ -585,6 +614,17 @@ A: No! It preserves:
 - Complete aggregate statistics (total volume, event counts, side distribution)
 - Key price inflection points (spikes, reversals)
 - What it removes: redundant price ticks and smaller whale events that don't affect patterns
+
+**Q: How does `--save-db` work?**
+A: The `--save-db` flag saves analysis results to MongoDB:
+- Works independently of `--output` format (you can display in terminal AND save to DB)
+- Stores analysis metadata and statistics (efficient, no raw data)
+- Makes results accessible via API dashboard
+- Returns a MongoDB document ID for reference
+- Example: `python live/price_change_analyzer.py --symbol TAO_USDT --lookback 24h --save-db`
+
+**Q: Do I need MongoDB to use this tool?**
+A: No! MongoDB is optional. Without `--save-db`, the tool works normally (terminal display, JSON/CSV export). MongoDB is only needed if you want to integrate with the API dashboard.
 
 ## Tips for Effective Analysis
 

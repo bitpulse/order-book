@@ -986,7 +986,7 @@ class PriceChangeAnalyzer:
         else:
             return WHITE
 
-    def export_json(self, results: List[Dict], filepath: str = None, save_to_file: bool = False):
+    def export_json(self, results: List[Dict], filepath: str = None, save_to_db: bool = True, save_to_file: bool = False):
         """Export results to MongoDB (and optionally to JSON file for backup)"""
         # Convert datetime objects to strings and prepare lightweight data structure
         intervals = []
@@ -1028,28 +1028,31 @@ class PriceChangeAnalyzer:
 
         # Save to MongoDB (primary storage)
         analysis_id = None
-        try:
-            # Import here to avoid circular dependencies
-            import sys
-            import os
-            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            from src.mongodb_storage import get_mongodb_storage
+        if save_to_db:
+            try:
+                # Import here to avoid circular dependencies
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from src.mongodb_storage import get_mongodb_storage
 
-            mongo = get_mongodb_storage()
-            if mongo:
-                metadata = {
-                    'filename': os.path.basename(filepath) if filepath else f'price_changes_{self.symbol}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
-                    'top_n': self.top_n
-                }
-                analysis_id = mongo.save_analysis('price_changes', export_data, metadata)
-                print(f"{GREEN}✓ Saved to MongoDB with ID: {analysis_id}{RESET}")
-                mongo.close()
-            else:
-                print(f"{YELLOW}Warning: MongoDB not available, saving to file instead{RESET}")
-                save_to_file = True
-        except Exception as e:
-            print(f"{YELLOW}Warning: Could not save to MongoDB: {e}{RESET}")
-            save_to_file = True
+                mongo = get_mongodb_storage()
+                if mongo:
+                    metadata = {
+                        'filename': os.path.basename(filepath) if filepath else f'price_changes_{self.symbol}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
+                        'top_n': self.top_n
+                    }
+                    analysis_id = mongo.save_analysis('price_changes', export_data, metadata)
+                    print(f"{GREEN}✓ Saved to MongoDB with ID: {analysis_id}{RESET}")
+                    mongo.close()
+                else:
+                    print(f"{YELLOW}Warning: MongoDB not available{RESET}")
+                    if not save_to_file and filepath:
+                        print(f"{YELLOW}Consider using file export as backup{RESET}")
+            except Exception as e:
+                print(f"{YELLOW}Warning: Could not save to MongoDB: {e}{RESET}")
+                if not save_to_file and filepath:
+                    print(f"{YELLOW}Consider using file export as backup{RESET}")
 
         # Optionally save to JSON file (backup or if MongoDB failed)
         if save_to_file and filepath:
@@ -1161,6 +1164,12 @@ def parse_args():
         help='End time for analysis (ISO 8601: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"). If not specified, uses now or from-time + lookback.'
     )
 
+    parser.add_argument(
+        '--save-db',
+        action='store_true',
+        help='Save results to MongoDB database (independent of output format)'
+    )
+
     return parser.parse_args()
 
 
@@ -1191,14 +1200,21 @@ def main():
         if not results:
             return
 
+        # Handle output format
         if args.output == 'terminal':
             analyzer.display_terminal(results)
         elif args.output == 'json':
-            # Save to MongoDB (no file creation unless it fails)
-            print(f"{DIM}Saving to MongoDB...{RESET}")
-            analysis_id = analyzer.export_json(results)
-            if analysis_id:
-                print(f"{GREEN}MongoDB ID: {analysis_id}{RESET}")
+            # JSON output mode: save to file
+            if args.export_path:
+                export_path = args.export_path
+            else:
+                # Create data directory if it doesn't exist
+                data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+                os.makedirs(data_dir, exist_ok=True)
+                filename = f"price_changes_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                export_path = os.path.join(data_dir, filename)
+
+            analyzer.export_json(results, filepath=export_path, save_to_db=False, save_to_file=True)
         elif args.output == 'csv':
             # Create data directory if it doesn't exist
             data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
@@ -1211,6 +1227,13 @@ def main():
                 export_path = os.path.join(data_dir, filename)
 
             analyzer.export_csv(results, export_path)
+
+        # Handle --save-db flag (independent of output format)
+        if args.save_db:
+            print(f"\n{DIM}Saving to MongoDB...{RESET}")
+            analysis_id = analyzer.export_json(results, save_to_db=True, save_to_file=False)
+            if analysis_id:
+                print(f"{GREEN}MongoDB ID: {analysis_id}{RESET}")
 
         analyzer.close()
 
