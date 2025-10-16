@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy dashboard application
 COPY dashboard/ .
 
+# Copy src directory for mongodb_storage module
+COPY src/ /app/src/
+
 # Create data directory
 RUN mkdir -p /app/data
 
