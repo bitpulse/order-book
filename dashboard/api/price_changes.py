@@ -17,8 +17,14 @@ analysis_service = AnalysisService()
 
 @price_changes_bp.route('/')
 def index():
-    """Serve the main dashboard page"""
+    """Serve the main dashboard page (card grid)"""
     return render_template('index.html')
+
+
+@price_changes_bp.route('/analysis/<analysis_id>')
+def analysis_detail(analysis_id):
+    """Serve the analysis detail page"""
+    return render_template('analysis_detail.html', analysis_id=analysis_id)
 
 
 @price_changes_bp.route('/api/files')

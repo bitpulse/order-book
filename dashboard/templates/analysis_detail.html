@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analysis Detail - Price Change Analyzer</title>
+
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/sidebar.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/dashboard.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/hero-bar.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/context-cards.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/event-stats.css') }}"
+    />
+  </head>
+  <body>
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-text">Bitpulse</span>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle">
+          <span>✕</span>
+        </button>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Analyzers</div>
+        <a href="/" class="nav-item">
+          <span class="nav-icon">▲</span>
+          <span class="nav-label">Price Changes</span>
+        </a>
+        <a href="/top-market-orders" class="nav-item">
+          <span class="nav-icon">◆</span>
+          <span class="nav-label">Market Orders</span>
+        </a>
+        <a href="/market-orders-intervals" class="nav-item">
+          <span class="nav-icon">■</span>
+          <span class="nav-label">Order Intervals</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Whale Tracking</div>
+        <a href="/whale-activity" class="nav-item">
+          <span class="nav-icon">●</span>
+          <span class="nav-label">Whale Activity</span>
+        </a>
+        <a href="/whale-monitor" class="nav-item">
+          <span class="nav-icon">◉</span>
+          <span class="nav-label">Whale Monitor</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Live Data</div>
+        <a href="/live" class="nav-item">
+          <span class="nav-icon">◆</span>
+          <span class="nav-label">Live Dashboard</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="nav-item" id="connection-status">
+          <span class="nav-icon status-indicator"></span>
+          <span class="nav-label">Connected</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay"></div>
+
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <a href="/" class="btn btn-link" style="padding: 0.5rem 1rem;">← Back</a>
+          <h1>Analysis Detail</h1>
+        </div>
+        <div class="header-controls">
+          <button id="delete-btn" class="btn btn-danger" title="Delete this analysis">
+            🗑️ Delete
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Left Panel: Chart and Stats -->
+        <div class="chart-panel">
+          <!-- Analysis Info (Basic Info Bar) -->
+          <div id="analysis-info" class="analysis-info" style="display: none">
+            <div class="info-item">
+              <span class="info-icon">📊</span>
+              <span id="info-symbol" class="info-text">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">⏱️</span>
+              <span id="info-interval" class="info-text">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">🔍</span>
+              <span id="info-lookback" class="info-text">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">📈</span>
+              <span id="info-threshold" class="info-text">-</span>
+            </div>
+          </div>
+
+          <!-- Hero Analytics Bar -->
+          <div id="hero-analytics-bar" class="hero-analytics-bar" style="display: none">
+            <div class="hero-analytics-grid">
+              <!-- Symbol Price -->
+              <div class="hero-metric neutral" id="hero-price">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">💎</span>
+                  <span class="hero-metric-label">Symbol Price</span>
+                </div>
+                <div class="hero-metric-value" id="hero-price-value">$0.00</div>
+                <div class="hero-metric-footer">
+                  <div class="hero-metric-change up" id="hero-price-change">
+                    <span class="hero-metric-change-icon">▲</span>
+                    <span>+0.00%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Price Change % -->
+              <div class="hero-metric neutral" id="hero-change">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon pulse">⚡</span>
+                  <span class="hero-metric-label">Price Change</span>
+                </div>
+                <div class="hero-metric-value" id="hero-change-value">+0.00%</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-change-badge">
+                    Neutral
+                  </span>
+                </div>
+              </div>
+
+              <!-- Market Sentiment -->
+              <div class="hero-metric neutral" id="hero-sentiment">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">🎯</span>
+                  <span class="hero-metric-label">Sentiment</span>
+                </div>
+                <div class="hero-metric-value" id="hero-sentiment-value">50</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-sentiment-badge">
+                    <span>Neutral</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Whale Pressure -->
+              <div class="hero-metric neutral" id="hero-pressure">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">🐋</span>
+                  <span class="hero-metric-label">Whale Pressure</span>
+                </div>
+                <div class="hero-metric-value" id="hero-pressure-value">0</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-pressure-badge">
+                    Balanced
+                  </span>
+                </div>
+              </div>
+
+              <!-- Liquidity Delta -->
+              <div class="hero-metric neutral" id="hero-liquidity">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">💧</span>
+                  <span class="hero-metric-label">Liquidity</span>
+                </div>
+                <div class="hero-metric-value" id="hero-liquidity-value">$0</div>
+                <div class="hero-metric-footer">
+                  <div class="hero-metric-change up" id="hero-liquidity-change">
+                    <span class="hero-metric-change-icon">▲</span>
+                    <span>+0%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Volatility Index -->
+              <div class="hero-metric neutral" id="hero-volatility">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">📊</span>
+                  <span class="hero-metric-label">Volatility</span>
+                </div>
+                <div class="hero-metric-value" id="hero-volatility-value">0</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-volatility-badge">
+                    Low
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Market Context Cards -->
+          <div id="context-cards-container" class="context-cards-container" style="display: none">
+            <!-- Spike Context Card -->
+            <div class="context-card spike" id="spike-context-card">
+              <div class="context-card-header" onclick="toggleContextCard('spike')">
+                <div class="context-card-title-wrapper">
+                  <span class="context-card-icon">🎯</span>
+                  <span class="context-card-title">Spike Context</span>
+                  <span class="context-card-badge medium" id="spike-severity">Medium</span>
+                </div>
+                <div class="context-card-toggle">▼</div>
+              </div>
+              <div class="context-card-body">
+                <div class="context-insight info">
+                  <span class="context-insight-icon">⚡</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Trigger Analysis</div>
+                    <div class="context-insight-value" id="spike-trigger">-</div>
+                  </div>
+                </div>
+                <div class="context-insight positive">
+                  <span class="context-insight-icon">📊</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Market Pattern</div>
+                    <div class="context-insight-value" id="spike-pattern">-</div>
+                  </div>
+                </div>
+                <div class="context-insight warning">
+                  <span class="context-insight-icon">🔄</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Follow-Through</div>
+                    <div class="context-insight-value" id="spike-followthrough">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Whale Behavior Card -->
+            <div class="context-card whale" id="whale-context-card">
+              <div class="context-card-header" onclick="toggleContextCard('whale')">
+                <div class="context-card-title-wrapper">
+                  <span class="context-card-icon">🐋</span>
+                  <span class="context-card-title">Whale Behavior</span>
+                  <span class="context-card-badge low" id="whale-activity">Low</span>
+                </div>
+                <div class="context-card-toggle">▼</div>
+              </div>
+              <div class="context-card-body">
+                <div class="context-insight info">
+                  <span class="context-insight-icon">👑</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Top Whale Action</div>
+                    <div class="context-insight-value" id="whale-top-action">-</div>
+                  </div>
+                </div>
+                <div class="context-insight warning">
+                  <span class="context-insight-icon">🔍</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Unusual Patterns</div>
+                    <div class="context-insight-value" id="whale-patterns">-</div>
+                  </div>
+                </div>
+                <div class="context-insight positive">
+                  <span class="context-insight-icon">🤝</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Coordination Score</div>
+                    <div class="context-insight-value" id="whale-coordination">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Market Structure Card -->
+            <div class="context-card structure" id="structure-context-card">
+              <div class="context-card-header" onclick="toggleContextCard('structure')">
+                <div class="context-card-title-wrapper">
+                  <span class="context-card-icon">📊</span>
+                  <span class="context-card-title">Market Structure</span>
+                  <span class="context-card-badge high" id="structure-quality">High</span>
+                </div>
+                <div class="context-card-toggle">▼</div>
+              </div>
+              <div class="context-card-body">
+                <div class="context-insight info">
+                  <span class="context-insight-icon">📍</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Key Levels</div>
+                    <div class="context-insight-value" id="structure-levels">-</div>
+                  </div>
+                </div>
+                <div class="context-insight warning">
+                  <span class="context-insight-icon">⚖️</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Order Book Imbalance</div>
+                    <div class="context-insight-value" id="structure-imbalance">-</div>
+                  </div>
+                </div>
+                <div class="context-insight positive">
+                  <span class="context-insight-icon">💎</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Liquidity Quality</div>
+                    <div class="context-insight-value" id="structure-liquidity">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Event Type Statistics Panel -->
+          <div id="event-type-stats" class="event-type-stats-panel" style="display: none">
+            <!-- Period Tabs -->
+            <div class="period-tabs">
+              <button class="period-tab active" data-period="before">
+                🔴 BEFORE <span class="tab-badge" id="before-count">0</span>
+              </button>
+              <button class="period-tab" data-period="during">
+                🎯 DURING <span class="tab-badge" id="during-count">0</span>
+              </button>
+              <button class="period-tab" data-period="after">
+                🟢 AFTER <span class="tab-badge" id="after-count">0</span>
+              </button>
+              <button class="comparison-toggle" id="comparison-toggle">
+                ⚖️ Compare
+              </button>
+            </div>
+
+            <!-- Stats Content -->
+            <div class="stats-content">
+              <div id="stats-table-before" class="stats-table active"></div>
+              <div id="stats-table-during" class="stats-table"></div>
+              <div id="stats-table-after" class="stats-table"></div>
+              <div id="stats-table-comparison" class="stats-table comparison"></div>
+            </div>
+
+            <!-- Key Insights -->
+            <div class="event-insights" id="event-insights"></div>
+          </div>
+
+          <!-- Interval Intelligence Panel (Simplified) -->
+          <div id="stats-summary" class="stats-summary">
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">🏆</span>
+              <span class="stat-label">Rank</span>
+              <span id="stat-rank" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">📈</span>
+              <span class="stat-label">Change</span>
+              <span id="stat-change" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">⏱️</span>
+              <span class="stat-label">Time</span>
+              <span id="stat-time" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">💰</span>
+              <span class="stat-label">Price</span>
+              <span id="stat-price" class="stat-value">-</span>
+            </div>
+            <div class="stat-item stat-export">
+              <button
+                id="export-interval-btn"
+                class="btn btn-export"
+                title="Export current interval data as JSON"
+              >
+                <span class="export-icon">📥</span>
+                Export JSON
+              </button>
+            </div>
+          </div>
+
+          <!-- Interval Selector (if multiple intervals in file) -->
+          <div
+            id="interval-selector-container"
+            class="interval-selector-container"
+            style="display: none"
+          >
+            <label for="interval-selector">Select Interval:</label>
+            <select id="interval-selector" class="interval-selector">
+              <option value="">Select an interval...</option>
+            </select>
+          </div>
+
+          <!-- Chart Container -->
+          <div class="chart-wrapper">
+            <button
+              id="fullscreen-btn"
+              class="fullscreen-btn"
+              title="Toggle Fullscreen"
+            >
+              ⛶
+            </button>
+            <div id="chart-container" class="chart-container">
+              <div id="loading" class="loading" style="display: none">
+                <div class="spinner"></div>
+                <p>Loading chart data...</p>
+              </div>
+              <div id="zero-state" class="zero-state">
+                <div class="zero-state-icon">📊</div>
+                <h3>Loading Analysis...</h3>
+                <p>Please wait while we load the analysis data</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart Legend with Filters -->
+          <div class="chart-legend">
+            <div class="legend-section">
+              <div class="legend-title">Price & Markers</div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-price"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span class="legend-marker" style="background: #00c2ff"></span>
+                <span>Price Line</span>
+              </div>
+              <div class="legend-item" style="opacity: 0.7; padding-left: 28px;">
+                <span style="font-size: 12px; color: #ffaa00;">▼</span>
+                <span style="font-size: 11px;">START - Interval start time</span>
+              </div>
+              <div class="legend-item" style="opacity: 0.7; padding-left: 28px;">
+                <span style="font-size: 12px; color: #ffaa00;">▲</span>
+                <span style="font-size: 11px;">END - Interval end time</span>
+              </div>
+              <div class="legend-item" style="opacity: 0.9; padding-left: 28px;">
+                <span style="font-size: 14px; color: #00ffa3;">● ★</span>
+                <span style="font-size: 11px; font-weight: bold;">SPIKE - Largest price change point</span>
+              </div>
+            </div>
+            <div class="legend-section">
+              <div class="legend-title">Definitive Events (Bright)</div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-new-bid"
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-triangle"
+                  style="border-bottom-color: #00ff88"
+                ></span>
+                <span>New Bid Orders</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-new-ask"
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-triangle-down"
+                  style="border-top-color: #ff4444"
+                ></span>
+                <span>New Ask Orders</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-market-buy"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span class="legend-marker" style="background: #00c2ff"></span>
+                <span>Market Buy</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-market-sell"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span class="legend-marker" style="background: #ff00ff"></span>
+                <span>Market Sell</span>
+              </div>
+            </div>
+            <div class="legend-section">
+              <div class="legend-title">Volume Changes (Muted)</div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-bid-increase"
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-diamond"
+                  style="background: #88cc88"
+                ></span>
+                <span>Bid Increase / Ask Decrease</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-ask-increase"
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-diamond"
+                  style="background: #cc8888"
+                ></span>
+                <span>Ask Increase / Bid Decrease</span>
+              </div>
+              <div class="legend-note">
+                Volume changes could be order modifications, cancellations, or
+                partial fills
+              </div>
+            </div>
+            <div class="legend-section legend-filter-section">
+              <div class="legend-title">Filter by Value</div>
+              <div class="usd-filter-wrapper">
+                <div class="usd-filter-input-group">
+                  <span class="usd-filter-label">Min USD:</span>
+                  <input
+                    type="number"
+                    id="chart-min-usd-filter"
+                    placeholder="0"
+                    min="0"
+                    step="1000"
+                    class="chart-usd-input"
+                  />
+                </div>
+                <div class="usd-filter-presets">
+                  <button class="usd-preset-btn" data-value="0">All</button>
+                  <button class="usd-preset-btn" data-value="1000">$1K</button>
+                  <button class="usd-preset-btn" data-value="5000">$5K</button>
+                  <button class="usd-preset-btn" data-value="10000">$10K</button>
+                  <button class="usd-preset-btn" data-value="50000">$50K</button>
+                </div>
+                <div class="usd-filter-status" id="usd-filter-status">Showing all events</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Flow Documentation -->
+          <details class="data-flow-info">
+            <summary class="data-flow-summary">
+              <span class="data-flow-icon">📡</span>
+              Data Flow: From MEXC API to Dashboard
+              <span class="data-flow-toggle">▼</span>
+            </summary>
+            <div class="data-flow-content">
+              <!-- API Sources -->
+              <div class="data-flow-section">
+                <div class="data-flow-title">📡 MEXC WebSocket API Sources</div>
+                <div class="data-flow-item">
+                  <code class="api-endpoint">sub.depth.full</code>
+                  <span class="api-description"
+                    >Order Book Updates (Top 20 levels)</span
+                  >
+                </div>
+                <div class="data-flow-detail">
+                  <span class="field-label">Format:</span>
+                  <code>[price, volume, order_count]</code>
+                </div>
+                <div class="data-flow-detail">
+                  <span class="field-label">Fields:</span>
+                  <ul class="field-list">
+                    <li><code>price</code> - Price level</li>
+                    <li><code>volume</code> - Total quantity at this price</li>
+                    <li>
+                      <code>order_count</code> - Number of individual orders
+                    </li>
+                    <li>
+                      <code>version</code> - Sequence number (packet loss
+                      detection)
+                    </li>
+                    <li><code>ts</code> - Timestamp</li>
+                  </ul>
+                </div>
+
+                <div class="data-flow-item" style="margin-top: 0.75rem">
+                  <code class="api-endpoint">sub.deal</code>
+                  <span class="api-description"
+                    >Trade Executions (Market orders)</span
+                  >
+                </div>
+                <div class="data-flow-detail">
+                  <span class="field-label">Fields:</span>
+                  <ul class="field-list">
+                    <li><code>p</code> - Execution price</li>
+                    <li><code>v</code> - Execution volume</li>
+                    <li><code>T</code> - Trade type (1=Buy, 2=Sell)</li>
+                    <li><code>t</code> - Timestamp</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Event Detection Logic -->
+              <div class="data-flow-section">
+                <div class="data-flow-title">
+                  🔄 Event Detection Logic & Classification
+                </div>
+
+                <!-- New Bid/Ask -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">New Bid/Ask</span>
+                    <span class="logic-badge logic-badge-definitive"
+                      >Definitive</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price NOT in previous snapshot
+                    AND NOT in historical full book
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> A completely new price level appeared
+                    that we've never seen before. This means a whale just placed
+                    a fresh order (not moved or modified an existing one). This
+                    is a <em>definitive action</em> showing new intent.
+                  </div>
+                  <div class="logic-example">
+                    <strong>Example:</strong> BTC at $95,000 suddenly shows
+                    $500K bid that wasn't there before → New whale support level
+                  </div>
+                </div>
+
+                <!-- Increase -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Increase</span>
+                    <span class="logic-badge logic-badge-ambiguous"
+                      >Ambiguous</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price exists in previous
+                    snapshot, current volume &gt; previous volume
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> Volume at an existing price went UP.
+                    Could mean: (1) whale added to their position, (2) another
+                    trader joined at same price, or (3) order modification. We
+                    can't distinguish, so it's <em>ambiguous</em> (shown in
+                    muted colors).
+                  </div>
+                  <div class="logic-impact">
+                    <strong>Market Impact:</strong>
+                    Bid Increase = potential support building (muted green) |
+                    Ask Increase = potential resistance building (muted red)
+                  </div>
+                </div>
+
+                <!-- Decrease -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Decrease</span>
+                    <span class="logic-badge logic-badge-ambiguous"
+                      >Ambiguous</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price exists in previous
+                    snapshot, current volume &lt; previous volume
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> Volume at an existing price went DOWN.
+                    Could mean: (1) whale cancelled part of their order, (2)
+                    order got partially filled by market takers, or (3) order
+                    modification. We can't know which, so it's
+                    <em>ambiguous</em> (muted colors).
+                  </div>
+                  <div class="logic-impact">
+                    <strong>Market Impact:</strong>
+                    Bid Decrease = support weakening (muted red) | Ask Decrease
+                    = resistance weakening (muted green)
+                  </div>
+                </div>
+
+                <!-- Market Buy/Sell -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Market Buy/Sell</span>
+                    <span class="logic-badge logic-badge-definitive"
+                      >Definitive</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Source:</strong> Separate trade execution stream
+                    (<code>sub.deal</code>), Type field: 1=Buy, 2=Sell
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> These are
+                    <em>aggressive orders</em> that executed immediately against
+                    the order book. Market Buy = someone bought at ask price
+                    (bullish aggression), Market Sell = someone sold at bid
+                    price (bearish aggression). This is
+                    <em>definitive action</em> with immediate price impact.
+                  </div>
+                  <div class="logic-example">
+                    <strong>Example:</strong> $1M market buy executes → whale
+                    aggressively buying, willing to pay premium to get filled
+                    NOW (very bullish signal)
+                  </div>
+                </div>
+
+                <!-- Entered/Left Top -->
+                <div class="logic-detailed">
+                  <div class="logic-header">
+                    <span class="logic-type">Entered/Left Top</span>
+                    <span class="logic-badge logic-badge-technical"
+                      >Technical</span
+                    >
+                  </div>
+                  <div class="logic-condition">
+                    <strong>Condition:</strong> Price was in historical full
+                    book but now appeared/disappeared in top 20 window
+                  </div>
+                  <div class="logic-explanation">
+                    <strong>Why:</strong> We only track top 20 price levels (API
+                    limitation). When orders move in/out of this window, it's
+                    just a visibility change, not necessarily new market
+                    activity. Less important - more
+                    <em>technical noise</em> than trading signal.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Additional Metrics -->
+              <div class="data-flow-section">
+                <div class="data-flow-title">📊 Derived Metrics</div>
+                <div class="metric-item">
+                  <span class="metric-name">Order Count:</span>
+                  <span class="metric-source"
+                    >Direct from API <code>order_count</code> field</span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Distance from Mid:</span>
+                  <span class="metric-source"
+                    >Calculated:
+                    <code>(price - mid_price) / mid_price × 100%</code></span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">USD Value:</span>
+                  <span class="metric-source"
+                    >Calculated: <code>price × volume</code></span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Level:</span>
+                  <span class="metric-source"
+                    >Position in top 20 (1=best bid/ask)</span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Mid Price:</span>
+                  <span class="metric-source"
+                    >Calculated: <code>(best_bid + best_ask) / 2</code></span
+                  >
+                </div>
+                <div class="metric-item">
+                  <span class="metric-name">Spread:</span>
+                  <span class="metric-source"
+                    >Calculated: <code>best_ask - best_bid</code></span
+                  >
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Right Panel: Whale Events -->
+        <div class="events-panel">
+          <div class="events-header">
+            <h2>Whale Events</h2>
+            <div class="events-filters">
+              <input
+                type="text"
+                id="event-search"
+                placeholder="Search events..."
+                class="search-input"
+              />
+              <select id="event-type-filter" class="filter-select">
+                <option value="">All Types</option>
+                <option value="new_bid">New Bid</option>
+                <option value="new_ask">New Ask</option>
+                <option value="increase">Volume Increase</option>
+                <option value="decrease">Volume Decrease</option>
+                <option value="market_buy">Market Buy</option>
+                <option value="market_sell">Market Sell</option>
+                <option value="entered_top">Entered Top</option>
+                <option value="left_top">Left Top</option>
+              </select>
+              <div class="usd-filter-container">
+                <label for="min-usd-filter">Min USD:</label>
+                <input
+                  type="number"
+                  id="min-usd-filter"
+                  placeholder="0"
+                  min="0"
+                  step="1000"
+                  class="usd-filter-input"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Event Statistics -->
+          <div id="event-stats" class="event-stats">
+            <div class="event-stat">
+              <span class="event-stat-label">Total Events:</span>
+              <span id="event-stat-total" class="event-stat-value">0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Total Volume:</span>
+              <span id="event-stat-volume" class="event-stat-value">$0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Biggest Whale:</span>
+              <span id="event-stat-biggest" class="event-stat-value">$0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Biggest (During):</span>
+              <span id="event-stat-biggest-during" class="event-stat-value"
+                >$0</span
+              >
+            </div>
+          </div>
+
+          <!-- Analytical Insights -->
+          <div id="insights-panel" class="insights-panel" style="display: none">
+            <div class="insights-header">📊 Analysis</div>
+            <div id="insights-content" class="insights-content"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <p>
+          Price Change Analyzer Dashboard | Powered by
+          <a href="https://www.tradingview.com" target="_blank"
+            >TradingView Lightweight Charts</a
+          >
+        </p>
+      </footer>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="error-toast" class="error-toast" style="display: none">
+      <span id="error-message"></span>
+      <button onclick="this.parentElement.style.display='none'">&times;</button>
+    </div>
+
+    <!-- Event Details Modal -->
+    <div id="event-details-modal" style="display: none">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">Whale Events at Time</h3>
+          <button
+            class="modal-close"
+            onclick="document.getElementById('event-details-modal').style.display='none'"
+          >
+            &times;
+          </button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" style="display: none">
+      <div class="modal-content delete-modal-content">
+        <div class="modal-header">
+          <h3>Delete Analysis</h3>
+          <button
+            class="modal-close"
+            onclick="document.getElementById('delete-modal').style.display='none'"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 1.5rem;">Are you sure you want to delete this analysis? This action cannot be undone.</p>
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button
+              class="btn btn-secondary"
+              onclick="document.getElementById('delete-modal').style.display='none'"
+            >
+              Cancel
+            </button>
+            <button
+              id="confirm-delete-btn"
+              class="btn btn-danger"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Styles -->
+    <style>
+      #event-details-modal,
+      #delete-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10000;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(4px);
+      }
+
+      .modal-content {
+        position: relative;
+        background: var(--bg-tertiary);
+        border: 1px solid rgba(0, 255, 163, 0.2);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+          0 0 40px rgba(0, 255, 163, 0.1);
+        animation: modalSlideIn 0.3s ease-out;
+      }
+
+      .delete-modal-content {
+        max-width: 500px;
+      }
+
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        color: var(--green);
+        font-size: 1.5rem;
+      }
+
+      .modal-close {
+        background: none;
+        border: none;
+        color: #808080;
+        font-size: 2rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+
+      .modal-close:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+      }
+
+      .modal-body {
+        padding: 24px;
+      }
+
+      .stat-card {
+        padding: 12px;
+        border-radius: 6px;
+      }
+    </style>
+
+    <!-- Custom JavaScript -->
+    <script>
+      // Get analysis ID from URL
+      const analysisId = '{{ analysis_id }}';
+    </script>
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/analytics-constants.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/event-breakdown.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
+  </body>
+</html>

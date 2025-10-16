@@ -18,11 +18,17 @@ let filters = {
 
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadFileList();
     setupEventListeners();
     setupFilterListeners();
-    // Hide loading spinner initially (show zero state instead)
-    showLoading(false);
+
+    // Check if we have an analysis ID from the template (detail page)
+    if (typeof analysisId !== 'undefined' && analysisId) {
+        // We're on the detail page - load this specific analysis
+        await loadDataFile(analysisId);
+    } else {
+        // We're on the old page or there's no analysis ID
+        showLoading(false);
+    }
 });
 
 // Load available analyses from MongoDB
@@ -1513,10 +1519,13 @@ function exportCurrentInterval() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // New Analysis button
-    document.getElementById('new-analysis-btn').addEventListener('click', () => {
-        document.getElementById('new-analysis-modal').style.display = 'flex';
-    });
+    // New Analysis button (only on card grid page)
+    const newAnalysisBtn = document.getElementById('new-analysis-btn');
+    if (newAnalysisBtn) {
+        newAnalysisBtn.addEventListener('click', () => {
+            document.getElementById('new-analysis-modal').style.display = 'flex';
+        });
+    }
 
     // Zero state new analysis button
     const zeroStateBtn = document.getElementById('zero-state-new-analysis');
@@ -1527,162 +1536,203 @@ function setupEventListeners() {
     }
 
     // Analysis form submit
-    document.getElementById('analysis-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await runAnalysis();
-    });
+    const analysisForm = document.getElementById('analysis-form');
+    if (analysisForm) {
+        analysisForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await runAnalysis();
+        });
+    }
 
-    // File selector change
-    document.getElementById('file-selector').addEventListener('change', (e) => {
-        const deleteBtn = document.getElementById('delete-btn');
-        if (e.target.value) {
-            deleteBtn.style.display = 'inline-block';
-        } else {
-            deleteBtn.style.display = 'none';
-        }
-        loadDataFile(e.target.value);
-    });
+    // File selector change (only exists on old page)
+    const fileSelector = document.getElementById('file-selector');
+    if (fileSelector) {
+        fileSelector.addEventListener('change', (e) => {
+            const deleteBtn = document.getElementById('delete-btn');
+            if (e.target.value) {
+                deleteBtn.style.display = 'inline-block';
+            } else {
+                deleteBtn.style.display = 'none';
+            }
+            loadDataFile(e.target.value);
+        });
+    }
 
     // Delete button
-    document.getElementById('delete-btn').addEventListener('click', () => {
-        const selector = document.getElementById('file-selector');
-        const analysisId = selector.value;
-        if (analysisId) {
-            showDeleteConfirmation(analysisId);
-        }
-    });
+    const deleteBtn = document.getElementById('delete-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            // On detail page, use analysisId from template
+            const idToDelete = typeof analysisId !== 'undefined' ? analysisId : (fileSelector ? fileSelector.value : null);
+            if (idToDelete) {
+                showDeleteConfirmation(idToDelete);
+            }
+        });
+    }
 
     // Confirm delete button
-    document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
-        const selector = document.getElementById('file-selector');
-        const analysisId = selector.value;
-        if (analysisId) {
-            await deleteAnalysis(analysisId);
-        }
-    });
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async () => {
+            // On detail page, use analysisId from template
+            const idToDelete = typeof analysisId !== 'undefined' ? analysisId : (fileSelector ? fileSelector.value : null);
+            if (idToDelete) {
+                await deleteAnalysis(idToDelete);
+            }
+        });
+    }
 
     // Interval selector change
-    document.getElementById('interval-selector').addEventListener('change', (e) => {
-        const index = parseInt(e.target.value);
-        if (currentData && currentData[index]) {
-            loadInterval(currentData[index]);
-        }
-    });
+    const intervalSelector = document.getElementById('interval-selector');
+    if (intervalSelector) {
+        intervalSelector.addEventListener('change', (e) => {
+            const index = parseInt(e.target.value);
+            if (currentData && currentData[index]) {
+                loadInterval(currentData[index]);
+            }
+        });
+    }
 
     // Refresh button
-    document.getElementById('refresh-btn').addEventListener('click', async () => {
-        await loadFileList();
-    });
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            await loadFileList();
+        });
+    }
 
     // Export interval button
-    document.getElementById('export-interval-btn').addEventListener('click', () => {
-        exportCurrentInterval();
-    });
+    const exportBtn = document.getElementById('export-interval-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            exportCurrentInterval();
+        });
+    }
 
     // Fullscreen toggle
-    document.getElementById('fullscreen-btn').addEventListener('click', () => {
-        toggleFullscreen();
-    });
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', () => {
+            toggleFullscreen();
+        });
+    }
 
     // Event search
-    document.getElementById('event-search').addEventListener('input', (e) => {
-        filterEvents(e.target.value, document.getElementById('event-type-filter').value);
-    });
+    const eventSearch = document.getElementById('event-search');
+    if (eventSearch) {
+        eventSearch.addEventListener('input', (e) => {
+            const eventTypeFilter = document.getElementById('event-type-filter');
+            filterEvents(e.target.value, eventTypeFilter ? eventTypeFilter.value : '');
+        });
+    }
 
     // Event type filter
-    document.getElementById('event-type-filter').addEventListener('change', (e) => {
-        filterEvents(document.getElementById('event-search').value, e.target.value);
-    });
+    const eventTypeFilter = document.getElementById('event-type-filter');
+    if (eventTypeFilter) {
+        eventTypeFilter.addEventListener('change', (e) => {
+            const eventSearch = document.getElementById('event-search');
+            filterEvents(eventSearch ? eventSearch.value : '', e.target.value);
+        });
+    }
 
     // USD Filter Management - Get input elements
     const chartUsdInput = document.getElementById('chart-min-usd-filter');
     const whaleUsdInput = document.getElementById('min-usd-filter');
 
-    // Helper function to apply USD filter value
-    function applyUsdFilter(value) {
-        minUsdFilter = value;
+    // Only set up USD filters if the elements exist
+    if (chartUsdInput || whaleUsdInput) {
+        // Helper function to apply USD filter value
+        function applyUsdFilter(value) {
+            minUsdFilter = value;
 
-        // Sync both inputs
-        chartUsdInput.value = value || '';
-        whaleUsdInput.value = value || '';
+            // Sync both inputs
+            if (chartUsdInput) chartUsdInput.value = value || '';
+            if (whaleUsdInput) whaleUsdInput.value = value || '';
 
-        // Update visual states
-        updateUsdFilterStatus(value);
+            // Update visual states
+            updateUsdFilterStatus(value);
 
-        // Reload chart with new filter
-        if (currentInterval) {
-            loadInterval(currentInterval);
-        }
-    }
-
-    // Helper function to update USD filter status display
-    function updateUsdFilterStatus(value) {
-        const statusEl = document.getElementById('usd-filter-status');
-        const inputEl = document.getElementById('chart-min-usd-filter');
-
-        if (value > 0) {
-            statusEl.textContent = `Showing events ≥ $${formatNumber(value)}`;
-            statusEl.classList.add('active');
-            inputEl.classList.add('active');
-        } else {
-            statusEl.textContent = 'Showing all events';
-            statusEl.classList.remove('active');
-            inputEl.classList.remove('active');
-        }
-
-        // Update preset button active states
-        document.querySelectorAll('.usd-preset-btn').forEach(btn => {
-            const btnValue = parseInt(btn.getAttribute('data-value'));
-            if (btnValue === value) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
+            // Reload chart with new filter
+            if (currentInterval) {
+                loadInterval(currentInterval);
             }
+        }
+
+        // Helper function to update USD filter status display
+        function updateUsdFilterStatus(value) {
+            const statusEl = document.getElementById('usd-filter-status');
+            const inputEl = document.getElementById('chart-min-usd-filter');
+
+            if (statusEl && inputEl) {
+                if (value > 0) {
+                    statusEl.textContent = `Showing events ≥ $${formatNumber(value)}`;
+                    statusEl.classList.add('active');
+                    inputEl.classList.add('active');
+                } else {
+                    statusEl.textContent = 'Showing all events';
+                    statusEl.classList.remove('active');
+                    inputEl.classList.remove('active');
+                }
+            }
+
+            // Update preset button active states
+            document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+                const btnValue = parseInt(btn.getAttribute('data-value'));
+                if (btnValue === value) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // USD filter - apply on Enter key (whale events panel)
+        if (whaleUsdInput) {
+            whaleUsdInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const value = parseFloat(e.target.value) || 0;
+                    applyUsdFilter(value);
+                }
+            });
+
+            // Also apply on blur (when clicking outside) (whale events panel)
+            whaleUsdInput.addEventListener('blur', (e) => {
+                const newValue = parseFloat(e.target.value) || 0;
+                if (newValue !== minUsdFilter) {
+                    applyUsdFilter(newValue);
+                }
+            });
+        }
+
+        // Chart USD input - Enter key
+        if (chartUsdInput) {
+            chartUsdInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const value = parseFloat(e.target.value) || 0;
+                    applyUsdFilter(value);
+                }
+            });
+
+            // Chart USD input - blur
+            chartUsdInput.addEventListener('blur', (e) => {
+                const value = parseFloat(e.target.value) || 0;
+                if (value !== minUsdFilter) {
+                    applyUsdFilter(value);
+                }
+            });
+        }
+
+        // Preset buttons
+        document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = parseInt(btn.getAttribute('data-value'));
+                applyUsdFilter(value);
+            });
         });
+
+        // Initialize filter status
+        updateUsdFilterStatus(minUsdFilter);
     }
-
-    // USD filter - apply on Enter key (whale events panel)
-    whaleUsdInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const value = parseFloat(e.target.value) || 0;
-            applyUsdFilter(value);
-        }
-    });
-
-    // Also apply on blur (when clicking outside) (whale events panel)
-    whaleUsdInput.addEventListener('blur', (e) => {
-        const newValue = parseFloat(e.target.value) || 0;
-        if (newValue !== minUsdFilter) {
-            applyUsdFilter(newValue);
-        }
-    });
-
-    // Chart USD input - Enter key
-    chartUsdInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const value = parseFloat(e.target.value) || 0;
-            applyUsdFilter(value);
-        }
-    });
-
-    // Chart USD input - blur
-    chartUsdInput.addEventListener('blur', (e) => {
-        const value = parseFloat(e.target.value) || 0;
-        if (value !== minUsdFilter) {
-            applyUsdFilter(value);
-        }
-    });
-
-    // Preset buttons
-    document.querySelectorAll('.usd-preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const value = parseInt(btn.getAttribute('data-value'));
-            applyUsdFilter(value);
-        });
-    });
-
-    // Initialize filter status
-    updateUsdFilterStatus(minUsdFilter);
 
     // Modal close button
     const closeBtn = document.querySelector('.modal-close');
@@ -1992,45 +2042,11 @@ async function deleteAnalysis(analysisId) {
             // Close modal
             document.getElementById('delete-modal').style.display = 'none';
 
-            // Clear current data
-            currentData = null;
-            currentInterval = null;
-
-            // Hide delete button
-            document.getElementById('delete-btn').style.display = 'none';
-
-            // Clear chart
-            if (chart) {
-                chart.clear();
-            }
-
-            // Reset file selector
-            const selector = document.getElementById('file-selector');
-            selector.value = '';
-
-            // Show zero state
-            const zeroState = document.getElementById('zero-state');
-            if (zeroState) {
-                zeroState.style.display = 'flex';
-            }
-
-            // Hide analysis info
-            const analysisInfo = document.getElementById('analysis-info');
-            if (analysisInfo) {
-                analysisInfo.style.display = 'none';
-            }
-
-            // Hide interval selector
-            const intervalSelector = document.getElementById('interval-selector-container');
-            if (intervalSelector) {
-                intervalSelector.style.display = 'none';
-            }
-
-            // Reload file list
-            await loadFileList();
-
             // Show success message
             console.log('Analysis deleted successfully');
+
+            // Redirect to main page (card grid)
+            window.location.href = '/';
         } else {
             throw new Error(result.error || 'Failed to delete analysis');
         }
