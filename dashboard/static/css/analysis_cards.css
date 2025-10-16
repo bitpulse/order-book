@@ -122,18 +122,20 @@
 .card-stats {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.65rem;
   margin-bottom: 1.25rem;
+  padding: 0.5rem 0;
 }
 
 .card-stat-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0.15rem 0;
 }
 
 .card-stat-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -141,9 +143,32 @@
 }
 
 .card-stat-value {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* Emphasize From/To time range */
+.card-stat-row:nth-child(1) .card-stat-label,
+.card-stat-row:nth-child(2) .card-stat-label {
+  color: var(--cyan);
+}
+
+.card-stat-row:nth-child(1) .card-stat-value,
+.card-stat-row:nth-child(2) .card-stat-value {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* Make Created time dimmer */
+.card-stat-row:nth-child(3) {
+  opacity: 0.7;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.card-stat-row:nth-child(3) .card-stat-value {
+  font-size: 0.75rem;
 }
 
 .card-change {

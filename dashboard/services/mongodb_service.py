@@ -68,12 +68,19 @@ class MongoDBService:
                         created_at_iso = None
                         created_at_ts = 0
 
+                    # Extract from_time and to_time from analysis data
+                    analysis_data = analysis.get('data', {}).get('analysis', {})
+                    from_time = analysis_data.get('from_time')
+                    to_time = analysis_data.get('to_time')
+
                     analyses.append({
                         'id': analysis['_id'],
                         'filename': analysis.get('metadata', {}).get('filename', 'N/A'),
                         'symbol': analysis.get('symbol'),
                         'created_at': created_at_iso,
                         'created_at_ts': created_at_ts,
+                        'from_time': from_time,
+                        'to_time': to_time,
                         'source': 'mongodb'
                     })
                 mongo.close()

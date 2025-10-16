@@ -416,6 +416,10 @@ class PriceChangeAnalyzer:
         # Calculate time range based on parameters (lookback or from/to times)
         start_time, end_time = self._calculate_time_range()
 
+        # Store time range as instance variables for later use in export
+        self.analysis_start_time = start_time
+        self.analysis_end_time = end_time
+
         # Show time range in log
         start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
         end_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -1021,7 +1025,9 @@ class PriceChangeAnalyzer:
                 'lookback': self.lookback,
                 'interval': self.interval,
                 'min_change': self.min_change,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'from_time': self.analysis_start_time.isoformat() if hasattr(self, 'analysis_start_time') else None,
+                'to_time': self.analysis_end_time.isoformat() if hasattr(self, 'analysis_end_time') else None
             },
             'intervals': intervals
         }

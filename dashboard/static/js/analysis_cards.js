@@ -56,15 +56,36 @@ function createAnalysisCard(file) {
     card.classList.add('neutral');
 
     const createdDate = file.created_at ? new Date(file.created_at) : new Date();
-    const formattedDate = createdDate.toLocaleDateString('en-US', {
+    const formattedCreatedTime = createdDate.toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
-        year: 'numeric'
-    });
-    const formattedTime = createdDate.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit'
     });
+
+    // Format from/to times if available
+    let fromTimeFormatted = 'Loading...';
+    let toTimeFormatted = 'Loading...';
+
+    if (file.from_time) {
+        const fromDate = new Date(file.from_time);
+        fromTimeFormatted = fromDate.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    if (file.to_time) {
+        const toDate = new Date(file.to_time);
+        toTimeFormatted = toDate.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
 
     card.innerHTML = `
         <div class="card-header">
@@ -75,12 +96,16 @@ function createAnalysisCard(file) {
         </div>
         <div class="card-stats">
             <div class="card-stat-row">
-                <span class="card-stat-label">Created</span>
-                <span class="card-stat-value">${formattedDate}</span>
+                <span class="card-stat-label">From</span>
+                <span class="card-stat-value">${fromTimeFormatted}</span>
             </div>
             <div class="card-stat-row">
-                <span class="card-stat-label">Time</span>
-                <span class="card-stat-value">${formattedTime}</span>
+                <span class="card-stat-label">To</span>
+                <span class="card-stat-value">${toTimeFormatted}</span>
+            </div>
+            <div class="card-stat-row">
+                <span class="card-stat-label">Created</span>
+                <span class="card-stat-value">${formattedCreatedTime}</span>
             </div>
         </div>
         <div class="card-change neutral" data-id="${file.id}">
