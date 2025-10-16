@@ -438,82 +438,146 @@ function updateContextCards(intervalData, whaleEvents, priceData) {
  * Update Spike Context Card
  */
 function updateSpikeContext(intervalData, whaleEvents, priceData) {
-    const priceChange = Math.abs(((intervalData.end_price - intervalData.start_price) / intervalData.start_price) * 100);
+    const startPrice = intervalData.start_price;
+    const endPrice = intervalData.end_price;
+    const priceChange = ((endPrice - startPrice) / startPrice) * 100;
+    const absPriceChange = Math.abs(priceChange);
 
-    // Severity badge
+    // Severity badge - use standardized thresholds
+    const severity = getPriceChangeSeverity(priceChange);
     const severityEl = document.getElementById('spike-severity');
-    if (priceChange > 5) {
-        severityEl.textContent = 'Extreme';
-        severityEl.className = 'context-card-badge high';
-    } else if (priceChange > 2) {
-        severityEl.textContent = 'High';
-        severityEl.className = 'context-card-badge high';
-    } else if (priceChange > 0.5) {
-        severityEl.textContent = 'Medium';
-        severityEl.className = 'context-card-badge medium';
-    } else {
-        severityEl.textContent = 'Low';
-        severityEl.className = 'context-card-badge low';
-    }
+    severityEl.textContent = severity.level;
+    severityEl.className = `context-card-badge ${severity.badge}`;
+    severityEl.title = `${absPriceChange.toFixed(2)}% price change (threshold: ${priceChange >= 0 ? '+' : ''}${absPriceChange.toFixed(2)}%)`;
 
-    // Trigger Analysis
+    // Trigger Analysis - use standardized thresholds
     const marketOrders = whaleEvents.filter(e => e.event_type.includes('market'));
-    const largeOrders = whaleEvents.filter(e => e.usd_value > 100000);
+    const largeOrders = whaleEvents.filter(e => e.usd_value >= ANALYTICS_CONFIG.THRESHOLDS.LARGE_ORDER);
+    const megaWhales = whaleEvents.filter(e => e.usd_value >= ANALYTICS_CONFIG.THRESHOLDS.MEGA_WHALE);
 
     let trigger = 'Normal market activity';
-    if (marketOrders.length > 10) {
-        trigger = `<strong>Market order cascade</strong> - ${marketOrders.length} aggressive orders executed rapidly`;
-    } else if (largeOrders.length > 5) {
-        trigger = `<strong>Large order placement</strong> - ${largeOrders.length} whale orders placed`;
-    } else if (whaleEvents.length > 50) {
-        trigger = `<strong>High activity spike</strong> - ${whaleEvents.length} events in interval`;
-    }
-    document.getElementById('spike-trigger').innerHTML = trigger;
+    let triggerCalc = {
+        formula: 'Event pattern analysis',
+        inputs: {
+            'Market Orders': `${marketOrders.length} orders`,
+            'Large Orders (>$100K)': `${largeOrders.length} orders`,
+            'Total Events': `${whaleEvents.length} events`
+        }
+    };
 
-    // Pattern Recognition
-    const buyVolume = whaleEvents.filter(e => e.event_type === 'market_buy' || e.event_type.includes('bid')).reduce((sum, e) => sum + e.usd_value, 0);
-    const sellVolume = whaleEvents.filter(e => e.event_type === 'market_sell' || e.event_type.includes('ask')).reduce((sum, e) => sum + e.usd_value, 0);
+    if (marketOrders.length >= ANALYTICS_CONFIG.PATTERN_DETECTION.CASCADE_ORDERS) {
+        trigger = `<strong>Market order cascade</strong> - ${marketOrders.length} aggressive orders executed rapidly`;
+        triggerCalc.interpretation = `${marketOrders.length} market orders exceeds cascade threshold (${ANALYTICS_CONFIG.PATTERN_DETECTION.CASCADE_ORDERS}+). Indicates aggressive execution.`;
+    } else if (megaWhales.length >= 3) {
+        const totalMegaVolume = megaWhales.reduce((sum, e) => sum + e.usd_value, 0);
+        trigger = `<strong>Mega whale activity</strong> - ${megaWhales.length} orders over $${ANALYTICS_CONFIG.THRESHOLDS.MEGA_WHALE / 1000000}M (total: ${formatLargeNumber(totalMegaVolume)})`;
+        triggerCalc.interpretation = `${megaWhales.length} mega-whale orders (>$${ANALYTICS_CONFIG.THRESHOLDS.MEGA_WHALE/1000000}M each) detected. Exceptional institutional activity.`;
+    } else if (largeOrders.length >= ANALYTICS_CONFIG.PATTERN_DETECTION.LARGE_WHALE_GROUP) {
+        trigger = `<strong>Large order placement</strong> - ${largeOrders.length} whale orders placed`;
+        triggerCalc.interpretation = `${largeOrders.length} large orders exceeds whale group threshold (${ANALYTICS_CONFIG.PATTERN_DETECTION.LARGE_WHALE_GROUP}+). Coordinated whale activity.`;
+    } else if (whaleEvents.length >= ANALYTICS_CONFIG.PATTERN_DETECTION.HIGH_ACTIVITY_SPIKE) {
+        trigger = `<strong>High activity spike</strong> - ${whaleEvents.length} events in interval`;
+        triggerCalc.interpretation = `${whaleEvents.length} events exceeds high-activity threshold (${ANALYTICS_CONFIG.PATTERN_DETECTION.HIGH_ACTIVITY_SPIKE}+). Unusual market attention.`;
+    } else {
+        triggerCalc.interpretation = `Activity levels within normal ranges. No exceptional patterns detected.`;
+    }
+
+    document.getElementById('spike-trigger').innerHTML = trigger;
+    document.getElementById('spike-trigger').setAttribute('data-calc', JSON.stringify(triggerCalc));
+
+    // Pattern Recognition - use standardized dominance thresholds
+    const buyEvents = whaleEvents.filter(e => e.event_type === 'market_buy' || e.event_type.includes('bid'));
+    const sellEvents = whaleEvents.filter(e => e.event_type === 'market_sell' || e.event_type.includes('ask'));
+    const buyVolume = buyEvents.reduce((sum, e) => sum + e.usd_value, 0);
+    const sellVolume = sellEvents.reduce((sum, e) => sum + e.usd_value, 0);
+    const totalVolume = buyVolume + sellVolume;
 
     let pattern = 'Balanced market activity';
-    if (buyVolume > sellVolume * 2) {
-        pattern = '<strong>Accumulation pattern</strong> - Strong buying pressure detected';
-    } else if (sellVolume > buyVolume * 2) {
-        pattern = '<strong>Distribution pattern</strong> - Strong selling pressure detected';
-    } else if (priceChange > 2) {
-        pattern = '<strong>Volatility breakout</strong> - Large price movement with mixed flows';
-    }
-    document.getElementById('spike-pattern').innerHTML = pattern;
+    let patternCalc = {
+        formula: 'Buy Volume / Sell Volume',
+        inputs: {
+            'Buy Volume': formatLargeNumber(buyVolume),
+            'Sell Volume': formatLargeNumber(sellVolume),
+            'Buy Events': `${buyEvents.length} orders`,
+            'Sell Events': `${sellEvents.length} orders`
+        }
+    };
 
-    // Follow-through Score
-    const followThrough = Math.min(100, (whaleEvents.length / 10) * priceChange);
-    let followText = 'Weak follow-through - spike may reverse';
-    if (followThrough > 70) {
-        followText = '<strong>Strong follow-through</strong> - sustained movement likely';
-    } else if (followThrough > 40) {
-        followText = '<strong>Moderate follow-through</strong> - watch for confirmation';
+    if (sellVolume > 0) {
+        const buyRatio = buyVolume / sellVolume;
+        patternCalc.steps = [`Ratio = ${formatLargeNumber(buyVolume)} / ${formatLargeNumber(sellVolume)} = ${buyRatio.toFixed(2)}x`];
+
+        if (buyRatio >= ANALYTICS_CONFIG.DOMINANCE.STRONG) {
+            pattern = `<strong>Accumulation pattern</strong> - Strong buying pressure (${buyRatio.toFixed(1)}x)`;
+            patternCalc.interpretation = `Buy volume is ${buyRatio.toFixed(1)}x sell volume. Strong dominance (threshold: ${ANALYTICS_CONFIG.DOMINANCE.STRONG}x+). Bullish accumulation pattern.`;
+        } else if (buyVolume / sellVolume >= ANALYTICS_CONFIG.DOMINANCE.MODERATE) {
+            pattern = `<strong>Buying pressure</strong> - Moderate accumulation (${buyRatio.toFixed(1)}x)`;
+            patternCalc.interpretation = `Buy volume is ${buyRatio.toFixed(1)}x sell volume. Moderate bullish bias.`;
+        }
     }
+
+    if (buyVolume > 0) {
+        const sellRatio = sellVolume / buyVolume;
+        if (sellRatio >= ANALYTICS_CONFIG.DOMINANCE.STRONG) {
+            pattern = `<strong>Distribution pattern</strong> - Strong selling pressure (${sellRatio.toFixed(1)}x)`;
+            patternCalc.steps = [`Ratio = ${formatLargeNumber(sellVolume)} / ${formatLargeNumber(buyVolume)} = ${sellRatio.toFixed(2)}x`];
+            patternCalc.interpretation = `Sell volume is ${sellRatio.toFixed(1)}x buy volume. Strong dominance (threshold: ${ANALYTICS_CONFIG.DOMINANCE.STRONG}x+). Bearish distribution pattern.`;
+        } else if (sellRatio >= ANALYTICS_CONFIG.DOMINANCE.MODERATE) {
+            pattern = `<strong>Selling pressure</strong> - Moderate distribution (${sellRatio.toFixed(1)}x)`;
+            patternCalc.steps = [`Ratio = ${formatLargeNumber(sellVolume)} / ${formatLargeNumber(buyVolume)} = ${sellRatio.toFixed(2)}x`];
+            patternCalc.interpretation = `Sell volume is ${sellRatio.toFixed(1)}x buy volume. Moderate bearish bias.`;
+        }
+    }
+
+    if (absPriceChange >= ANALYTICS_CONFIG.PRICE_CHANGE.HIGH && Math.abs(buyVolume - sellVolume) / totalVolume < 0.3) {
+        pattern = '<strong>Volatility breakout</strong> - Large price movement with mixed flows';
+        patternCalc.interpretation = `${absPriceChange.toFixed(2)}% price change but volumes nearly balanced. High volatility, unclear direction.`;
+    }
+
+    if (totalVolume === 0) {
+        pattern = 'No significant volume activity';
+        patternCalc.interpretation = 'Minimal whale activity detected during interval.';
+    }
+
+    document.getElementById('spike-pattern').innerHTML = pattern;
+    document.getElementById('spike-pattern').setAttribute('data-calc', JSON.stringify(patternCalc));
+
+    // Follow-through Score - improved calculation
+    // Use combination of price persistence and volume continuation
+    const followScore = Math.min(100, (whaleEvents.length / ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH) * Math.min(absPriceChange * 20, 100));
+    const followLevel = getFollowThroughLevel(followScore);
+
+    let followText = `<strong>${followLevel.level} follow-through</strong> - ${followLevel.description}`;
+    const followCalc = {
+        formula: '(Event Count / Activity Threshold) × Price Change Impact',
+        inputs: {
+            'Event Count': `${whaleEvents.length} events`,
+            'Activity Threshold': `${ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH} (very high)`,
+            'Price Change': `${absPriceChange.toFixed(2)}%`
+        },
+        steps: [
+            `Activity ratio = ${whaleEvents.length} / ${ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH} = ${(whaleEvents.length / ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH).toFixed(2)}`,
+            `Price impact = min(${absPriceChange.toFixed(2)}% × 20, 100) = ${Math.min(absPriceChange * 20, 100).toFixed(1)}`,
+            `Score = ${(whaleEvents.length / ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH).toFixed(2)} × ${Math.min(absPriceChange * 20, 100).toFixed(1)} = ${followScore.toFixed(1)}%`
+        ],
+        result: `${followScore.toFixed(0)}% follow-through score`,
+        interpretation: `Score ${followScore.toFixed(0)}% indicates ${followLevel.level.toLowerCase()} follow-through. ${followLevel.description}.`
+    };
+
     document.getElementById('spike-followthrough').innerHTML = followText;
+    document.getElementById('spike-followthrough').setAttribute('data-calc', JSON.stringify(followCalc));
 }
 
 /**
  * Update Whale Behavior Card
  */
 function updateWhaleContext(whaleEvents) {
-    // Activity level badge
+    // Activity level badge - use standardized thresholds
+    const activity = getActivityLevel(whaleEvents.length);
     const activityEl = document.getElementById('whale-activity');
-    if (whaleEvents.length > 50) {
-        activityEl.textContent = 'Very High';
-        activityEl.className = 'context-card-badge high';
-    } else if (whaleEvents.length > 30) {
-        activityEl.textContent = 'High';
-        activityEl.className = 'context-card-badge medium';
-    } else if (whaleEvents.length > 15) {
-        activityEl.textContent = 'Medium';
-        activityEl.className = 'context-card-badge medium';
-    } else {
-        activityEl.textContent = 'Low';
-        activityEl.className = 'context-card-badge low';
-    }
+    activityEl.textContent = activity.level;
+    activityEl.className = `context-card-badge ${activity.badge}`;
+    activityEl.title = `${whaleEvents.length} whale events (thresholds: Low<${ANALYTICS_CONFIG.ACTIVITY.MEDIUM}, Medium<${ANALYTICS_CONFIG.ACTIVITY.HIGH}, High<${ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH}, Very High≥${ANALYTICS_CONFIG.ACTIVITY.VERY_HIGH})`;
 
     // Top whale action
     const sortedBySize = [...whaleEvents].sort((a, b) => b.usd_value - a.usd_value);
@@ -544,20 +608,36 @@ function updateWhaleContext(whaleEvents) {
     }
     document.getElementById('whale-patterns').innerHTML = patternsText;
 
-    // Coordination score
+    // Coordination score - clearer calculation
     const buyEvents = whaleEvents.filter(e => e.event_type.includes('buy') || e.event_type.includes('bid'));
     const sellEvents = whaleEvents.filter(e => e.event_type.includes('sell') || e.event_type.includes('ask'));
 
-    const buyConcentration = buyEvents.length / whaleEvents.length;
-    const coordinationScore = Math.abs(buyConcentration - 0.5) * 200; // 0-100
+    const buyPct = whaleEvents.length > 0 ? (buyEvents.length / whaleEvents.length) * 100 : 50;
+    const sellPct = 100 - buyPct;
+    const imbalance = Math.abs(buyPct - sellPct);
 
-    let coordText = 'Mixed activity - No clear coordination';
-    if (coordinationScore > 70) {
-        coordText = `<strong>High coordination (${Math.round(coordinationScore)}%)</strong> - Whales moving in same direction`;
-    } else if (coordinationScore > 40) {
-        coordText = `<strong>Moderate coordination (${Math.round(coordinationScore)}%)</strong> - Some directional bias`;
-    }
+    const coordLevel = getCoordinationLevel(imbalance);
+    let coordText = `<strong>${coordLevel.level} coordination (${imbalance.toFixed(0)}% imbalance)</strong> - ${coordLevel.description}`;
+
+    const coordCalc = {
+        formula: '|Buy% - Sell%|',
+        inputs: {
+            'Buy Events': `${buyEvents.length} (${buyPct.toFixed(1)}%)`,
+            'Sell Events': `${sellEvents.length} (${sellPct.toFixed(1)}%)`,
+            'Total Events': `${whaleEvents.length}`
+        },
+        steps: [
+            `Buy% = ${buyEvents.length} / ${whaleEvents.length} × 100 = ${buyPct.toFixed(1)}%`,
+            `Sell% = 100% - ${buyPct.toFixed(1)}% = ${sellPct.toFixed(1)}%`,
+            `Imbalance = |${buyPct.toFixed(1)}% - ${sellPct.toFixed(1)}%| = ${imbalance.toFixed(1)}%`
+        ],
+        result: `${imbalance.toFixed(0)}% directional imbalance`,
+        interpretation: `${imbalance.toFixed(0)}% imbalance toward ${buyPct > sellPct ? 'buying' : 'selling'}. ${coordLevel.description}. Threshold: High≥${ANALYTICS_CONFIG.COORDINATION.HIGH}%, Moderate≥${ANALYTICS_CONFIG.COORDINATION.MODERATE}%.`,
+        baseline: `Balanced market: 0-${ANALYTICS_CONFIG.COORDINATION.MODERATE}% imbalance. Current: ${coordLevel.level}`
+    };
+
     document.getElementById('whale-coordination').innerHTML = coordText;
+    document.getElementById('whale-coordination').setAttribute('data-calc', JSON.stringify(coordCalc));
 }
 
 /**
@@ -602,17 +682,29 @@ function updateStructureContext(intervalData, whaleEvents, priceData) {
     }
     document.getElementById('structure-imbalance').innerHTML = imbalanceText;
 
-    // Liquidity quality
-    const avgOrderSize = whaleEvents.reduce((sum, e) => sum + e.usd_value, 0) / whaleEvents.length;
-    let liquidityText = 'Average liquidity depth';
-    if (avgOrderSize > 150000) {
-        liquidityText = `<strong>Deep liquidity</strong> - Avg order: ${formatLargeNumber(avgOrderSize)}`;
-    } else if (avgOrderSize > 75000) {
-        liquidityText = `<strong>Good liquidity</strong> - Avg order: ${formatLargeNumber(avgOrderSize)}`;
-    } else {
-        liquidityText = `<strong>Thin liquidity</strong> - Avg order: ${formatLargeNumber(avgOrderSize)}`;
-    }
+    // Liquidity quality - use standardized thresholds
+    const totalOrderValue = whaleEvents.reduce((sum, e) => sum + e.usd_value, 0);
+    const avgOrderSize = whaleEvents.length > 0 ? totalOrderValue / whaleEvents.length : 0;
+
+    const liquidity = getLiquidityQuality(avgOrderSize);
+    let liquidityText = `<strong>${liquidity.level}</strong> - Avg order: ${formatLargeNumber(avgOrderSize)}`;
+
+    const liquidityCalc = {
+        formula: 'Total Volume / Event Count',
+        inputs: {
+            'Total Volume': formatLargeNumber(totalOrderValue),
+            'Event Count': `${whaleEvents.length} orders`
+        },
+        steps: [
+            `Avg = ${formatLargeNumber(totalOrderValue)} / ${whaleEvents.length} = ${formatLargeNumber(avgOrderSize)}`
+        ],
+        result: `${formatLargeNumber(avgOrderSize)} average order size`,
+        interpretation: `${liquidity.description}. Thresholds: Deep≥$${ANALYTICS_CONFIG.LIQUIDITY.DEEP/1000}K, Good≥$${ANALYTICS_CONFIG.LIQUIDITY.GOOD/1000}K, Average≥$${ANALYTICS_CONFIG.LIQUIDITY.AVERAGE/1000}K, Thin<$${ANALYTICS_CONFIG.LIQUIDITY.AVERAGE/1000}K.`,
+        baseline: `Professional/institutional orders typically >$${ANALYTICS_CONFIG.THRESHOLDS.INSTITUTIONAL/1000}K. Current: ${liquidity.level}`
+    };
+
     document.getElementById('structure-liquidity').innerHTML = liquidityText;
+    document.getElementById('structure-liquidity').setAttribute('data-calc', JSON.stringify(liquidityCalc));
 }
 
 /**
@@ -631,4 +723,173 @@ function animateCounter(element, start, end, duration = 500) {
         }
         element.textContent = Math.round(current).toString();
     }, 16);
+}
+
+/**
+ * Initialize calculation explanation tooltips
+ * Adds click handlers to show calculation breakdowns
+ */
+function initializeCalculationTooltips() {
+    // Add click handlers to all elements with data-calc attribute
+    document.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-calc]');
+        if (!target) return;
+
+        const calcData = target.getAttribute('data-calc');
+        if (!calcData) return;
+
+        try {
+            const calculation = JSON.parse(calcData);
+            showCalculationModal(target.textContent, calculation);
+        } catch (err) {
+            console.error('Failed to parse calculation data:', err);
+        }
+    });
+
+    // Add visual indicator that elements are clickable
+    const style = document.createElement('style');
+    style.textContent = `
+        [data-calc] {
+            cursor: help;
+            position: relative;
+        }
+        [data-calc]::after {
+            content: '🔍';
+            font-size: 0.7em;
+            opacity: 0.4;
+            margin-left: 0.3em;
+            transition: opacity 0.2s;
+        }
+        [data-calc]:hover::after {
+            opacity: 0.8;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+/**
+ * Show calculation breakdown in a modal/tooltip
+ * @param {string} metricName - Name of the metric
+ * @param {object} calculation - Calculation details object
+ */
+function showCalculationModal(metricName, calculation) {
+    // Remove existing modal if any
+    const existingModal = document.getElementById('calc-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.id = 'calc-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, rgba(20, 20, 20, 0.98), rgba(15, 15, 15, 0.98));
+        border: 1px solid rgba(0, 194, 255, 0.3);
+        border-radius: 12px;
+        padding: 1.5rem;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        z-index: 10000;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 194, 255, 0.2);
+        backdrop-filter: blur(20px);
+    `;
+
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+            <h3 style="margin: 0; color: #00d9ff; font-size: 1.1rem;">📊 How is this calculated?</h3>
+            <button id="close-calc-modal" style="background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+        </div>
+        <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <strong style="color: #00ffa3;">Metric:</strong> <span style="color: #fff;">${metricName}</span>
+        </div>
+    `;
+
+    if (calculation.formula) {
+        html += `<div style="margin-bottom: 1rem;">
+            <strong style="color: #00d9ff;">📐 Formula:</strong><br/>
+            <code style="background: rgba(0,194,255,0.1); padding: 0.5rem; border-radius: 4px; display: inline-block; margin-top: 0.5rem; color: #00d9ff;">${calculation.formula}</code>
+        </div>`;
+    }
+
+    if (calculation.inputs) {
+        html += `<div style="margin-bottom: 1rem;">
+            <strong style="color: #00d9ff;">📊 Inputs:</strong>
+            <ul style="margin: 0.5rem 0; padding-left: 1.5rem; color: #ccc;">`;
+        for (const [key, value] of Object.entries(calculation.inputs)) {
+            html += `<li><span style="color: #aaa;">${key}:</span> <strong style="color: #fff;">${value}</strong></li>`;
+        }
+        html += `</ul></div>`;
+    }
+
+    if (calculation.steps && calculation.steps.length > 0) {
+        html += `<div style="margin-bottom: 1rem;">
+            <strong style="color: #00d9ff;">🔢 Calculation Steps:</strong>
+            <ol style="margin: 0.5rem 0; padding-left: 1.5rem; color: #ccc;">`;
+        calculation.steps.forEach(step => {
+            html += `<li style="margin: 0.3rem 0;">${step}</li>`;
+        });
+        html += `</ol></div>`;
+    }
+
+    if (calculation.result) {
+        html += `<div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(0,255,163,0.1); border-left: 3px solid #00ffa3; border-radius: 4px;">
+            <strong style="color: #00ffa3;">✅ Result:</strong> <span style="color: #fff;">${calculation.result}</span>
+        </div>`;
+    }
+
+    if (calculation.interpretation) {
+        html += `<div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 4px;">
+            <strong style="color: #ffaa00;">💡 What this means:</strong><br/>
+            <span style="color: #ddd; line-height: 1.6;">${calculation.interpretation}</span>
+        </div>`;
+    }
+
+    if (calculation.baseline) {
+        html += `<div style="padding: 0.75rem; background: rgba(0,194,255,0.05); border-radius: 4px;">
+            <strong style="color: #00c2ff;">📈 Context / Baseline:</strong><br/>
+            <span style="color: #ddd; line-height: 1.6;">${calculation.baseline}</span>
+        </div>`;
+    }
+
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+
+    // Add backdrop
+    const backdrop = document.createElement('div');
+    backdrop.id = 'calc-modal-backdrop';
+    backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        backdrop-filter: blur(5px);
+    `;
+    document.body.appendChild(backdrop);
+
+    // Close handlers
+    const closeModal = () => {
+        modal.remove();
+        backdrop.remove();
+    };
+
+    document.getElementById('close-calc-modal').addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    }, { once: true });
+}
+
+// Initialize tooltips when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeCalculationTooltips);
+} else {
+    initializeCalculationTooltips();
 }
