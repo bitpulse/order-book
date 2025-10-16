@@ -336,17 +336,20 @@ class PriceChangeAnalyzer:
                 'last_price': 0
             }
 
-        prices = [p['mid_price'] for p in price_data]
+        prices = [p['mid_price'] for p in price_data if p['mid_price'] is not None]
 
         # Find spike point (largest absolute price change between consecutive points)
         max_change = 0
         spike_point = None
 
         for i in range(1, len(price_data)):
-            change = abs(price_data[i]['mid_price'] - price_data[i-1]['mid_price'])
-            if change > max_change:
-                max_change = change
-                spike_point = price_data[i]
+            curr_price = price_data[i]['mid_price']
+            prev_price = price_data[i-1]['mid_price']
+            if curr_price is not None and prev_price is not None:
+                change = abs(curr_price - prev_price)
+                if change > max_change:
+                    max_change = change
+                    spike_point = price_data[i]
 
         return {
             'total_points': len(price_data),
