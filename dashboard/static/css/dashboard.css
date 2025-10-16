@@ -354,29 +354,77 @@ body::after {
     padding: 1.5rem;
     border-radius: 12px;
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    grid-template-rows: repeat(2, auto);
-    grid-auto-flow: column;
+    grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-summary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--blue), transparent);
+    box-shadow: 0 0 10px var(--blue-glow);
 }
 
 .stat-item {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 8px;
-    border-left: 3px solid var(--green);
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    border-radius: 10px;
+    border-left: 3px solid var(--border-color);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.stat-item:hover::before {
+    opacity: 1;
 }
 
 .stat-item:hover {
-    background: rgba(255, 255, 255, 0.04);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px var(--green-glow);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.stat-item.has-icon {
+    padding-left: 3.5rem;
+}
+
+.stat-item-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+    opacity: 0.6;
+    transition: all 0.3s;
+}
+
+.stat-item:hover .stat-item-icon {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.1) rotate(5deg);
 }
 
 .stat-label {
@@ -1921,7 +1969,7 @@ details[open] .data-flow-toggle {
     }
 
     .stats-summary {
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
     }
 
     .events-panel {

@@ -240,6 +240,28 @@ async function loadIntervalWithLazyLoading(intervalData) {
         // Load whale events
         loadWhaleEvents(intervalData);
 
+        // Update hero analytics bar
+        const allWhaleEvents = [
+            ...intervalData.whale_events_before,
+            ...intervalData.whale_events,
+            ...intervalData.whale_events_after
+        ];
+        updateHeroAnalytics(intervalData, allWhaleEvents, intervalData.price_data);
+
+        // Update enhanced stats
+        updateEnhancedStats(intervalData, allWhaleEvents);
+
+        // Update context cards
+        updateContextCards(intervalData, allWhaleEvents, intervalData.price_data);
+
+        // Update event type statistics panel
+        updateEventStatsPanel(
+            intervalData,
+            intervalData.whale_events_before,
+            intervalData.whale_events,
+            intervalData.whale_events_after
+        );
+
         showDetailedDataLoading(false);
 
     } catch (error) {

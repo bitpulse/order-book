@@ -17,6 +17,18 @@
       rel="stylesheet"
       href="{{ url_for('static', filename='css/dashboard.css') }}"
     />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/hero-bar.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/context-cards.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/event-stats.css') }}"
+    />
   </head>
   <body>
     <!-- Mobile Menu Button -->
@@ -241,27 +253,296 @@
             </div>
           </div>
 
-          <!-- Stats Summary -->
+          <!-- Hero Analytics Bar -->
+          <div id="hero-analytics-bar" class="hero-analytics-bar" style="display: none">
+            <div class="hero-analytics-grid">
+              <!-- Symbol Price -->
+              <div class="hero-metric neutral" id="hero-price">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">💎</span>
+                  <span class="hero-metric-label">Symbol Price</span>
+                </div>
+                <div class="hero-metric-value" id="hero-price-value">$0.00</div>
+                <div class="hero-metric-footer">
+                  <div class="hero-metric-change up" id="hero-price-change">
+                    <span class="hero-metric-change-icon">▲</span>
+                    <span>+0.00%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Price Change % -->
+              <div class="hero-metric neutral" id="hero-change">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon pulse">⚡</span>
+                  <span class="hero-metric-label">Price Change</span>
+                </div>
+                <div class="hero-metric-value" id="hero-change-value">+0.00%</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-change-badge">
+                    Neutral
+                  </span>
+                </div>
+              </div>
+
+              <!-- Market Sentiment -->
+              <div class="hero-metric neutral" id="hero-sentiment">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">🎯</span>
+                  <span class="hero-metric-label">Sentiment</span>
+                </div>
+                <div class="hero-metric-value" id="hero-sentiment-value">50</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-sentiment-badge">
+                    <span>Neutral</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Whale Pressure -->
+              <div class="hero-metric neutral" id="hero-pressure">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">🐋</span>
+                  <span class="hero-metric-label">Whale Pressure</span>
+                </div>
+                <div class="hero-metric-value" id="hero-pressure-value">0</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-pressure-badge">
+                    Balanced
+                  </span>
+                </div>
+              </div>
+
+              <!-- Liquidity Delta -->
+              <div class="hero-metric neutral" id="hero-liquidity">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">💧</span>
+                  <span class="hero-metric-label">Liquidity</span>
+                </div>
+                <div class="hero-metric-value" id="hero-liquidity-value">$0</div>
+                <div class="hero-metric-footer">
+                  <div class="hero-metric-change up" id="hero-liquidity-change">
+                    <span class="hero-metric-change-icon">▲</span>
+                    <span>+0%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Volatility Index -->
+              <div class="hero-metric neutral" id="hero-volatility">
+                <div class="hero-metric-header">
+                  <span class="hero-metric-icon">📊</span>
+                  <span class="hero-metric-label">Volatility</span>
+                </div>
+                <div class="hero-metric-value" id="hero-volatility-value">0</div>
+                <div class="hero-metric-footer">
+                  <span class="hero-metric-badge neutral" id="hero-volatility-badge">
+                    Low
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Market Context Cards -->
+          <div id="context-cards-container" class="context-cards-container" style="display: none">
+            <!-- Spike Context Card -->
+            <div class="context-card spike" id="spike-context-card">
+              <div class="context-card-header" onclick="toggleContextCard('spike')">
+                <div class="context-card-title-wrapper">
+                  <span class="context-card-icon">🎯</span>
+                  <span class="context-card-title">Spike Context</span>
+                  <span class="context-card-badge medium" id="spike-severity">Medium</span>
+                </div>
+                <div class="context-card-toggle">▼</div>
+              </div>
+              <div class="context-card-body">
+                <div class="context-insight info">
+                  <span class="context-insight-icon">⚡</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Trigger Analysis</div>
+                    <div class="context-insight-value" id="spike-trigger">-</div>
+                  </div>
+                </div>
+                <div class="context-insight positive">
+                  <span class="context-insight-icon">📊</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Market Pattern</div>
+                    <div class="context-insight-value" id="spike-pattern">-</div>
+                  </div>
+                </div>
+                <div class="context-insight warning">
+                  <span class="context-insight-icon">🔄</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Follow-Through</div>
+                    <div class="context-insight-value" id="spike-followthrough">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Whale Behavior Card -->
+            <div class="context-card whale" id="whale-context-card">
+              <div class="context-card-header" onclick="toggleContextCard('whale')">
+                <div class="context-card-title-wrapper">
+                  <span class="context-card-icon">🐋</span>
+                  <span class="context-card-title">Whale Behavior</span>
+                  <span class="context-card-badge low" id="whale-activity">Low</span>
+                </div>
+                <div class="context-card-toggle">▼</div>
+              </div>
+              <div class="context-card-body">
+                <div class="context-insight info">
+                  <span class="context-insight-icon">👑</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Top Whale Action</div>
+                    <div class="context-insight-value" id="whale-top-action">-</div>
+                  </div>
+                </div>
+                <div class="context-insight warning">
+                  <span class="context-insight-icon">🔍</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Unusual Patterns</div>
+                    <div class="context-insight-value" id="whale-patterns">-</div>
+                  </div>
+                </div>
+                <div class="context-insight positive">
+                  <span class="context-insight-icon">🤝</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Coordination Score</div>
+                    <div class="context-insight-value" id="whale-coordination">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Market Structure Card -->
+            <div class="context-card structure" id="structure-context-card">
+              <div class="context-card-header" onclick="toggleContextCard('structure')">
+                <div class="context-card-title-wrapper">
+                  <span class="context-card-icon">📊</span>
+                  <span class="context-card-title">Market Structure</span>
+                  <span class="context-card-badge high" id="structure-quality">High</span>
+                </div>
+                <div class="context-card-toggle">▼</div>
+              </div>
+              <div class="context-card-body">
+                <div class="context-insight info">
+                  <span class="context-insight-icon">📍</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Key Levels</div>
+                    <div class="context-insight-value" id="structure-levels">-</div>
+                  </div>
+                </div>
+                <div class="context-insight warning">
+                  <span class="context-insight-icon">⚖️</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Order Book Imbalance</div>
+                    <div class="context-insight-value" id="structure-imbalance">-</div>
+                  </div>
+                </div>
+                <div class="context-insight positive">
+                  <span class="context-insight-icon">💎</span>
+                  <div class="context-insight-content">
+                    <div class="context-insight-label">Liquidity Quality</div>
+                    <div class="context-insight-value" id="structure-liquidity">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Event Type Statistics Panel -->
+          <div id="event-type-stats" class="event-type-stats-panel" style="display: none">
+            <!-- Period Tabs -->
+            <div class="period-tabs">
+              <button class="period-tab active" data-period="before">
+                🔴 BEFORE <span class="tab-badge" id="before-count">0</span>
+              </button>
+              <button class="period-tab" data-period="during">
+                🎯 DURING <span class="tab-badge" id="during-count">0</span>
+              </button>
+              <button class="period-tab" data-period="after">
+                🟢 AFTER <span class="tab-badge" id="after-count">0</span>
+              </button>
+              <button class="comparison-toggle" id="comparison-toggle">
+                ⚖️ Compare
+              </button>
+            </div>
+
+            <!-- Stats Content -->
+            <div class="stats-content">
+              <div id="stats-table-before" class="stats-table active"></div>
+              <div id="stats-table-during" class="stats-table"></div>
+              <div id="stats-table-after" class="stats-table"></div>
+              <div id="stats-table-comparison" class="stats-table comparison"></div>
+            </div>
+
+            <!-- Key Insights -->
+            <div class="event-insights" id="event-insights"></div>
+          </div>
+
+          <!-- Interval Intelligence Panel -->
           <div id="stats-summary" class="stats-summary">
-            <div class="stat-item">
-              <span class="stat-label">Rank:</span>
+            <!-- Row 1 -->
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">🏆</span>
+              <span class="stat-label">Rank</span>
               <span id="stat-rank" class="stat-value">-</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Change:</span>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">📈</span>
+              <span class="stat-label">Change</span>
               <span id="stat-change" class="stat-value">-</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Time:</span>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">⏱️</span>
+              <span class="stat-label">Time</span>
               <span id="stat-time" class="stat-value">-</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Price:</span>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">💰</span>
+              <span class="stat-label">Price</span>
               <span id="stat-price" class="stat-value">-</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Events:</span>
+
+            <!-- Row 2 -->
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">🐋</span>
+              <span class="stat-label">Whale Events</span>
               <span id="stat-events" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">📊</span>
+              <span class="stat-label">Whale Count</span>
+              <span id="stat-whale-count" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">⚖️</span>
+              <span class="stat-label">Flow Imbalance</span>
+              <span id="stat-imbalance" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">🔥</span>
+              <span class="stat-label">Event Density</span>
+              <span id="stat-density" class="stat-value">-</span>
+            </div>
+
+            <!-- Row 3 -->
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">🎯</span>
+              <span class="stat-label">Dominant Side</span>
+              <span id="stat-dominant" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">💥</span>
+              <span class="stat-label">Impact Score</span>
+              <span id="stat-impact" class="stat-value">-</span>
+            </div>
+            <div class="stat-item has-icon">
+              <span class="stat-item-icon">💸</span>
+              <span class="stat-label">Total Volume</span>
+              <span id="stat-volume" class="stat-value">-</span>
             </div>
             <div class="stat-item stat-export">
               <button
@@ -885,6 +1166,8 @@
 
     <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/event-breakdown.js') }}"></script>
     <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
   </body>
 </html>
