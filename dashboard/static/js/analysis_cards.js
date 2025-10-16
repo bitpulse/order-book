@@ -150,6 +150,7 @@ async function loadCardStats(analysisId) {
         // Extract stats
         let topChange = 0;
         let intervalCount = 0;
+        let intervalSize = null;
 
         if (Array.isArray(data)) {
             // Legacy format
@@ -157,11 +158,23 @@ async function loadCardStats(analysisId) {
             if (data.length > 0) {
                 topChange = data[0].change_pct;
             }
+        } else if (data.data && data.data.intervals) {
+            // Newest format (MongoDB with nested data)
+            intervalCount = data.data.intervals.length;
+            if (data.data.intervals.length > 0) {
+                topChange = data.data.intervals[0].change_pct;
+            }
+            if (data.data.analysis && data.data.analysis.interval) {
+                intervalSize = data.data.analysis.interval;
+            }
         } else if (data.intervals) {
             // New format
             intervalCount = data.intervals.length;
             if (data.intervals.length > 0) {
                 topChange = data.intervals[0].change_pct;
+            }
+            if (data.analysis && data.analysis.interval) {
+                intervalSize = data.analysis.interval;
             }
         }
 
@@ -179,9 +192,13 @@ async function loadCardStats(analysisId) {
         card.classList.remove('neutral');
         card.classList.add(topChange >= 0 ? 'positive' : 'negative');
 
-        // Update interval count
+        // Update interval count and size
         const intervalBadge = card.querySelector('.card-intervals-badge');
-        intervalBadge.textContent = `${intervalCount} intervals`;
+        if (intervalSize) {
+            intervalBadge.textContent = `${intervalCount} intervals @ ${intervalSize}`;
+        } else {
+            intervalBadge.textContent = `${intervalCount} intervals`;
+        }
 
     } catch (error) {
         console.error(`Error loading stats for ${analysisId}:`, error);
