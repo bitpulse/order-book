@@ -338,6 +338,19 @@ class PriceChangeAnalyzer:
 
         prices = [p['mid_price'] for p in price_data if p['mid_price'] is not None]
 
+        # If all prices are None, return zero stats
+        if not prices:
+            return {
+                'total_points': len(price_data),
+                'min_price': 0,
+                'max_price': 0,
+                'avg_price': 0,
+                'volatility': 0,
+                'spike_point': None,
+                'first_price': 0,
+                'last_price': 0
+            }
+
         # Find spike point (largest absolute price change between consecutive points)
         max_change = 0
         spike_point = None
@@ -359,10 +372,10 @@ class PriceChangeAnalyzer:
             'volatility': self._calculate_volatility(prices),
             'spike_point': {
                 'time': spike_point['time'].isoformat(),
-                'price': spike_point['mid_price']
+                'price': spike_point['mid_price'] or 0
             } if spike_point else None,
-            'first_price': price_data[0]['mid_price'],
-            'last_price': price_data[-1]['mid_price']
+            'first_price': price_data[0]['mid_price'] or 0,
+            'last_price': price_data[-1]['mid_price'] or 0
         }
 
     def _compute_whale_statistics(self, whale_events: List[Dict]) -> Dict:
@@ -388,9 +401,9 @@ class PriceChangeAnalyzer:
         by_side = defaultdict(lambda: {'count': 0, 'total_usd': 0})
 
         for event in whale_events:
-            event_type = event.get('event_type', 'unknown')
-            side = event.get('side', 'unknown')
-            usd_value = event.get('usd_value', 0)
+            event_type = event.get('event_type') or 'unknown'
+            side = event.get('side') or 'unknown'
+            usd_value = event.get('usd_value') or 0
 
             by_type[event_type]['count'] += 1
             by_type[event_type]['total_usd'] += usd_value
@@ -400,8 +413,8 @@ class PriceChangeAnalyzer:
 
         return {
             'count': len(whale_events),
-            'total_usd': sum(e.get('usd_value', 0) for e in whale_events),
-            'biggest_whale_usd': max((e.get('usd_value', 0) for e in whale_events), default=0),
+            'total_usd': sum((e.get('usd_value') or 0) for e in whale_events),
+            'biggest_whale_usd': max((e.get('usd_value') or 0 for e in whale_events), default=0),
             'by_type': dict(by_type),
             'by_side': dict(by_side)
         }
@@ -478,8 +491,8 @@ class PriceChangeAnalyzer:
                 else:
                     break
 
-            start_price = start_point['mid_price']
-            end_price = end_point['mid_price']
+            start_price = start_point['mid_price'] or 0
+            end_price = end_point['mid_price'] or 0
             actual_end_time = end_point['time']
 
             if start_price > 0:
@@ -553,10 +566,10 @@ class PriceChangeAnalyzer:
             for record in table.records:
                 price_points.append({
                     'time': record.get_time(),
-                    'mid_price': record.values.get('mid_price', 0),
-                    'best_bid': record.values.get('best_bid', 0),
-                    'best_ask': record.values.get('best_ask', 0),
-                    'spread': record.values.get('spread', 0),
+                    'mid_price': record.values.get('mid_price') or 0,
+                    'best_bid': record.values.get('best_bid') or 0,
+                    'best_ask': record.values.get('best_ask') or 0,
+                    'spread': record.values.get('spread') or 0,
                 })
 
         # Sort by time
@@ -592,12 +605,12 @@ class PriceChangeAnalyzer:
             for record in table.records:
                 events.append({
                     'time': record.get_time(),
-                    'event_type': record.values.get('event_type', 'unknown'),
-                    'side': record.values.get('side', 'unknown'),
-                    'price': record.values.get('price', 0),
-                    'volume': record.values.get('volume', 0),
-                    'usd_value': record.values.get('usd_value', 0),
-                    'distance_from_mid_pct': record.values.get('distance_from_mid_pct', 0),
+                    'event_type': record.values.get('event_type') or 'unknown',
+                    'side': record.values.get('side') or 'unknown',
+                    'price': record.values.get('price') or 0,
+                    'volume': record.values.get('volume') or 0,
+                    'usd_value': record.values.get('usd_value') or 0,
+                    'distance_from_mid_pct': record.values.get('distance_from_mid_pct') or 0,
                 })
 
         # Sort by time
@@ -713,9 +726,15 @@ class PriceChangeAnalyzer:
         if len(price_data) < 2:
             return [f"{YELLOW}Insufficient data for chart{RESET}"]
 
-        # Extract prices and times
-        prices = [p['mid_price'] for p in price_data]
-        times = [p['time'] for p in price_data]
+        # Extract prices and times (only where price is not None)
+        valid_data = [(p['mid_price'], p['time']) for p in price_data if p['mid_price'] is not None]
+
+        # If all prices are None, return error message
+        if not valid_data:
+            return [f"{YELLOW}No valid price data for chart{RESET}"]
+
+        prices = [d[0] for d in valid_data]
+        times = [d[1] for d in valid_data]
 
         # Calculate price range with padding
         min_price = min(prices)
@@ -960,8 +979,8 @@ class PriceChangeAnalyzer:
                     event_color = self._get_event_color(event['event_type'], event.get('side', ''))
                     time_str = event['time'].strftime('%H:%M:%S.%f')[:-3]
                     print(f"  {DIM}{time_str}{RESET} {event_color}{event['event_type']:15s}{RESET} "
-                          f"${event['price']:.2f} × {event['volume']:.4f} "
-                          f"= ${event['usd_value']:,.0f}")
+                          f"${event['price'] or 0:.2f} × {event['volume'] or 0:.4f} "
+                          f"= ${event['usd_value'] or 0:,.0f}")
 
                 if len(whale_events_during) > 20:
                     print(f"  {DIM}... and {len(whale_events_during) - 20} more events{RESET}")
