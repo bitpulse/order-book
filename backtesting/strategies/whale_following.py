@@ -55,7 +55,8 @@ class WhaleFollowingStrategy(BaseStrategy):
                  timeout_seconds: int = 60,
                  follow_buys: bool = True,
                  follow_sells: bool = True,
-                 max_spread_pct: float = 0.001):
+                 max_spread_pct: float = 0.001,
+                 event_types: Optional[list] = None):
         """
         Initialize whale following strategy
 
@@ -68,6 +69,8 @@ class WhaleFollowingStrategy(BaseStrategy):
             follow_buys: Follow whale market buys
             follow_sells: Follow whale market sells
             max_spread_pct: Maximum allowed spread percentage
+            event_types: List of event types to follow (default: ['market_buy', 'market_sell'])
+                        Options: 'market_buy', 'market_sell', 'increase', 'decrease', 'new'
         """
         super().__init__(name='WhaleFollowingStrategy')
 
@@ -79,6 +82,7 @@ class WhaleFollowingStrategy(BaseStrategy):
         self.follow_buys = follow_buys
         self.follow_sells = follow_sells
         self.max_spread_pct = max_spread_pct
+        self.event_types = event_types or ['market_buy', 'market_sell']
 
         # Statistics
         self.signals_generated = 0
@@ -89,6 +93,7 @@ class WhaleFollowingStrategy(BaseStrategy):
         logger.info(f"  stop_loss: {stop_loss_pct*100:.2f}%")
         logger.info(f"  take_profit: {take_profit_pct*100:.2f}%")
         logger.info(f"  timeout: {timeout_seconds}s")
+        logger.info(f"  event_types: {self.event_types}")
 
     def on_whale_event(self,
                       event: pd.Series,
@@ -114,8 +119,8 @@ class WhaleFollowingStrategy(BaseStrategy):
         if self.signals_generated + self.signals_filtered < 5:
             logger.info(f"Whale event: type={event_type}, usd={usd_value:.0f}, price={price:.2f}")
 
-        # Only react to market orders (not limit walls)
-        if event_type not in ['market_buy', 'market_sell']:
+        # Filter by event type
+        if event_type not in self.event_types:
             return None
 
         # Log first few market orders
@@ -158,16 +163,41 @@ class WhaleFollowingStrategy(BaseStrategy):
         self.signals_generated += 1
         logger.info(f"✓ Generated signal #{self.signals_generated}: {event_type} ${usd_value:.0f} @ ${price:.2f}")
 
+        # Determine action based on event type
+        side = event.get('side', '')
+
         if event_type == 'market_buy':
             action = 'OPEN_LONG'
-        else:
+        elif event_type == 'market_sell':
             action = 'OPEN_SHORT'
+        elif event_type in ['increase', 'new']:
+            # Order book wall increases - follow the side
+            if side == 'bid':
+                action = 'OPEN_LONG'  # Large buy wall = support
+            elif side == 'ask':
+                action = 'OPEN_SHORT'  # Large sell wall = resistance
+            else:
+                logger.warning(f"Unknown side '{side}' for {event_type} event")
+                return None
+        elif event_type == 'decrease':
+            # Order book wall decreases - contrarian signal (wall being eaten)
+            if side == 'bid':
+                action = 'OPEN_SHORT'  # Buy wall being eaten = bearish
+            elif side == 'ask':
+                action = 'OPEN_LONG'  # Sell wall being eaten = bullish
+            else:
+                logger.warning(f"Unknown side '{side}' for {event_type} event")
+                return None
+        else:
+            logger.warning(f"Unknown event_type '{event_type}'")
+            return None
 
         signal = {
             'action': action,
             'stop_loss_pct': self.stop_loss_pct,
             'take_profit_pct': self.take_profit_pct,
             'timeout_seconds': self.timeout_seconds,
+            'entry_delay_seconds': self.entry_delay_seconds,  # Manual trading delay
             'metadata': {
                 'whale_usd': usd_value,
                 'whale_type': event_type,

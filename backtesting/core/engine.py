@@ -90,6 +90,14 @@ class BacktestEngine:
         self.current_price: Optional[float] = None
         self.data: Optional[pd.DataFrame] = None
 
+        # Data cache for reusing loaded data across multiple runs
+        self._cached_prices: Optional[pd.DataFrame] = None
+        self._cached_whales: Optional[pd.DataFrame] = None
+        self._cache_key: Optional[tuple] = None  # (symbol, start, end)
+
+        # Pending orders for delayed execution (manual trading simulation)
+        self.pending_orders: List[Dict[str, Any]] = []
+
         logger.info(f"BacktestEngine initialized with {strategy.__class__.__name__}")
 
     def run(self,
@@ -97,7 +105,8 @@ class BacktestEngine:
             start: str,
             end: str,
             min_whale_usd: float = 100000,
-            window_size: str = '1s') -> BacktestResult:
+            window_size: str = '1s',
+            use_cache: bool = True) -> BacktestResult:
         """
         Run backtest on historical data
 
@@ -107,6 +116,7 @@ class BacktestEngine:
             end: End time (ISO format or datetime)
             min_whale_usd: Minimum whale event size in USD
             window_size: Time window for aggregation ('1s', '1min', etc.)
+            use_cache: If True, reuse cached data for same symbol/time period
 
         Returns:
             BacktestResult with comprehensive performance metrics
@@ -125,12 +135,31 @@ class BacktestEngine:
         if hasattr(self.strategy, 'initialize'):
             self.strategy.initialize(self.portfolio, self.execution_simulator)
 
-        # Load data
-        logger.info("Loading historical data...")
-        prices = self.data_loader.get_price_data(symbol, start, end)
-        whales = self.data_loader.get_whale_events(symbol, start, end, min_usd=min_whale_usd)
+        # Check if we can use cached data
+        current_cache_key = (symbol, start, end)
+        if use_cache and self._cache_key == current_cache_key and self._cached_prices is not None:
+            logger.info("Using cached data from previous run")
+            prices = self._cached_prices
+            # Filter cached whales by min_whale_usd
+            whales = self._cached_whales[self._cached_whales['usd_value'] >= min_whale_usd].copy()
+            logger.info(f"Using {len(prices):,} cached price ticks and {len(whales):,} filtered whale events")
+        else:
+            # Load data from database
+            logger.info("Loading historical data from database...")
+            prices = self.data_loader.get_price_data(symbol, start, end)
+            # Load ALL whales (no min_usd filter) to cache them
+            whales_all = self.data_loader.get_whale_events(symbol, start, end, min_usd=0)
 
-        logger.info(f"Loaded {len(prices):,} price ticks and {len(whales):,} whale events")
+            # Cache the data
+            if use_cache:
+                self._cached_prices = prices
+                self._cached_whales = whales_all
+                self._cache_key = current_cache_key
+                logger.info(f"Cached {len(prices):,} price ticks and {len(whales_all):,} whale events")
+
+            # Filter whales for this run
+            whales = whales_all[whales_all['usd_value'] >= min_whale_usd].copy()
+            logger.info(f"Loaded {len(prices):,} price ticks and {len(whales):,} whale events (>= ${min_whale_usd:,.0f})")
 
         # Create unified timeline
         self.data = self.data_loader.create_unified_timeline(prices, whales, window_size=window_size)
@@ -170,6 +199,9 @@ class BacktestEngine:
 
             # Update portfolio with current price
             self.portfolio.update(self.current_price, self.current_time)
+
+            # Process pending orders (delayed execution for manual trading)
+            self._process_pending_orders(symbol, row)
 
             # Process whale events that occurred at this timestamp (within 100ms window)
             time_window = timedelta(milliseconds=100)
@@ -245,12 +277,31 @@ class BacktestEngine:
                 - 'take_profit_pct': Optional take profit percentage
                 - 'timeout_seconds': Optional timeout in seconds
                 - 'size': Optional position size override
+                - 'entry_delay_seconds': Optional delay before execution (manual trading)
                 - 'metadata': Optional metadata dict
         """
         action = signal.get('action')
 
         if action in ['OPEN_LONG', 'OPEN_SHORT']:
-            self._open_position(symbol, signal)
+            # Check if signal has entry delay (manual trading simulation)
+            entry_delay_seconds = signal.get('entry_delay_seconds', 0)
+
+            if entry_delay_seconds > 0:
+                # Add to pending orders for delayed execution
+                execute_at = self.current_time + timedelta(seconds=entry_delay_seconds)
+                pending_order = {
+                    'symbol': symbol,
+                    'signal': signal,
+                    'signal_time': self.current_time,
+                    'signal_price': self.current_price,
+                    'execute_at': execute_at
+                }
+                self.pending_orders.append(pending_order)
+                logger.debug(f"Order delayed by {entry_delay_seconds}s: {action} @ ${self.current_price:.2f}, "
+                           f"will execute at {execute_at.strftime('%H:%M:%S')}")
+            else:
+                # Execute immediately (API trading)
+                self._open_position(symbol, signal)
         elif action in ['CLOSE_LONG', 'CLOSE_SHORT']:
             self._close_positions_by_side(signal)
 
@@ -436,6 +487,52 @@ class BacktestEngine:
 
         if len(positions) > 0:
             logger.info(f"Closed {len(positions)} remaining positions: {reason}")
+
+    def _process_pending_orders(self, symbol: str, market_data: pd.Series):
+        """
+        Process pending orders that are ready for execution (manual trading delays)
+
+        Args:
+            symbol: Trading symbol
+            market_data: Current market data
+        """
+        orders_to_execute = []
+        remaining_orders = []
+
+        for pending_order in self.pending_orders:
+            if self.current_time >= pending_order['execute_at']:
+                orders_to_execute.append(pending_order)
+            else:
+                remaining_orders.append(pending_order)
+
+        # Update pending orders list
+        self.pending_orders = remaining_orders
+
+        # Execute ready orders
+        for order in orders_to_execute:
+            signal = order['signal']
+            signal_time = order['signal_time']
+            signal_price = order['signal_price']
+
+            # Calculate price movement during delay (slippage)
+            price_change = self.current_price - signal_price
+            price_change_pct = (price_change / signal_price) * 100
+            delay_seconds = (self.current_time - signal_time).total_seconds()
+
+            logger.debug(f"Executing delayed order: {signal['action']}, "
+                        f"signal @ ${signal_price:.2f}, now @ ${self.current_price:.2f} "
+                        f"(delay: {delay_seconds:.1f}s, slippage: {price_change_pct:+.3f}%)")
+
+            # Store slippage info in metadata
+            if 'metadata' not in signal:
+                signal['metadata'] = {}
+            signal['metadata']['manual_delay_seconds'] = delay_seconds
+            signal['metadata']['signal_price'] = signal_price
+            signal['metadata']['execution_price'] = self.current_price
+            signal['metadata']['delay_slippage_pct'] = price_change_pct
+
+            # Execute the order at current price
+            self._open_position(symbol, signal)
 
     def _calculate_results(self, symbol: str, start: str, end: str) -> BacktestResult:
         """
