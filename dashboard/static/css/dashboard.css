@@ -34,21 +34,7 @@
     --glow-intense: 0 0 30px;
 }
 
-@keyframes gradient-shift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-}
-
-@keyframes glow-pulse {
-    0%, 100% { box-shadow: 0 0 20px var(--blue-glow); }
-    50% { box-shadow: 0 0 40px var(--blue-glow), 0 0 60px var(--blue-glow); }
-}
+/* Removed unnecessary animations for cleaner look */
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -59,35 +45,7 @@ body {
     overflow-x: hidden;
 }
 
-body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background:
-        radial-gradient(circle at 20% 20%, rgba(0, 255, 163, 0.05) 0%, transparent 40%),
-        radial-gradient(circle at 80% 80%, rgba(0, 255, 163, 0.03) 0%, transparent 40%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image:
-        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.01) 0px, transparent 1px, transparent 2px, rgba(255, 255, 255, 0.01) 3px),
-        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.01) 0px, transparent 1px, transparent 2px, rgba(255, 255, 255, 0.01) 3px);
-    background-size: 100px 100px;
-    opacity: 0.2;
-    pointer-events: none;
-    z-index: 0;
-}
+/* Removed decorative background elements for cleaner look */
 
 .container {
     max-width: 1920px;
@@ -123,17 +81,7 @@ body::after {
     display: inline-block;
 }
 
-.header h1::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: var(--green);
-    box-shadow: 0 0 10px var(--green-glow);
-    border-radius: 2px;
-}
+/* Removed decorative underline */
 
 .header-controls {
     display: flex;
@@ -163,15 +111,13 @@ body::after {
 
 .file-selector:hover {
     border-color: var(--green);
-    box-shadow: 0 4px 30px var(--green-glow), 0 0 0 1px var(--green);
-    transform: translateY(-2px);
     background-color: rgba(0, 255, 163, 0.05);
 }
 
 .file-selector:focus {
     outline: none;
     border-color: var(--green);
-    box-shadow: 0 0 0 4px var(--green-glow), 0 4px 30px var(--green-glow);
+    box-shadow: 0 0 0 2px rgba(0, 255, 163, 0.2);
     background-color: rgba(0, 255, 163, 0.05);
 }
 
@@ -189,31 +135,23 @@ body::after {
 .btn {
     padding: 0.6rem 1.5rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
+    transition: all 0.2s ease;
 }
 
 .btn-primary {
     background: var(--green);
     color: #000000;
     border: 1px solid var(--green);
-    box-shadow: 0 4px 12px var(--green-glow);
-    position: relative;
-    z-index: 1;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .btn-primary:hover {
-    background: transparent;
-    color: var(--green);
-    border-color: var(--green);
-    box-shadow: 0 4px 20px var(--green-glow), 0 0 40px var(--green-glow);
-    transform: translateY(-2px);
+    background: #00cc82;
+    color: #000000;
 }
 
 .btn-large {
@@ -222,40 +160,18 @@ body::after {
     width: 100%;
 }
 
-.btn::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
-}
-
-.btn:hover::before {
-    width: 300px;
-    height: 300px;
-}
+/* Removed button ripple effect */
 
 .btn-secondary {
-    background: var(--green);
-    color: #000000;
-    border: 1px solid var(--green);
-    box-shadow: 0 4px 12px var(--green-glow);
-    position: relative;
-    z-index: 1;
-    font-weight: 700;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    font-weight: 600;
 }
 
 .btn-secondary:hover {
-    background: transparent;
-    color: var(--green);
-    border-color: var(--green);
-    box-shadow: 0 4px 20px var(--green-glow), 0 0 40px var(--green-glow);
-    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-link {
@@ -270,8 +186,6 @@ body::after {
 
 .btn-link:hover {
     background: rgba(0, 194, 255, 0.1);
-    box-shadow: 0 0 20px var(--blue-glow);
-    transform: translateY(-2px);
 }
 
 .btn-danger {
@@ -285,8 +199,6 @@ body::after {
     background: var(--red);
     color: #ffffff;
     border-color: var(--red);
-    box-shadow: 0 4px 20px var(--red-glow), 0 0 40px var(--red-glow);
-    transform: translateY(-2px);
 }
 
 /* Main Content */
@@ -417,16 +329,7 @@ body::after {
     }
 }
 
-.stats-summary::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--blue), transparent);
-    box-shadow: 0 0 10px var(--blue-glow);
-}
+/* Removed decorative top border */
 
 .stat-item {
     display: flex;
@@ -441,26 +344,10 @@ body::after {
     overflow: hidden;
 }
 
-.stat-item::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent);
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-
-.stat-item:hover::before {
-    opacity: 1;
-}
+/* Removed decorative hover effects */
 
 .stat-item:hover {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .stat-item.has-icon {
@@ -477,10 +364,7 @@ body::after {
     transition: all 0.3s;
 }
 
-.stat-item:hover .stat-item-icon {
-    opacity: 1;
-    transform: translateY(-50%) scale(1.1) rotate(5deg);
-}
+/* Removed icon animation */
 
 .stat-label {
     font-size: 0.75rem;
@@ -494,17 +378,14 @@ body::after {
     font-size: 1.3rem;
     font-weight: 700;
     color: var(--text-primary);
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 }
 
 .stat-value.positive {
     color: var(--green);
-    text-shadow: 0 0 15px var(--green-glow);
 }
 
 .stat-value.negative {
     color: var(--red);
-    text-shadow: 0 0 15px var(--red-glow);
 }
 
 .stat-value.stat-bullish {
@@ -619,9 +500,7 @@ body::after {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.chart-container:hover {
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 255, 163, 0.2);
-}
+/* Removed hover glow */
 
 .chart-wrapper.fullscreen .chart-container {
     width: 100%;
@@ -662,14 +541,7 @@ body::after {
 .fullscreen-btn:hover {
     background: rgba(0, 255, 163, 0.1);
     border-color: var(--green);
-    transform: scale(1.15) rotate(5deg);
-    box-shadow: 0 6px 24px var(--green-glow), 0 0 30px var(--green-glow);
     color: var(--green);
-}
-
-.download-chart-btn:active,
-.fullscreen-btn:active {
-    transform: scale(0.95);
 }
 
 .download-chart-btn:disabled,
@@ -699,26 +571,19 @@ body::after {
 .spinner {
     border: 4px solid rgba(255, 255, 255, 0.1);
     border-top: 4px solid var(--green);
-    border-right: 4px solid var(--green);
     border-radius: 50%;
     width: 50px;
     height: 50px;
     animation: spin 1s linear infinite;
     margin: 0 auto 1.5rem;
-    box-shadow: 0 0 20px var(--green-glow);
 }
 
 @keyframes spin {
     0% {
         transform: rotate(0deg);
-        box-shadow: 0 0 20px var(--green-glow);
-    }
-    50% {
-        box-shadow: 0 0 40px var(--green-glow), 0 0 60px var(--green-glow);
     }
     100% {
         transform: rotate(360deg);
-        box-shadow: 0 0 20px var(--green-glow);
     }
 }
 
@@ -743,7 +608,6 @@ body::after {
 .zero-state-icon {
     font-size: 4rem;
     margin-bottom: 1.5rem;
-    animation: float 3s ease-in-out infinite;
 }
 
 .zero-state h3 {
@@ -1177,11 +1041,10 @@ details[open] .data-flow-toggle {
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 4px;
+    width: 3px;
     height: 70%;
     background: var(--green);
     border-radius: 2px;
-    box-shadow: 0 0 10px var(--green-glow);
 }
 
 .events-filters {
@@ -1690,27 +1553,17 @@ details[open] .data-flow-toggle {
     position: relative;
 }
 
-.footer::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--green), transparent);
-    box-shadow: 0 0 10px var(--green-glow);
-}
+/* Removed decorative border */
 
 .footer a {
     color: var(--green);
     text-decoration: none;
     font-weight: 600;
-    transition: all 0.3s;
+    transition: all 0.2s;
 }
 
 .footer a:hover {
-    color: var(--green);
-    text-shadow: 0 0 10px var(--green-glow);
+    color: #00cc82;
 }
 
 /* Error Toast */

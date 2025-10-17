@@ -32,7 +32,9 @@
   </head>
   <body>
     <!-- Mobile Menu Button -->
-    <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+    <button class="mobile-menu-btn" id="mobile-menu-btn">
+      <span class="menu-icon"></span>
+    </button>
 
     <!-- Sidebar Navigation -->
     <nav class="sidebar">
@@ -41,22 +43,19 @@
           <span class="logo-text">Bitpulse</span>
         </div>
         <button class="sidebar-toggle" id="sidebar-toggle">
-          <span>✕</span>
+          <span class="close-icon"></span>
         </button>
       </div>
 
       <div class="nav-section">
         <div class="nav-section-title">Analyzers</div>
         <a href="/" class="nav-item">
-          <span class="nav-icon">▲</span>
           <span class="nav-label">Price Changes</span>
         </a>
         <a href="/top-market-orders" class="nav-item">
-          <span class="nav-icon">◆</span>
           <span class="nav-label">Market Orders</span>
         </a>
         <a href="/market-orders-intervals" class="nav-item">
-          <span class="nav-icon">■</span>
           <span class="nav-label">Order Intervals</span>
         </a>
       </div>
@@ -64,11 +63,9 @@
       <div class="nav-section">
         <div class="nav-section-title">Whale Tracking</div>
         <a href="/whale-activity" class="nav-item">
-          <span class="nav-icon">●</span>
           <span class="nav-label">Whale Activity</span>
         </a>
         <a href="/whale-monitor" class="nav-item">
-          <span class="nav-icon">◉</span>
           <span class="nav-label">Whale Monitor</span>
         </a>
       </div>
@@ -76,14 +73,13 @@
       <div class="nav-section">
         <div class="nav-section-title">Live Data</div>
         <a href="/live" class="nav-item">
-          <span class="nav-icon">◆</span>
           <span class="nav-label">Live Dashboard</span>
         </a>
       </div>
 
       <div class="sidebar-footer">
         <div class="nav-item" id="connection-status">
-          <span class="nav-icon status-indicator"></span>
+          <span class="status-indicator"></span>
           <span class="nav-label">Connected</span>
         </div>
       </div>
@@ -97,7 +93,7 @@
       <header class="header">
         <div style="display: flex; align-items: center; gap: 1rem">
           <a href="/" class="btn btn-link" style="padding: 0.5rem 1rem"
-            >← Back</a
+            >Back</a
           >
           <h1>Analysis Detail</h1>
         </div>
@@ -107,7 +103,7 @@
             class="btn btn-danger"
             title="Delete this analysis"
           >
-            🗑️ Delete
+            Delete
           </button>
         </div>
       </header>
@@ -198,7 +194,6 @@
               <!-- Whale Pressure -->
               <div class="hero-metric neutral" id="hero-pressure">
                 <div class="hero-metric-header">
-                  <span class="hero-metric-icon">🐋</span>
                   <span class="hero-metric-label">Whale Pressure</span>
                 </div>
                 <div class="hero-metric-value" id="hero-pressure-value">0</div>
@@ -215,7 +210,6 @@
               <!-- Liquidity Delta -->
               <div class="hero-metric neutral" id="hero-liquidity">
                 <div class="hero-metric-header">
-                  <span class="hero-metric-icon">💧</span>
                   <span class="hero-metric-label">Liquidity</span>
                 </div>
                 <div class="hero-metric-value" id="hero-liquidity-value">
@@ -223,7 +217,6 @@
                 </div>
                 <div class="hero-metric-footer">
                   <div class="hero-metric-change up" id="hero-liquidity-change">
-                    <span class="hero-metric-change-icon">▲</span>
                     <span>+0%</span>
                   </div>
                 </div>
@@ -309,13 +302,12 @@
                 onclick="toggleContextCard('whale')"
               >
                 <div class="context-card-title-wrapper">
-                  <span class="context-card-icon">🐋</span>
                   <span class="context-card-title">Whale Behavior</span>
                   <span class="context-card-badge low" id="whale-activity"
                     >Low</span
                   >
                 </div>
-                <div class="context-card-toggle">▼</div>
+                <div class="context-card-toggle"></div>
               </div>
               <div class="context-card-body">
                 <div class="context-insight info">
@@ -486,14 +478,14 @@
               class="download-chart-btn"
               title="Download Filtered Chart Data"
             >
-              ↓
+              Download
             </button>
             <button
               id="fullscreen-btn"
               class="fullscreen-btn"
               title="Toggle Fullscreen"
             >
-              ⊡
+              Fullscreen
             </button>
             <div id="chart-container" class="chart-container">
               <div id="loading" class="loading" style="display: none">
@@ -532,15 +524,12 @@
                 <span>Price Line</span>
               </div>
               <div class="legend-item" style="opacity: 0.7; padding-left: 28px">
-                <span style="font-size: 12px; color: #ffaa00">▼</span>
                 <span style="font-size: 11px">START - Interval start time</span>
               </div>
               <div class="legend-item" style="opacity: 0.7; padding-left: 28px">
-                <span style="font-size: 12px; color: #ffaa00">▲</span>
                 <span style="font-size: 11px">END - Interval end time</span>
               </div>
               <div class="legend-item" style="opacity: 0.9; padding-left: 28px">
-                <span style="font-size: 14px; color: #00ffa3">● ★</span>
                 <span style="font-size: 11px; font-weight: bold"
                   >SPIKE - Largest price change point</span
                 >
@@ -659,14 +648,13 @@
           <!-- Data Flow Documentation -->
           <details class="data-flow-info">
             <summary class="data-flow-summary">
-              <span class="data-flow-icon">📡</span>
               Data Flow: From MEXC API to Dashboard
-              <span class="data-flow-toggle">▼</span>
+              <span class="data-flow-toggle"></span>
             </summary>
             <div class="data-flow-content">
               <!-- API Sources -->
               <div class="data-flow-section">
-                <div class="data-flow-title">📡 MEXC WebSocket API Sources</div>
+                <div class="data-flow-title">MEXC WebSocket API Sources</div>
                 <div class="data-flow-item">
                   <code class="api-endpoint">sub.depth.full</code>
                   <span class="api-description"

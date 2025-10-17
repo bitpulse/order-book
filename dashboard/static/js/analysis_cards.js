@@ -91,7 +91,7 @@ function createAnalysisCard(file) {
         <div class="card-header">
             <div class="card-symbol">${file.symbol || 'Unknown'}</div>
             <button class="card-delete-btn" data-id="${file.id}" title="Delete analysis">
-                🗑️
+                Delete
             </button>
         </div>
         <div class="card-stats">

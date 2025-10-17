@@ -2,48 +2,11 @@
 
 .hero-analytics-bar {
     display: none !important; /* Hidden per user request */
-    background: linear-gradient(
-        135deg,
-        rgba(17, 17, 17, 0.95) 0%,
-        rgba(10, 10, 10, 0.95) 100%
-    );
-    backdrop-filter: blur(20px) saturate(180%);
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(17, 17, 17, 0.8);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 2rem 2.5rem;
     margin-bottom: 1.5rem;
-    position: relative;
-    overflow: hidden;
-    box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hero-analytics-bar::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #00ffa3, #00c2ff, #a855f7, #00ffa3);
-    background-size: 200% 100%;
-    animation: gradient-flow 8s linear infinite;
-    box-shadow: 0 0 20px rgba(0, 255, 163, 0.4);
-}
-
-@keyframes gradient-flow {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 200% 50%; }
-}
-
-.hero-analytics-bar:hover {
-    box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(0, 255, 163, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transform: translateY(-2px);
 }
 
 .hero-analytics-grid {
@@ -60,57 +23,27 @@
     gap: 0.75rem;
     padding: 1rem 1.25rem;
     background: rgba(255, 255, 255, 0.02);
-    border-radius: 12px;
-    border-left: 3px solid transparent;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-}
-
-.hero-metric::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent);
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-
-.hero-metric:hover::before {
-    opacity: 1;
+    border-radius: 8px;
+    border-left: 2px solid transparent;
+    transition: all 0.2s ease;
 }
 
 .hero-metric:hover {
     background: rgba(255, 255, 255, 0.04);
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .hero-metric.positive {
     border-left-color: var(--green);
 }
 
-.hero-metric.positive:hover {
-    box-shadow: 0 8px 24px rgba(0, 255, 163, 0.2);
-}
+/* Removed hover glow effects */
 
 .hero-metric.negative {
     border-left-color: var(--red);
 }
 
-.hero-metric.negative:hover {
-    box-shadow: 0 8px 24px rgba(255, 59, 105, 0.2);
-}
-
 .hero-metric.neutral {
     border-left-color: var(--blue);
-}
-
-.hero-metric.neutral:hover {
-    box-shadow: 0 8px 24px rgba(0, 194, 255, 0.2);
 }
 
 .hero-metric-header {
@@ -119,31 +52,7 @@
     gap: 0.5rem;
 }
 
-.hero-metric-icon {
-    font-size: 1.5rem;
-    opacity: 0.8;
-    transition: all 0.3s;
-}
-
-.hero-metric:hover .hero-metric-icon {
-    opacity: 1;
-    transform: scale(1.1) rotate(5deg);
-}
-
-.hero-metric-icon.pulse {
-    animation: icon-pulse 2s ease-in-out infinite;
-}
-
-@keyframes icon-pulse {
-    0%, 100% {
-        transform: scale(1);
-        opacity: 0.8;
-    }
-    50% {
-        transform: scale(1.15);
-        opacity: 1;
-    }
-}
+/* Removed icon animations */
 
 .hero-metric-label {
     font-size: 0.75rem;
@@ -156,43 +65,21 @@
 
 .hero-metric-value {
     font-size: 2rem;
-    font-weight: 800;
+    font-weight: 700;
     color: var(--text-primary);
     line-height: 1;
-    letter-spacing: -0.5px;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
-    transition: all 0.3s;
 }
 
 .hero-metric.positive .hero-metric-value {
     color: var(--green);
-    text-shadow: 0 0 20px rgba(0, 255, 163, 0.3);
 }
 
 .hero-metric.negative .hero-metric-value {
     color: var(--red);
-    text-shadow: 0 0 20px rgba(255, 59, 105, 0.3);
 }
 
 .hero-metric.neutral .hero-metric-value {
     color: var(--blue);
-    text-shadow: 0 0 20px rgba(0, 194, 255, 0.3);
-}
-
-.hero-metric-value.counting {
-    animation: value-flash 0.5s ease-out;
-}
-
-@keyframes value-flash {
-    0% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-    100% {
-        transform: scale(1);
-    }
 }
 
 .hero-metric-footer {
@@ -272,16 +159,6 @@
     background: rgba(255, 0, 85, 0.2);
     color: #ff0055;
     border-color: rgba(255, 0, 85, 0.4);
-    animation: badge-pulse 2s ease-in-out infinite;
-}
-
-@keyframes badge-pulse {
-    0%, 100% {
-        box-shadow: 0 0 0 0 rgba(255, 0, 85, 0.4);
-    }
-    50% {
-        box-shadow: 0 0 0 6px rgba(255, 0, 85, 0);
-    }
 }
 
 /* Responsive Design */

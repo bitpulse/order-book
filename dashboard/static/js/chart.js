@@ -1065,7 +1065,7 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
         const verb = countChange > 0 ? 'increased' : 'decreased';
         insights.push({
             type: type,
-            icon: countChange > 0 ? '📈' : '📉',
+            icon: '',
             text: `Activity ${verb} by ${Math.abs(countChange).toFixed(0)}% during spike`
         });
     }
@@ -1084,7 +1084,7 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
             if (timeDiff < 10) {
                 insights.push({
                     type: 'warning',
-                    icon: '⏱️',
+                    icon: '',
                     text: `Large ${firstSignificantEvent.side} order ${timeDiff.toFixed(1)}s before spike`,
                     value: `$${formatNumber(firstSignificantEvent.usd_value)}`
                 });
@@ -1099,7 +1099,7 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
     if (duringPct > 40) {
         insights.push({
             type: 'positive',
-            icon: '💰',
+            icon: '',
             text: `${duringPct.toFixed(0)}% of total volume occurred during spike`
         });
     }
@@ -1115,26 +1115,26 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
         const ratio = (bidVolume / askVolume).toFixed(1);
         insights.push({
             type: 'positive',
-            icon: '🐂',
+            icon: '',
             text: `Strong buying pressure (${ratio}x more bids) aligned with price rise`
         });
     } else if (askVolume > bidVolume * 1.5 && priceChange < 0) {
         const ratio = (askVolume / bidVolume).toFixed(1);
         insights.push({
             type: 'negative',
-            icon: '🐻',
+            icon: '',
             text: `Strong selling pressure (${ratio}x more asks) aligned with price drop`
         });
     } else if (bidVolume > askVolume * 1.5 && priceChange < 0) {
         insights.push({
             type: 'warning',
-            icon: '⚠️',
+            icon: '',
             text: 'Buying pressure during price drop - possible support level'
         });
     } else if (askVolume > bidVolume * 1.5 && priceChange > 0) {
         insights.push({
             type: 'warning',
-            icon: '⚠️',
+            icon: '',
             text: 'Selling pressure during price rise - possible resistance level'
         });
     }

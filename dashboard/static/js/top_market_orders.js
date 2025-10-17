@@ -760,7 +760,7 @@ function formatTooltip(params, intervalData) {
         }
         if (market.length > 0) {
             const totalUsd = market.reduce((sum, e) => sum + (e.usd_value || 0), 0);
-            html += `<div style="color: #ffaa00;">🎯 Market: ${market.length} ($${(totalUsd/1000).toFixed(1)}K)</div>`;
+            html += `<div style="color: #ffaa00;">Market: ${market.length} ($${(totalUsd/1000).toFixed(1)}K)</div>`;
         }
 
         html += `</div>`;

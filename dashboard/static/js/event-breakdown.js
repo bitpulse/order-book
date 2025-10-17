@@ -190,14 +190,14 @@ function renderEventStatsTable(stats, period) {
     if (!container || !stats) return;
 
     const eventTypes = [
-        { key: 'market_buy', name: 'Market Buy', icon: '🔵', class: 'market-order market-buy definitive' },
-        { key: 'market_sell', name: 'Market Sell', icon: '🔴', class: 'market-order market-sell definitive' },
-        { key: 'new_bid', name: 'New Bid Orders', icon: '🟢', class: 'new-bid definitive' },
-        { key: 'new_ask', name: 'New Ask Orders', icon: '🔴', class: 'new-ask definitive' },
-        { key: 'bid_increase', name: 'Bid Increase', icon: '💎', class: 'ambiguous' },
-        { key: 'ask_increase', name: 'Ask Increase', icon: '💎', class: 'ambiguous' },
-        { key: 'bid_decrease', name: 'Bid Decrease', icon: '💎', class: 'ambiguous' },
-        { key: 'ask_decrease', name: 'Ask Decrease', icon: '💎', class: 'ambiguous' }
+        { key: 'market_buy', name: 'Market Buy', icon: '', class: 'market-order market-buy definitive' },
+        { key: 'market_sell', name: 'Market Sell', icon: '', class: 'market-order market-sell definitive' },
+        { key: 'new_bid', name: 'New Bid Orders', icon: '', class: 'new-bid definitive' },
+        { key: 'new_ask', name: 'New Ask Orders', icon: '', class: 'new-ask definitive' },
+        { key: 'bid_increase', name: 'Bid Increase', icon: '', class: 'ambiguous' },
+        { key: 'ask_increase', name: 'Ask Increase', icon: '', class: 'ambiguous' },
+        { key: 'bid_decrease', name: 'Bid Decrease', icon: '', class: 'ambiguous' },
+        { key: 'ask_decrease', name: 'Ask Decrease', icon: '', class: 'ambiguous' }
     ];
 
     let html = `
@@ -240,7 +240,6 @@ function renderEventStatsTable(stats, period) {
             <tr class="event-row total">
                 <td>
                     <div class="event-type-cell">
-                        <span class="event-icon">📊</span>
                         <span class="event-name">TOTAL</span>
                     </div>
                 </td>
@@ -267,12 +266,12 @@ function renderComparisonTable(stats) {
     if (!container) return;
 
     const eventTypes = [
-        { key: 'market_buy', name: 'Market Buy', icon: '🔵' },
-        { key: 'market_sell', name: 'Market Sell', icon: '🔴' },
-        { key: 'new_bid', name: 'New Bid', icon: '🟢' },
-        { key: 'new_ask', name: 'New Ask', icon: '🔴' },
-        { key: 'bid_increase', name: 'Bid Inc', icon: '💎' },
-        { key: 'ask_increase', name: 'Ask Inc', icon: '💎' }
+        { key: 'market_buy', name: 'Market Buy', icon: '' },
+        { key: 'market_sell', name: 'Market Sell', icon: '' },
+        { key: 'new_bid', name: 'New Bid', icon: '' },
+        { key: 'new_ask', name: 'New Ask', icon: '' },
+        { key: 'bid_increase', name: 'Bid Inc', icon: '' },
+        { key: 'ask_increase', name: 'Ask Inc', icon: '' }
     ];
 
     let html = `
@@ -280,9 +279,9 @@ function renderComparisonTable(stats) {
             <thead>
                 <tr>
                     <th>Event Type</th>
-                    <th>🔴 Before</th>
-                    <th>🎯 During</th>
-                    <th>🟢 After</th>
+                    <th>Before</th>
+                    <th>During</th>
+                    <th>After</th>
                     <th>Total</th>
                 </tr>
             </thead>
@@ -352,7 +351,7 @@ function generateEventInsights(before, during, after) {
         const ratio = duringSellVol / duringBuyVol;
         insights.push({
             type: 'bearish',
-            icon: '📉',
+            icon: '',
             text: `<strong>Aggressive Selling</strong>: ${during.market_sell?.count || 0} market sells (${formatLargeNumber(duringSellVol)}) dominated - ${ratio.toFixed(1)}x more than buys`
         });
     }
@@ -363,7 +362,7 @@ function generateEventInsights(before, during, after) {
     if (beforeNewBidCount > beforeNewAskCount * 1.5 && beforeNewBidCount > 3) {
         insights.push({
             type: 'info',
-            icon: '📊',
+            icon: '',
             text: `<strong>Accumulation Phase</strong>: ${beforeNewBidCount} new bid orders (${formatLargeNumber(before.new_bid?.volume || 0)}) placed before spike vs ${beforeNewAskCount} asks`
         });
     }
@@ -377,13 +376,13 @@ function generateEventInsights(before, during, after) {
     if (buyRatio > 0.7 && afterBuyCount > 3) {
         insights.push({
             type: 'bullish',
-            icon: '💪',
+            icon: '',
             text: `<strong>Strong Follow-Through</strong>: Market buys continued after spike at ${(buyRatio * 100).toFixed(0)}% of during-spike volume (${afterBuyCount} orders)`
         });
     } else if (buyRatio < 0.3 && duringBuyCount > 5) {
         insights.push({
             type: 'warning',
-            icon: '⚠️',
+            icon: '',
             text: `<strong>Buying Exhaustion</strong>: Market buys dropped ${((1 - buyRatio) * 100).toFixed(0)}% after spike - potential reversal signal`
         });
     }
@@ -398,7 +397,7 @@ function generateEventInsights(before, during, after) {
     if (beforeBuyDominance && afterSellDominance) {
         insights.push({
             type: 'warning',
-            icon: '🔄',
+            icon: '',
             text: `<strong>Reversal Pattern</strong>: Activity flipped from buying before spike to selling after - possible distribution`
         });
     }
@@ -408,7 +407,7 @@ function generateEventInsights(before, during, after) {
     if (duringBuyAvg > 150000 && duringBuyCount > 5) {
         insights.push({
             type: 'info',
-            icon: '🏦',
+            icon: '',
             text: `<strong>Institutional Size</strong>: Average market buy of ${formatLargeNumber(duringBuyAvg)} suggests institutional participation`
         });
     }
@@ -419,7 +418,7 @@ function generateEventInsights(before, during, after) {
     if (duringNewBidCount > 8 && duringNewBidAvg > 75000) {
         insights.push({
             type: 'bullish',
-            icon: '🐋',
+            icon: '',
             text: `<strong>Coordinated Bids</strong>: ${duringNewBidCount} large bid orders (avg ${formatLargeNumber(duringNewBidAvg)}) placed simultaneously`
         });
     }
@@ -441,7 +440,7 @@ function renderEventInsights(insights) {
 
     let html = `
         <div class="insights-title">
-            💡 Key Insights
+            Key Insights
         </div>
     `;
 

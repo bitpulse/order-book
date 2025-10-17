@@ -195,13 +195,13 @@ function formatCalculationExplanation(calculation) {
     // Formula
     if (calculation.formula) {
         html += `<div class="calc-section">
-            <strong>📐 Formula:</strong> <code>${calculation.formula}</code>
+            <strong>Formula:</strong> <code>${calculation.formula}</code>
         </div>`;
     }
 
     // Inputs
     if (calculation.inputs) {
-        html += '<div class="calc-section"><strong>📊 Inputs:</strong><ul class="calc-inputs">';
+        html += '<div class="calc-section"><strong>Inputs:</strong><ul class="calc-inputs">';
         for (const [key, value] of Object.entries(calculation.inputs)) {
             html += `<li><span class="input-label">${key}:</span> <span class="input-value">${value}</span></li>`;
         }
@@ -210,7 +210,7 @@ function formatCalculationExplanation(calculation) {
 
     // Steps
     if (calculation.steps && calculation.steps.length > 0) {
-        html += '<div class="calc-section"><strong>🔢 Calculation:</strong><ol class="calc-steps">';
+        html += '<div class="calc-section"><strong>Calculation:</strong><ol class="calc-steps">';
         calculation.steps.forEach(step => {
             html += `<li>${step}</li>`;
         });
@@ -220,21 +220,21 @@ function formatCalculationExplanation(calculation) {
     // Result
     if (calculation.result) {
         html += `<div class="calc-section calc-result">
-            <strong>✅ Result:</strong> ${calculation.result}
+            <strong>Result:</strong> ${calculation.result}
         </div>`;
     }
 
     // Interpretation
     if (calculation.interpretation) {
         html += `<div class="calc-section calc-interpretation">
-            <strong>💡 Meaning:</strong> ${calculation.interpretation}
+            <strong>Meaning:</strong> ${calculation.interpretation}
         </div>`;
     }
 
     // Baseline/Context
     if (calculation.baseline) {
         html += `<div class="calc-section calc-baseline">
-            <strong>📈 Context:</strong> ${calculation.baseline}
+            <strong>Context:</strong> ${calculation.baseline}
         </div>`;
     }
 

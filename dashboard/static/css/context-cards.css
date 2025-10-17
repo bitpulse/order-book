@@ -8,17 +8,15 @@
 }
 
 .context-card {
-    background: linear-gradient(135deg, rgba(17, 17, 17, 0.9), rgba(10, 10, 10, 0.9));
-    backdrop-filter: blur(15px);
-    border-radius: 12px;
+    background: rgba(17, 17, 17, 0.8);
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
 }
 
 .context-card.expanded {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 255, 163, 0.15);
+    border-color: rgba(255, 255, 255, 0.12);
 }
 
 .context-card-header {
@@ -28,17 +26,19 @@
     padding: 1rem 1.25rem;
     cursor: pointer;
     user-select: none;
-    transition: all 0.3s;
+    transition: all 0.2s;
     background: rgba(255, 255, 255, 0.02);
-    border-left: 3px solid transparent;
+    border-left: 2px solid transparent;
 }
 
 .context-card-header:hover {
     background: rgba(255, 255, 255, 0.04);
 }
 
+/* Simplified card type colors - removed purple, only using core colors */
+
 .context-card.spike .context-card-header {
-    border-left-color: var(--yellow);
+    border-left-color: #ffaa00;
 }
 
 .context-card.whale .context-card-header {
@@ -46,7 +46,7 @@
 }
 
 .context-card.structure .context-card-header {
-    border-left-color: var(--purple);
+    border-left-color: var(--green);
 }
 
 .context-card.expanded .context-card-header {
@@ -60,14 +60,7 @@
     flex: 1;
 }
 
-.context-card-icon {
-    font-size: 1.5rem;
-    transition: all 0.3s;
-}
-
-.context-card.expanded .context-card-icon {
-    transform: scale(1.1) rotate(5deg);
-}
+/* Removed icon animations */
 
 .context-card-title {
     font-size: 0.95rem;
@@ -112,30 +105,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    transition: all 0.3s;
-    font-size: 0.75rem;
+    width: 20px;
+    height: 20px;
+    transition: all 0.2s;
     color: var(--text-secondary);
 }
 
-.context-card-header:hover .context-card-toggle {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
+.context-card-toggle::before {
+    content: '▼';
+    font-size: 0.6rem;
 }
 
 .context-card.expanded .context-card-toggle {
     transform: rotate(180deg);
-    background: rgba(0, 255, 163, 0.15);
-    color: var(--green);
+    color: var(--text-primary);
 }
 
 .context-card-body {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s, padding 0.3s;
+    transition: max-height 0.3s ease, opacity 0.2s, padding 0.2s;
     opacity: 0;
     padding: 0 1.25rem;
 }
@@ -153,15 +142,14 @@
     gap: 0.75rem;
     padding: 0.875rem;
     background: rgba(255, 255, 255, 0.02);
-    border-radius: 8px;
+    border-radius: 6px;
     margin-bottom: 0.75rem;
     border-left: 2px solid var(--border-color);
-    transition: all 0.3s;
+    transition: all 0.2s;
 }
 
 .context-insight:hover {
     background: rgba(255, 255, 255, 0.04);
-    transform: translateX(3px);
 }
 
 .context-insight:last-child {
