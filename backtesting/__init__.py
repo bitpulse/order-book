@@ -49,7 +49,7 @@ from backtesting.core.data_loader import DataLoader
 from backtesting.core.portfolio import Portfolio
 from backtesting.core.execution import ExecutionSimulator
 from backtesting.core.metrics import MetricsCalculator
-from backtesting.strategies import BaseStrategy, WhaleFollowingStrategy
+from backtesting.strategies import BaseStrategy, WhaleFollowingStrategy, MomentumReversalStrategy
 
 __all__ = [
     'BacktestEngine',
@@ -59,4 +59,5 @@ __all__ = [
     'MetricsCalculator',
     'BaseStrategy',
     'WhaleFollowingStrategy',
+    'MomentumReversalStrategy',
 ]
