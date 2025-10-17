@@ -48,7 +48,12 @@ class MongoDBService:
 
             mongo = get_mongodb_storage()
             if mongo:
-                results = mongo.get_analyses(collection_name, limit=limit)
+                # Use projection to exclude heavy data.intervals array
+                # MongoDB requires either all inclusion or all exclusion (except for _id)
+                projection = {
+                    'data.intervals': 0  # Exclude only the heavy intervals array
+                }
+                results = mongo.get_analyses(collection_name, limit=limit, projection=projection)
                 for analysis in results:
                     # Handle created_at - could be datetime or string
                     created_at = analysis.get('created_at')
