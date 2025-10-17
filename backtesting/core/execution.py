@@ -10,7 +10,7 @@ This module simulates realistic order execution including:
 Critical for accurate backtesting!
 """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from datetime import datetime, timedelta
 from loguru import logger
 

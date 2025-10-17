@@ -257,37 +257,32 @@ class DataLoader:
 
         if whale_events.empty:
             logger.warning("No whale events to merge - using price data only")
-            return df.reset_index()
+            # Add empty whale columns
+            df['whale_usd_total'] = 0
+            df['whale_count'] = 0
+            df['whale_max_usd'] = 0
+            df['market_buy_count'] = 0
+            df['market_sell_count'] = 0
+            df['whale_bid_volume'] = 0
+            df['whale_ask_volume'] = 0
+            df['whale_imbalance'] = 0
+            df['price_change_pct'] = df['mid_price'].pct_change() * 100
+            df['spread_pct'] = (df['spread'] / df['mid_price']) * 100
+            return df  # Keep timestamp as index!
 
-        # Aggregate whale events into time buckets
-        whale_df = whale_events.copy()
-        whale_df = whale_df.set_index('timestamp')
+        # Don't resample - keep whale events at their exact timestamps
+        # Instead, we'll match them in the backtest engine directly
+        # But we still need to add whale columns to price data for compatibility
 
-        # Calculate whale activity metrics per time window
-        whale_agg = whale_df.resample(window_size).agg({
-            'usd_value': ['sum', 'count', 'max'],
-            'event_type': lambda x: (x == 'market_buy').sum(),  # Count market buys
-        }).fillna(0)
-
-        # Flatten column names
-        whale_agg.columns = ['whale_usd_total', 'whale_count', 'whale_max_usd', 'market_buy_count']
-
-        # Calculate market sell count
-        whale_agg['market_sell_count'] = whale_df.resample(window_size)['event_type'].apply(
-            lambda x: (x == 'market_sell').sum()
-        ).fillna(0)
-
-        # Calculate bid/ask imbalance from whale events
-        whale_bid_volume = whale_df[whale_df['side'] == 'bid'].resample(window_size)['usd_value'].sum().fillna(0)
-        whale_ask_volume = whale_df[whale_df['side'] == 'ask'].resample(window_size)['usd_value'].sum().fillna(0)
-
-        whale_agg['whale_bid_volume'] = whale_bid_volume
-        whale_agg['whale_ask_volume'] = whale_ask_volume
-        whale_agg['whale_imbalance'] = (whale_bid_volume - whale_ask_volume) / (whale_bid_volume + whale_ask_volume + 1e-9)
-
-        # Merge with price data (forward fill for missing whale data)
-        df = df.merge(whale_agg, left_index=True, right_index=True, how='left')
-        df = df.fillna(0)
+        # Initialize whale columns with zeros
+        df['whale_usd_total'] = 0.0
+        df['whale_count'] = 0
+        df['whale_max_usd'] = 0.0
+        df['market_buy_count'] = 0
+        df['market_sell_count'] = 0
+        df['whale_bid_volume'] = 0.0
+        df['whale_ask_volume'] = 0.0
+        df['whale_imbalance'] = 0.0
 
         # Add derived features
         df['price_change_pct'] = df['mid_price'].pct_change() * 100
@@ -295,7 +290,7 @@ class DataLoader:
 
         logger.info(f"Created unified timeline with {len(df):,} data points")
 
-        return df.reset_index()
+        return df  # Keep timestamp as index!
 
     def _parse_time_string(self, time_str: str) -> datetime:
         """
