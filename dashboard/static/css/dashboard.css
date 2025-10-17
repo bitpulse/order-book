@@ -672,6 +672,21 @@ body::after {
     transform: scale(0.95);
 }
 
+.download-chart-btn:disabled,
+.fullscreen-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.download-chart-btn:disabled:hover,
+.fullscreen-btn:disabled:hover {
+    background: rgba(17, 17, 17, 0.9);
+    border-color: var(--border-color);
+    transform: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
 .loading {
     position: absolute;
     top: 50%;
