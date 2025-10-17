@@ -1816,7 +1816,7 @@ function exportChartData() {
     notification.style.cssText = 'position: fixed; top: 80px; right: 20px; background: rgba(0, 255, 163, 0.15); ' +
         'border: 1px solid var(--green); color: var(--green); padding: 12px 20px; border-radius: 8px; ' +
         'z-index: 10001; font-size: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);';
-    notification.innerHTML = `✓ Exported with ${Object.keys(exportData.event_type_explanations).length} event type explanations`;
+    notification.innerHTML = `Exported successfully: ${Object.keys(exportData.event_type_explanations).length} event types`;
     document.body.appendChild(notification);
 
     setTimeout(() => {
