@@ -1855,6 +1855,14 @@ function setupEventListeners() {
         updateUsdFilterStatus(minUsdFilter);
     }
 
+    // Data explanation button
+    const showDataExplanationBtn = document.getElementById('show-data-explanation');
+    if (showDataExplanationBtn) {
+        showDataExplanationBtn.addEventListener('click', () => {
+            document.getElementById('data-explanation-modal').style.display = 'flex';
+        });
+    }
+
     // Modal close button
     const closeBtn = document.querySelector('.modal-close');
     if (closeBtn) {
@@ -1869,12 +1877,20 @@ function setupEventListeners() {
         // ESC key: close modal first, then exit fullscreen
         if (e.key === 'Escape') {
             // First check if any modal is open
-            const modal = document.getElementById('event-details-modal');
-            const isModalOpen = modal && modal.style.display === 'flex';
+            const eventModal = document.getElementById('event-details-modal');
+            const dataModal = document.getElementById('data-explanation-modal');
+            const deleteModal = document.getElementById('delete-modal');
 
-            if (isModalOpen) {
-                // Close the modal
-                modal.style.display = 'none';
+            const isEventModalOpen = eventModal && eventModal.style.display === 'flex';
+            const isDataModalOpen = dataModal && dataModal.style.display === 'flex';
+            const isDeleteModalOpen = deleteModal && deleteModal.style.display === 'flex';
+
+            if (isEventModalOpen) {
+                eventModal.style.display = 'none';
+            } else if (isDataModalOpen) {
+                dataModal.style.display = 'none';
+            } else if (isDeleteModalOpen) {
+                deleteModal.style.display = 'none';
             } else {
                 // If no modal, exit fullscreen if active
                 const wrapper = document.querySelector('.chart-wrapper');

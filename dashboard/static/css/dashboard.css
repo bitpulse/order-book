@@ -770,6 +770,38 @@ body::after {
     letter-spacing: 0.5px;
     margin-bottom: 0.25rem;
     opacity: 0.7;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.legend-title .info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0, 255, 163, 0.1);
+    color: var(--green);
+    font-size: 12px;
+    text-decoration: none;
+    transition: all 0.2s;
+    opacity: 0.6;
+    border: 1px solid rgba(0, 255, 163, 0.2);
+    cursor: pointer;
+    padding: 0;
+}
+
+.legend-title .info-icon:hover {
+    opacity: 1;
+    background: rgba(0, 255, 163, 0.2);
+    transform: scale(1.1);
+    box-shadow: 0 0 10px rgba(0, 255, 163, 0.3);
+}
+
+.legend-title .info-icon:active {
+    transform: scale(0.95);
 }
 
 .legend-item {

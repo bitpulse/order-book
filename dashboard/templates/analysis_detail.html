@@ -437,7 +437,12 @@
           <!-- Chart Legend with Filters -->
           <div class="chart-legend">
             <div class="legend-section">
-              <div class="legend-title">Price & Markers</div>
+              <div class="legend-title">
+                Price & Markers
+                <button id="show-data-explanation" class="info-icon" title="What do these events mean? Click for detailed explanation">
+                  ℹ️
+                </button>
+              </div>
               <div class="legend-item">
                 <input
                   type="checkbox"
@@ -926,10 +931,38 @@
       </div>
     </div>
 
+    <!-- Data Explanation Modal -->
+    <div id="data-explanation-modal" style="display: none">
+      <div class="modal-content" style="max-width: 900px; max-height: 90vh;">
+        <div class="modal-header">
+          <h3>📊 What Do These Events Mean?</h3>
+          <button
+            class="modal-close"
+            onclick="document.getElementById('data-explanation-modal').style.display='none'"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 100px);">
+          <iframe
+            src="/static/docs/WHALE_EVENTS_EXPLAINED.md"
+            style="width: 100%; height: 100%; min-height: 600px; border: none; background: rgba(17, 17, 17, 0.5); border-radius: 8px; padding: 1rem;"
+            onload="this.style.height = this.contentWindow.document.body.scrollHeight + 'px';"
+          ></iframe>
+          <p style="margin-top: 1rem; text-align: center; color: #808080; font-size: 0.9rem;">
+            <a href="/static/docs/WHALE_EVENTS_EXPLAINED.md" target="_blank" style="color: var(--green); text-decoration: none;">
+              Open in new tab →
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Styles -->
     <style>
       #event-details-modal,
-      #delete-modal {
+      #delete-modal,
+      #data-explanation-modal {
         display: none;
         position: fixed;
         top: 0;
