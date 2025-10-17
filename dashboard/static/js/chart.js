@@ -1517,6 +1517,119 @@ function exportCurrentInterval() {
     console.log('Exported interval:', filename);
 }
 
+// Export filtered chart data as JSON (respects active filters)
+function exportChartData() {
+    if (!currentInterval) {
+        alert('No interval data loaded');
+        return;
+    }
+
+    // Helper function to filter whale events by active filters
+    function filterEventsByActiveFilters(events) {
+        if (!events || events.length === 0) return [];
+
+        return events.filter(event => {
+            // Apply USD filter first
+            if (event.usd_value < minUsdFilter) return false;
+
+            // Apply event type filters
+            const isMarketBuy = event.event_type === 'market_buy';
+            const isMarketSell = event.event_type === 'market_sell';
+            const isIncrease = event.event_type === 'increase';
+            const isDecrease = event.event_type === 'decrease';
+            const isBid = event.side === 'bid' || event.event_type.includes('bid');
+            const isAsk = event.side === 'ask' || event.event_type.includes('ask');
+            const isNewBid = !isMarketBuy && !isMarketSell && !isIncrease && !isDecrease && isBid;
+            const isNewAsk = !isMarketBuy && !isMarketSell && !isIncrease && !isDecrease && isAsk;
+
+            // Check filters
+            if (isMarketBuy && !filters.marketBuy) return false;
+            if (isMarketSell && !filters.marketSell) return false;
+            if (isNewBid && !filters.newBid) return false;
+            if (isNewAsk && !filters.newAsk) return false;
+            if ((isIncrease && isBid) && !filters.bidIncrease) return false;
+            if ((isIncrease && isAsk) && !filters.askIncrease) return false;
+            if ((isDecrease && isBid) && !filters.askIncrease) return false; // bid decrease = resistance building
+            if ((isDecrease && isAsk) && !filters.bidIncrease) return false; // ask decrease = support building
+
+            return true;
+        });
+    }
+
+    // Build filtered dataset
+    const exportData = {
+        metadata: {
+            symbol: currentInterval.symbol || 'UNKNOWN',
+            interval_rank: currentInterval.rank,
+            start_time: currentInterval.start_time,
+            end_time: currentInterval.end_time,
+            start_price: currentInterval.start_price,
+            end_price: currentInterval.end_price,
+            change_pct: currentInterval.change_pct,
+            exported_at: new Date().toISOString(),
+            active_filters: {
+                price_line: filters.price,
+                market_buy: filters.marketBuy,
+                market_sell: filters.marketSell,
+                new_bid: filters.newBid,
+                new_ask: filters.newAsk,
+                bid_increase: filters.bidIncrease,
+                ask_increase: filters.askIncrease,
+                min_usd: minUsdFilter
+            }
+        },
+        price_data: filters.price ? (currentInterval.price_data || []) : [],
+        whale_events_before: filterEventsByActiveFilters(currentInterval.whale_events_before || []),
+        whale_events_during: filterEventsByActiveFilters(currentInterval.whale_events || []),
+        whale_events_after: filterEventsByActiveFilters(currentInterval.whale_events_after || [])
+    };
+
+    // Add statistics
+    const allFilteredEvents = [
+        ...exportData.whale_events_before,
+        ...exportData.whale_events_during,
+        ...exportData.whale_events_after
+    ];
+
+    exportData.statistics = {
+        total_events: allFilteredEvents.length,
+        events_before: exportData.whale_events_before.length,
+        events_during: exportData.whale_events_during.length,
+        events_after: exportData.whale_events_after.length,
+        total_volume_usd: allFilteredEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0),
+        price_points: exportData.price_data.length
+    };
+
+    // Create filename
+    const symbol = currentInterval.symbol || 'UNKNOWN';
+    const startTime = new Date(currentInterval.start_time);
+    const filterSuffix = minUsdFilter > 0 ? `_min${minUsdFilter}usd` : '';
+    const filename = `chart_${symbol}_rank${currentInterval.rank}_${startTime.toISOString().replace(/[:.]/g, '-')}${filterSuffix}_filtered.json`;
+
+    // Create and download JSON blob
+    const jsonData = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    // Cleanup
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    console.log('Exported filtered chart data:', {
+        filename,
+        total_events: exportData.statistics.total_events,
+        price_points: exportData.statistics.price_points,
+        filters: exportData.metadata.active_filters
+    });
+}
+
 // Setup event listeners
 function setupEventListeners() {
     // New Analysis button (only on card grid page)
@@ -1606,6 +1719,14 @@ function setupEventListeners() {
     if (exportBtn) {
         exportBtn.addEventListener('click', () => {
             exportCurrentInterval();
+        });
+    }
+
+    // Download chart data button
+    const downloadChartBtn = document.getElementById('download-chart-btn');
+    if (downloadChartBtn) {
+        downloadChartBtn.addEventListener('click', () => {
+            exportChartData();
         });
     }
 
