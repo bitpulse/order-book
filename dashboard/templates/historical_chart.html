@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Historical Chart - Order Book Dashboard</title>
+
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/sidebar.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/dashboard.css') }}"
+    />
+  </head>
+  <body>
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-text">Bitpulse</span>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle">
+          <span>✕</span>
+        </button>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Analyzers</div>
+        <a href="/" class="nav-item">
+          <span class="nav-icon">▲</span>
+          <span class="nav-label">Price Changes</span>
+        </a>
+        <a href="/top-market-orders" class="nav-item">
+          <span class="nav-icon">◆</span>
+          <span class="nav-label">Market Orders</span>
+        </a>
+        <a href="/market-orders-intervals" class="nav-item">
+          <span class="nav-icon">■</span>
+          <span class="nav-label">Order Intervals</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Whale Tracking</div>
+        <a href="/whale-activity" class="nav-item">
+          <span class="nav-icon">●</span>
+          <span class="nav-label">Whale Activity</span>
+        </a>
+        <a href="/whale-monitor" class="nav-item">
+          <span class="nav-icon">◉</span>
+          <span class="nav-label">Whale Monitor</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Live Data</div>
+        <a href="/live" class="nav-item">
+          <span class="nav-icon">◆</span>
+          <span class="nav-label">Live Dashboard</span>
+        </a>
+        <a href="/historical" class="nav-item active">
+          <span class="nav-icon">⌚</span>
+          <span class="nav-label">Historical Chart</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="nav-item" id="connection-status">
+          <span class="nav-icon status-indicator"></span>
+          <span class="nav-label">Ready</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay"></div>
+
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <h1>Historical Chart</h1>
+        <div class="header-controls">
+          <select id="symbol-select" class="file-selector">
+            <!-- Dynamically loaded from API -->
+          </select>
+          <input
+            type="datetime-local"
+            id="timestamp-input"
+            class="search-input"
+            style="width: 220px"
+          />
+          <input
+            type="number"
+            id="min-usd-input"
+            placeholder="Min USD"
+            value="5000"
+            step="1000"
+            class="search-input"
+            style="width: 120px"
+          />
+          <button id="load-btn" class="btn btn-primary">Load Chart</button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Left Panel: Chart and Stats -->
+        <div class="chart-panel">
+          <!-- Analysis Info -->
+          <div id="analysis-info" class="analysis-info">
+            <div class="info-item">
+              <span class="info-icon"></span>
+              <span id="info-symbol" class="info-text">TAO_USDT - Select timestamp</span>
+            </div>
+            <div class="info-item">
+              <span id="info-window" class="info-text">±5 minutes window</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon"></span>
+              <span id="info-min-usd" class="info-text">Min: $5,000</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon"></span>
+              <span id="info-status" class="info-text">Historical (static)</span>
+            </div>
+          </div>
+
+          <!-- Stats Summary -->
+          <div id="stats-summary" class="stats-summary">
+            <!-- Column 1: Price -->
+            <div class="stat-item">
+              <span class="stat-label">Price (End):</span>
+              <span id="stat-current-price" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Change:</span>
+              <span id="stat-price-change" class="stat-value">-</span>
+            </div>
+
+            <!-- Column 2: Average Sizes -->
+            <div class="stat-item">
+              <span class="stat-label">Avg Market Buy:</span>
+              <span id="stat-avg-buy" class="stat-value stat-bullish">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Avg Market Sell:</span>
+              <span id="stat-avg-sell" class="stat-value stat-bearish">-</span>
+            </div>
+
+            <!-- Column 3: Largest Orders -->
+            <div class="stat-item">
+              <span class="stat-label">Largest Buy:</span>
+              <span id="stat-largest-buy" class="stat-value stat-bullish"
+                >-</span
+              >
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Largest Sell:</span>
+              <span id="stat-largest-sell" class="stat-value stat-bearish"
+                >-</span
+              >
+            </div>
+
+            <!-- Column 4: Volume -->
+            <div class="stat-item">
+              <span class="stat-label">Buy Volume:</span>
+              <span id="stat-buy-volume" class="stat-value stat-bullish"
+                >-</span
+              >
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Sell Volume:</span>
+              <span id="stat-sell-volume" class="stat-value stat-bearish"
+                >-</span
+              >
+            </div>
+
+            <!-- Column 5: Flow & Ratio -->
+            <div class="stat-item">
+              <span class="stat-label">Net Flow:</span>
+              <span id="stat-net-flow" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Buy/Sell Ratio:</span>
+              <span id="stat-buy-sell-ratio" class="stat-value">-</span>
+            </div>
+
+            <!-- Column 6: Order Book -->
+            <div class="stat-item">
+              <span class="stat-label">New Bids:</span>
+              <span id="stat-new-bids" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">New Asks:</span>
+              <span id="stat-new-asks" class="stat-value">-</span>
+            </div>
+
+            <!-- Column 7: General -->
+            <div class="stat-item">
+              <span class="stat-label">Total Events:</span>
+              <span id="stat-total-events" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Time Range:</span>
+              <span id="stat-time-range" class="stat-value">-</span>
+            </div>
+          </div>
+
+          <!-- Chart Container -->
+          <div class="chart-wrapper">
+            <button
+              id="fullscreen-btn"
+              class="fullscreen-btn"
+              title="Toggle Fullscreen"
+            >
+              ⛶
+            </button>
+            <div id="loading" class="loading">
+              <div class="spinner"></div>
+              <p>Select a timestamp and click "Load Chart"</p>
+            </div>
+            <div id="chart-container" class="chart-container"></div>
+          </div>
+
+          <!-- Chart Legend with Filters -->
+          <div class="chart-legend">
+            <div class="legend-section">
+              <div class="legend-title">Price & Markers</div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-price"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span class="legend-marker" style="background: #00c2ff"></span>
+                <span>Price Line</span>
+              </div>
+            </div>
+            <div class="legend-section">
+              <div class="legend-title">Definitive Events (Bright)</div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-new-bid"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-triangle"
+                  style="border-bottom-color: #00ff88"
+                ></span>
+                <span>New Bid Orders</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-new-ask"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-triangle-down"
+                  style="border-top-color: #ff4444"
+                ></span>
+                <span>New Ask Orders</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-market-buy"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span class="legend-marker" style="background: #00c2ff"></span>
+                <span>Market Buy</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-market-sell"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span class="legend-marker" style="background: #ff00ff"></span>
+                <span>Market Sell</span>
+              </div>
+            </div>
+            <div class="legend-section">
+              <div class="legend-title">Volume Changes (Muted)</div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-bid-increase"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-diamond"
+                  style="background: #88cc88"
+                ></span>
+                <span>Bid Increase / Ask Decrease</span>
+              </div>
+              <div class="legend-item">
+                <input
+                  type="checkbox"
+                  id="filter-ask-increase"
+                  checked
+                  style="margin-right: 8px"
+                />
+                <span
+                  class="legend-marker legend-diamond"
+                  style="background: #cc8888"
+                ></span>
+                <span>Ask Increase / Bid Decrease</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Panel: Whale Events -->
+        <div class="events-panel">
+          <div class="events-header">
+            <h2>Whale Events (10 min window)</h2>
+            <div class="events-filters">
+              <select id="event-type-filter" class="filter-select">
+                <option value="">All Types</option>
+                <option value="market_buy">Market Buy</option>
+                <option value="market_sell">Market Sell</option>
+                <option value="bid">Bid Events</option>
+                <option value="ask">Ask Events</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Event Statistics -->
+          <div id="event-stats" class="event-stats">
+            <div class="event-stat">
+              <span class="event-stat-label">Market Buys:</span>
+              <span id="event-stat-buys" class="event-stat-value">0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Market Sells:</span>
+              <span id="event-stat-sells" class="event-stat-value">0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Bid Events:</span>
+              <span id="event-stat-bids" class="event-stat-value">0</span>
+            </div>
+            <div class="event-stat">
+              <span class="event-stat-label">Ask Events:</span>
+              <span id="event-stat-asks" class="event-stat-value">0</span>
+            </div>
+          </div>
+
+          <!-- Event List -->
+          <div
+            id="event-list"
+            class="whale-events-list"
+            style="max-height: calc(100vh - 400px); overflow-y: auto"
+          >
+            <!-- Events will be inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <p>
+          Historical Chart Dashboard | Powered by
+          <a href="https://echarts.apache.org" target="_blank"
+            >Apache ECharts</a
+          >
+        </p>
+      </footer>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="error-toast" class="error-toast" style="display: none">
+      <span id="error-message"></span>
+      <button onclick="this.parentElement.style.display='none'">&times;</button>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/historical_chart.js') }}"></script>
+  </body>
+</html>
