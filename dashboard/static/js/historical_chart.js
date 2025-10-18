@@ -65,11 +65,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('timestamp-input').value =
                 timestamp.toISOString().slice(0, 16);
 
+            // Show loading state while auto-loading
+            showLoading(true, 'Loading data from URL...');
+
             // Auto-load data if timestamp is provided
             setTimeout(() => loadChartData(), 100);
         } catch (error) {
             console.error('Invalid timestamp in URL:', error);
             setDefaultTimestamp();
+            showLoading(false);
         }
     } else {
         setDefaultTimestamp();
@@ -677,7 +681,7 @@ async function loadChartData() {
     // Convert to ISO format
     currentTimestamp = new Date(timestampInput).toISOString();
 
-    showLoading(true);
+    showLoading(true, `Loading ${currentSymbol} data for ${new Date(currentTimestamp).toLocaleString()}...`);
 
     try {
         // Fetch price history and whale events in parallel
@@ -1031,8 +1035,17 @@ function toggleFullscreen() {
 }
 
 // Show/hide loading
-function showLoading(show) {
-    document.getElementById('loading').style.display = show ? 'flex' : 'none';
+function showLoading(show, message = 'Loading chart data...') {
+    const loading = document.getElementById('loading');
+    if (show) {
+        loading.style.display = 'flex';
+        const loadingText = loading.querySelector('p');
+        if (loadingText) {
+            loadingText.textContent = message;
+        }
+    } else {
+        loading.style.display = 'none';
+    }
 }
 
 // Show error toast
