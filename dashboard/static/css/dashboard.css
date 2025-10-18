@@ -566,6 +566,13 @@ body {
     transform: translate(-50%, -50%);
     text-align: center;
     color: var(--text-secondary);
+    z-index: 100;
+    background: rgba(13, 17, 23, 0.95);
+    padding: 2rem 3rem;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 255, 163, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
 }
 
 .spinner {

@@ -1,0 +1,88 @@
+<!-- Sidebar Navigation Component -->
+{# Usage: Set active_page variable then include this template #}
+
+<!-- Mobile Menu Button -->
+<button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+
+<!-- Sidebar Navigation -->
+<nav class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">
+      <span class="logo-text">Bitpulse</span>
+    </div>
+    <button class="sidebar-toggle" id="sidebar-toggle">
+      <span>✕</span>
+    </button>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Analyzers</div>
+    <a
+      href="/"
+      class="nav-item {% if active_page == 'index' %}active{% endif %}"
+    >
+      <span class="nav-icon">▲</span>
+      <span class="nav-label">Price Changes</span>
+    </a>
+    <a
+      href="/top-market-orders"
+      class="nav-item {% if active_page == 'top_market_orders' %}active{% endif %}"
+    >
+      <span class="nav-icon">◆</span>
+      <span class="nav-label">Market Orders</span>
+    </a>
+    <a
+      href="/market-orders-intervals"
+      class="nav-item {% if active_page == 'market_orders_intervals' %}active{% endif %}"
+    >
+      <span class="nav-icon">■</span>
+      <span class="nav-label">Order Intervals</span>
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Whale Tracking</div>
+    <a
+      href="/whale-activity"
+      class="nav-item {% if active_page == 'whale_activity' %}active{% endif %}"
+    >
+      <span class="nav-icon">●</span>
+      <span class="nav-label">Whale Activity</span>
+    </a>
+    <a
+      href="/whale-monitor"
+      class="nav-item {% if active_page == 'whale_monitor' %}active{% endif %}"
+    >
+      <span class="nav-icon">◉</span>
+      <span class="nav-label">Whale Monitor</span>
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Live Data</div>
+    <a
+      href="/live"
+      class="nav-item {% if active_page == 'live' %}active{% endif %}"
+    >
+      <span class="nav-icon">◉</span>
+      <span class="nav-label">Live Dashboard</span>
+    </a>
+    <a
+      href="/historical"
+      class="nav-item {% if active_page == 'historical' %}active{% endif %}"
+    >
+      <span class="nav-icon">X</span>
+      <span class="nav-label">Historical Chart</span>
+    </a>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="nav-item" id="connection-status">
+      <span class="nav-icon status-indicator"></span>
+      <span class="nav-label">Connected</span>
+    </div>
+  </div>
+</nav>
+
+<!-- Sidebar Overlay (Mobile) -->
+<div class="sidebar-overlay"></div>
