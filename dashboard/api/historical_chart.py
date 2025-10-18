@@ -142,8 +142,8 @@ def get_historical_whale_events():
     if error:
         return jsonify({'error': error}), 500
 
-    # Filter by min_usd
-    filtered_events = [e for e in events if e.get('usd_value', 0) >= min_usd]
+    # Filter by min_usd (handle None values)
+    filtered_events = [e for e in events if (e.get('usd_value') or 0) >= min_usd]
 
     return jsonify({
         'symbol': symbol,
@@ -211,8 +211,8 @@ def get_historical_stats():
     if events_error:
         return jsonify({'error': events_error}), 500
 
-    # Filter events by min_usd
-    filtered_events = [e for e in events if e.get('usd_value', 0) >= min_usd]
+    # Filter events by min_usd (handle None values)
+    filtered_events = [e for e in events if (e.get('usd_value') or 0) >= min_usd]
 
     # Calculate statistics
     stats = {
@@ -243,7 +243,7 @@ def get_historical_stats():
     for event in filtered_events:
         event_type = event.get('event_type', 'unknown')
         side = event.get('side', 'unknown')
-        usd_value = event.get('usd_value', 0)
+        usd_value = event.get('usd_value') or 0
 
         # Count by type
         event_counts[event_type] = event_counts.get(event_type, 0) + 1
