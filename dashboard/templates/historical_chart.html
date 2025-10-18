@@ -98,15 +98,20 @@
             class="search-input"
             style="width: 220px"
           />
-          <input
-            type="number"
-            id="min-usd-input"
-            placeholder="Min USD"
-            value="5000"
-            step="1000"
-            class="search-input"
-            style="width: 120px"
-          />
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="min-usd-input" style="color: #999; font-size: 14px; white-space: nowrap;">Filter Min USD:</label>
+            <input
+              type="number"
+              id="min-usd-input"
+              placeholder="5000"
+              value="5000"
+              step="1000"
+              min="0"
+              class="search-input"
+              style="width: 120px"
+              title="Live filter - updates chart instantly as you type"
+            />
+          </div>
           <button id="load-btn" class="btn btn-primary">Load Chart</button>
         </div>
       </header>
@@ -252,7 +257,6 @@
                 <input
                   type="checkbox"
                   id="filter-new-bid"
-                  checked
                   style="margin-right: 8px"
                 />
                 <span
@@ -265,7 +269,6 @@
                 <input
                   type="checkbox"
                   id="filter-new-ask"
-                  checked
                   style="margin-right: 8px"
                 />
                 <span
@@ -301,7 +304,6 @@
                 <input
                   type="checkbox"
                   id="filter-bid-increase"
-                  checked
                   style="margin-right: 8px"
                 />
                 <span
@@ -314,7 +316,6 @@
                 <input
                   type="checkbox"
                   id="filter-ask-increase"
-                  checked
                   style="margin-right: 8px"
                 />
                 <span
@@ -322,6 +323,32 @@
                   style="background: #cc8888"
                 ></span>
                 <span>Ask Increase / Bid Decrease</span>
+              </div>
+            </div>
+            <div class="legend-section legend-filter-section">
+              <div class="legend-title">Filter by Value</div>
+              <div class="usd-filter-wrapper">
+                <div class="usd-filter-input-group">
+                  <span class="usd-filter-label">Min USD:</span>
+                  <input
+                    type="number"
+                    id="chart-min-usd-filter"
+                    placeholder="0"
+                    min="0"
+                    step="1000"
+                    value="5000"
+                    class="chart-usd-input"
+                  />
+                </div>
+                <div class="usd-filter-presets">
+                  <button class="usd-preset-btn" data-value="0">All</button>
+                  <button class="usd-preset-btn" data-value="1000">$1K</button>
+                  <button class="usd-preset-btn active" data-value="5000">$5K</button>
+                  <button class="usd-preset-btn" data-value="10000">$10K</button>
+                  <button class="usd-preset-btn" data-value="50000">$50K</button>
+                  <button class="usd-preset-btn" data-value="100000">$100K</button>
+                </div>
+                <div class="usd-filter-status" id="usd-filter-status">Filtering: ≥ $5,000</div>
               </div>
             </div>
           </div>

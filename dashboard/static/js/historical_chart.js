@@ -7,15 +7,15 @@ let whaleEvents = [];
 let currentSymbol = 'TAO_USDT';
 let currentTimestamp = null;
 
-// Filter state
+// Filter state - default to only market buy/sell
 let filters = {
     price: true,
     marketBuy: true,
     marketSell: true,
-    newBid: true,
-    newAsk: true,
-    bidIncrease: true,
-    askIncrease: true
+    newBid: false,
+    newAsk: false,
+    bidIncrease: false,
+    askIncrease: false
 };
 
 // Get URL parameters
@@ -126,6 +126,66 @@ function setupEventListeners() {
     });
 
     document.getElementById('event-type-filter').addEventListener('change', filterEvents);
+
+    // Min USD filter - live update (no need to reload)
+    document.getElementById('min-usd-input').addEventListener('input', function(e) {
+        if (whaleEvents.length > 0) {
+            // Re-filter and update chart with current events
+            updateChart();
+            updateEventsList(whaleEvents);
+        }
+    });
+
+    // Preset button handlers
+    document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const value = parseInt(this.getAttribute('data-value'));
+
+            // Update both input fields
+            document.getElementById('chart-min-usd-filter').value = value;
+            document.getElementById('min-usd-input').value = value;
+
+            // Update active state
+            document.querySelectorAll('.usd-preset-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update status text
+            const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+            document.getElementById('usd-filter-status').textContent = statusText;
+
+            // Update chart if data loaded
+            if (whaleEvents.length > 0) {
+                updateChart();
+                updateEventsList(whaleEvents);
+            }
+        });
+    });
+
+    // Keep legend input synced with header input
+    document.getElementById('chart-min-usd-filter').addEventListener('input', function() {
+        const value = parseInt(this.value) || 0;
+        document.getElementById('min-usd-input').value = value;
+
+        // Update active state on preset buttons
+        let matchFound = false;
+        document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+            if (parseInt(btn.getAttribute('data-value')) === value) {
+                btn.classList.add('active');
+                matchFound = true;
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Update status text
+        const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+        document.getElementById('usd-filter-status').textContent = statusText;
+
+        if (whaleEvents.length > 0) {
+            updateChart();
+            updateEventsList(whaleEvents);
+        }
+    });
 }
 
 // Get ECharts configuration (matching live_chart.js)
@@ -733,29 +793,35 @@ function updateChart() {
     // Prepare price data
     const chartData = priceData.map(p => [new Date(p.time), p.mid_price]);
 
+    // Get current Min USD filter value
+    const minUsd = parseFloat(document.getElementById('min-usd-input').value) || 0;
+
+    // Filter events by Min USD value
+    const filteredEvents = whaleEvents.filter(e => e.usd_value >= minUsd);
+
     // Categorize events by type (enhanced logic matching live_chart.js)
-    const marketBuys = whaleEvents.filter(e => e.event_type === 'market_buy');
-    const marketSells = whaleEvents.filter(e => e.event_type === 'market_sell');
-    const newBids = whaleEvents.filter(e =>
+    const marketBuys = filteredEvents.filter(e => e.event_type === 'market_buy');
+    const marketSells = filteredEvents.filter(e => e.event_type === 'market_sell');
+    const newBids = filteredEvents.filter(e =>
         e.event_type === 'new_bid' ||
         (e.side === 'bid' && !e.event_type.includes('increase') && !e.event_type.includes('decrease'))
     );
-    const newAsks = whaleEvents.filter(e =>
+    const newAsks = filteredEvents.filter(e =>
         e.event_type === 'new_ask' ||
         (e.side === 'ask' && !e.event_type.includes('increase') && !e.event_type.includes('decrease'))
     );
 
     // Volume changes (ambiguous events)
-    const bidIncreases = whaleEvents.filter(e =>
+    const bidIncreases = filteredEvents.filter(e =>
         (e.event_type === 'increase' || e.event_type === 'bid_increase') && e.side === 'bid'
     );
-    const askIncreases = whaleEvents.filter(e =>
+    const askIncreases = filteredEvents.filter(e =>
         (e.event_type === 'increase' || e.event_type === 'ask_increase') && e.side === 'ask'
     );
-    const askDecreases = whaleEvents.filter(e =>
+    const askDecreases = filteredEvents.filter(e =>
         (e.event_type === 'decrease' || e.event_type === 'ask_decrease') && e.side === 'ask'
     );
-    const bidDecreases = whaleEvents.filter(e =>
+    const bidDecreases = filteredEvents.filter(e =>
         (e.event_type === 'decrease' || e.event_type === 'bid_decrease') && e.side === 'bid'
     );
 
@@ -791,13 +857,17 @@ function updateChart() {
 function updateEventsList(events) {
     const eventsList = document.getElementById('event-list');
     const filter = document.getElementById('event-type-filter').value;
+    const minUsd = parseFloat(document.getElementById('min-usd-input').value) || 0;
 
-    let filteredEvents = events;
+    // First filter by Min USD
+    let filteredEvents = events.filter(e => e.usd_value >= minUsd);
+
+    // Then filter by event type if selected
     if (filter) {
         if (filter === 'bid' || filter === 'ask') {
-            filteredEvents = events.filter(e => e.side === filter);
+            filteredEvents = filteredEvents.filter(e => e.side === filter);
         } else {
-            filteredEvents = events.filter(e => e.event_type === filter);
+            filteredEvents = filteredEvents.filter(e => e.event_type === filter);
         }
     }
 
