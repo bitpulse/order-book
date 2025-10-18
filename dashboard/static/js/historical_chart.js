@@ -131,16 +131,18 @@ function setupEventListeners() {
 
     document.getElementById('event-type-filter').addEventListener('change', filterEvents);
 
-    // Min USD filter - live update (no need to reload)
-    document.getElementById('min-usd-input').addEventListener('input', function(e) {
-        if (whaleEvents.length > 0) {
-            // Re-filter and update chart with current events
-            updateChart();
-            updateEventsList(whaleEvents);
+    // Min USD filter - apply on Enter key
+    document.getElementById('min-usd-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            if (whaleEvents.length > 0) {
+                // Re-filter and update chart with current events
+                updateChart();
+                updateEventsList(whaleEvents);
+            }
         }
     });
 
-    // Preset button handlers
+    // Preset button handlers - update immediately on click
     document.querySelectorAll('.usd-preset-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const value = parseInt(this.getAttribute('data-value'));
@@ -157,7 +159,7 @@ function setupEventListeners() {
             const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
             document.getElementById('usd-filter-status').textContent = statusText;
 
-            // Update chart if data loaded
+            // Update chart IMMEDIATELY on button click
             if (whaleEvents.length > 0) {
                 updateChart();
                 updateEventsList(whaleEvents);
@@ -165,29 +167,30 @@ function setupEventListeners() {
         });
     });
 
-    // Keep legend input synced with header input
-    document.getElementById('chart-min-usd-filter').addEventListener('input', function() {
-        const value = parseInt(this.value) || 0;
-        document.getElementById('min-usd-input').value = value;
+    // Legend input - apply on Enter key
+    document.getElementById('chart-min-usd-filter').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const value = parseInt(this.value) || 0;
+            document.getElementById('min-usd-input').value = value;
 
-        // Update active state on preset buttons
-        let matchFound = false;
-        document.querySelectorAll('.usd-preset-btn').forEach(btn => {
-            if (parseInt(btn.getAttribute('data-value')) === value) {
-                btn.classList.add('active');
-                matchFound = true;
-            } else {
-                btn.classList.remove('active');
+            // Update active state on preset buttons
+            document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+                if (parseInt(btn.getAttribute('data-value')) === value) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // Update status text
+            const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+            document.getElementById('usd-filter-status').textContent = statusText;
+
+            // Update chart
+            if (whaleEvents.length > 0) {
+                updateChart();
+                updateEventsList(whaleEvents);
             }
-        });
-
-        // Update status text
-        const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
-        document.getElementById('usd-filter-status').textContent = statusText;
-
-        if (whaleEvents.length > 0) {
-            updateChart();
-            updateEventsList(whaleEvents);
         }
     });
 }
