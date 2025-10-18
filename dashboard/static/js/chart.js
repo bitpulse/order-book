@@ -96,6 +96,9 @@ async function loadDataFile(analysisId) {
         // Extract and display analysis metadata
         updateAnalysisInfo(analysisId, intervals, analysis);
 
+        // Sort intervals by absolute price change (largest first) for display
+        const sortedIntervals = [...intervals].sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+
         // If multiple intervals, show selector
         if (intervals.length > 1) {
             showIntervalSelector(intervals);
@@ -103,9 +106,9 @@ async function loadDataFile(analysisId) {
             document.getElementById('interval-selector-container').style.display = 'none';
         }
 
-        // Load first interval
-        if (intervals.length > 0) {
-            loadInterval(intervals[0]);
+        // Load first interval (largest price change)
+        if (sortedIntervals.length > 0) {
+            loadInterval(sortedIntervals[0]);
         }
 
         showLoading(false);
@@ -136,12 +139,23 @@ function showIntervalSelector(intervals) {
     const container = document.getElementById('interval-selector-container');
     const selector = document.getElementById('interval-selector');
 
+    // Create indexed array for reliable lookups
+    const indexedIntervals = intervals.map((interval, index) => ({ interval, originalIndex: index }));
+
+    // Sort by absolute price change (largest first)
+    const sortedIntervals = [...indexedIntervals].sort((a, b) =>
+        Math.abs(b.interval.change_pct) - Math.abs(a.interval.change_pct)
+    );
+
     selector.innerHTML = '';
-    intervals.forEach((interval, index) => {
+    sortedIntervals.forEach((item, sortedIndex) => {
+        const interval = item.interval;
         const option = document.createElement('option');
-        option.value = index;
+        // Store the original index for loading the correct data
+        option.value = item.originalIndex;
         const startTime = new Date(interval.start_time).toLocaleTimeString();
-        option.textContent = `#${interval.rank} - ${interval.change_pct.toFixed(3)}% @ ${startTime}`;
+        // Show the actual magnitude rank (1 = largest change)
+        option.textContent = `#${sortedIndex + 1} - ${interval.change_pct.toFixed(3)}% @ ${startTime}`;
         selector.appendChild(option);
     });
 
