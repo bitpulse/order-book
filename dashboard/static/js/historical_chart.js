@@ -18,20 +18,73 @@ let filters = {
     askIncrease: true
 };
 
+// Get URL parameters
+function getUrlParams() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return {
+        symbol: urlParams.get('symbol'),
+        timestamp: urlParams.get('timestamp'),
+        minUsd: urlParams.get('min_usd') || urlParams.get('minUsd')
+    };
+}
+
+// Update URL with current parameters
+function updateUrl() {
+    const params = new URLSearchParams();
+    if (currentSymbol) params.set('symbol', currentSymbol);
+    if (currentTimestamp) params.set('timestamp', currentTimestamp);
+    const minUsd = document.getElementById('min-usd-input')?.value;
+    if (minUsd) params.set('min_usd', minUsd);
+
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     await loadSymbols();
     setupEventListeners();
     initializeChart();
 
-    // Set current time as default
+    // Check for URL parameters
+    const urlParams = getUrlParams();
+
+    if (urlParams.symbol) {
+        currentSymbol = urlParams.symbol;
+        document.getElementById('symbol-select').value = urlParams.symbol;
+    }
+
+    if (urlParams.minUsd) {
+        document.getElementById('min-usd-input').value = urlParams.minUsd;
+    }
+
+    if (urlParams.timestamp) {
+        // Parse timestamp and set input
+        try {
+            const timestamp = new Date(urlParams.timestamp);
+            document.getElementById('timestamp-input').value =
+                timestamp.toISOString().slice(0, 16);
+
+            // Auto-load data if timestamp is provided
+            setTimeout(() => loadChartData(), 100);
+        } catch (error) {
+            console.error('Invalid timestamp in URL:', error);
+            setDefaultTimestamp();
+        }
+    } else {
+        setDefaultTimestamp();
+    }
+});
+
+// Set default timestamp to current time
+function setDefaultTimestamp() {
     const now = new Date();
     // Round down to nearest minute
     now.setSeconds(0);
     now.setMilliseconds(0);
     document.getElementById('timestamp-input').value =
         now.toISOString().slice(0, 16);
-});
+}
 
 // Load available symbols
 async function loadSymbols() {
@@ -589,6 +642,9 @@ async function loadChartData() {
         updateStats(statsResult);
         updateChart();
         updateEventsList(whaleEvents);
+
+        // Update URL with current parameters for shareable link
+        updateUrl();
 
     } catch (error) {
         showError('Failed to load data: ' + error.message);
