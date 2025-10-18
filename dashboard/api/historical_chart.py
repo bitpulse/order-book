@@ -42,14 +42,16 @@ def historical_dashboard():
 @historical_chart_bp.route('/api/historical/price-history')
 def get_historical_price_history():
     """
-    Get price history for a specific timestamp ±5 minutes
+    Get price history for a specific timestamp with configurable interval
 
     Query params:
         symbol: Trading symbol (optional, defaults to DEFAULT_SYMBOL)
         timestamp: Center timestamp in ISO format (required)
+        interval: Minutes before/after timestamp (optional, defaults to 5)
     """
     symbol = request.args.get('symbol', DEFAULT_SYMBOL)
     timestamp_str = request.args.get('timestamp')
+    interval = int(request.args.get('interval', 5))  # Default ±5 minutes
 
     # Validate symbol
     from utils.validators import validate_symbol
@@ -65,9 +67,9 @@ def get_historical_price_history():
         # Parse timestamp
         center_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
 
-        # Calculate ±5 minute window
-        start_time = center_time - timedelta(minutes=5)
-        end_time = center_time + timedelta(minutes=5)
+        # Calculate window based on interval
+        start_time = center_time - timedelta(minutes=interval)
+        end_time = center_time + timedelta(minutes=interval)
 
         # Convert to RFC3339 format for InfluxDB
         start_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -96,15 +98,17 @@ def get_historical_price_history():
 @historical_chart_bp.route('/api/historical/whale-events')
 def get_historical_whale_events():
     """
-    Get whale events for a specific timestamp ±5 minutes
+    Get whale events for a specific timestamp with configurable interval
 
     Query params:
         symbol: Trading symbol (optional, defaults to DEFAULT_SYMBOL)
         timestamp: Center timestamp in ISO format (required)
+        interval: Minutes before/after timestamp (optional, defaults to 5)
         min_usd: Minimum USD value filter (optional, defaults to 5000)
     """
     symbol = request.args.get('symbol', DEFAULT_SYMBOL)
     timestamp_str = request.args.get('timestamp')
+    interval = int(request.args.get('interval', 5))  # Default ±5 minutes
     min_usd = request.args.get('min_usd', 5000, type=float)
 
     # Validate symbol
@@ -121,9 +125,9 @@ def get_historical_whale_events():
         # Parse timestamp
         center_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
 
-        # Calculate ±5 minute window
-        start_time = center_time - timedelta(minutes=5)
-        end_time = center_time + timedelta(minutes=5)
+        # Calculate window based on interval
+        start_time = center_time - timedelta(minutes=interval)
+        end_time = center_time + timedelta(minutes=interval)
 
         # Convert to RFC3339 format for InfluxDB
         start_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -157,15 +161,17 @@ def get_historical_whale_events():
 @historical_chart_bp.route('/api/historical/stats')
 def get_historical_stats():
     """
-    Get statistics for a specific timestamp ±5 minutes
+    Get statistics for a specific timestamp with configurable interval
 
     Query params:
         symbol: Trading symbol (optional, defaults to DEFAULT_SYMBOL)
         timestamp: Center timestamp in ISO format (required)
+        interval: Minutes before/after timestamp (optional, defaults to 5)
         min_usd: Minimum USD value filter (optional, defaults to 5000)
     """
     symbol = request.args.get('symbol', DEFAULT_SYMBOL)
     timestamp_str = request.args.get('timestamp')
+    interval = int(request.args.get('interval', 5))  # Default ±5 minutes
     min_usd = request.args.get('min_usd', 5000, type=float)
 
     # Validate symbol
@@ -182,9 +188,9 @@ def get_historical_stats():
         # Parse timestamp
         center_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
 
-        # Calculate ±5 minute window
-        start_time = center_time - timedelta(minutes=5)
-        end_time = center_time + timedelta(minutes=5)
+        # Calculate window based on interval
+        start_time = center_time - timedelta(minutes=interval)
+        end_time = center_time + timedelta(minutes=interval)
 
         # Convert to RFC3339 format for InfluxDB
         start_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')

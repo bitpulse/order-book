@@ -54,10 +54,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('symbol-select').value = urlParams.symbol;
     }
 
-    if (urlParams.minUsd) {
-        document.getElementById('min-usd-input').value = urlParams.minUsd;
-    }
-
     if (urlParams.timestamp) {
         // Parse timestamp and set input
         try {
@@ -117,6 +113,8 @@ function setupEventListeners() {
 
     document.getElementById('load-btn').addEventListener('click', loadChartData);
 
+    document.getElementById('download-chart-btn').addEventListener('click', exportChartData);
+
     document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
 
     // Filter checkboxes
@@ -129,29 +127,19 @@ function setupEventListeners() {
         });
     });
 
-    document.getElementById('event-type-filter').addEventListener('change', filterEvents);
-
-    // Min USD filter - apply on Enter key
-    document.getElementById('min-usd-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            if (whaleEvents.length > 0) {
-                // Re-filter and update chart with current events
-                updateChart();
-                updateEventsList(whaleEvents);
-            }
-        }
-    });
+    const eventTypeFilter = document.getElementById('event-type-filter');
+    if (eventTypeFilter) {
+        eventTypeFilter.addEventListener('change', filterEvents);
+    }
 
     // Preset button handlers - update immediately on click
     document.querySelectorAll('.usd-preset-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const value = parseInt(this.getAttribute('data-value'));
 
-            // Update both input fields
+            // Update input field
             const chartInput = document.getElementById('chart-min-usd-filter');
-            const headerInput = document.getElementById('min-usd-input');
             if (chartInput) chartInput.value = value;
-            if (headerInput) headerInput.value = value;
 
             // Update active state
             document.querySelectorAll('.usd-preset-btn').forEach(b => b.classList.remove('active'));
@@ -160,7 +148,7 @@ function setupEventListeners() {
             // Update status text
             const statusEl = document.getElementById('usd-filter-status');
             if (statusEl) {
-                const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+                const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${safeFixed(value / 1000, 0)}K`;
                 statusEl.textContent = statusText;
             }
 
@@ -178,8 +166,6 @@ function setupEventListeners() {
         chartMinUsdFilter.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 const value = parseInt(this.value) || 0;
-                const headerInput = document.getElementById('min-usd-input');
-                if (headerInput) headerInput.value = value;
 
                 // Update active state on preset buttons
                 document.querySelectorAll('.usd-preset-btn').forEach(btn => {
@@ -193,7 +179,7 @@ function setupEventListeners() {
                 // Update status text
                 const statusEl = document.getElementById('usd-filter-status');
                 if (statusEl) {
-                    const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+                    const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${safeFixed(value / 1000, 0)}K`;
                     statusEl.textContent = statusText;
                 }
 
@@ -307,7 +293,7 @@ function getChartOption() {
                 color: '#808080',
                 fontSize: 11,
                 formatter: function(value) {
-                    return '$' + value.toFixed(4);
+                    return '$' + safeFixed(value, 4);
                 }
             }
         },
@@ -517,15 +503,15 @@ function formatTooltip(params) {
             html += `
                 <div style="border-left: 3px solid ${color}; padding-left: 8px; margin: 8px 0;">
                     <div style="font-weight: bold; color: ${color}; margin-bottom: 4px;">${param.seriesName}</div>
-                    <div style="margin: 2px 0;"><strong>Price:</strong> $${event.price.toFixed(6)}</div>
-                    <div style="margin: 2px 0;"><strong>Volume:</strong> ${event.volume.toFixed(4)}</div>
-                    <div style="margin: 2px 0;"><strong>USD Value:</strong> $${event.usd_value.toLocaleString()}</div>
+                    <div style="margin: 2px 0;"><strong>Price:</strong> $${safeFixed(event.price, 6)}</div>
+                    <div style="margin: 2px 0;"><strong>Volume:</strong> ${safeFixed(event.volume, 4)}</div>
+                    <div style="margin: 2px 0;"><strong>USD Value:</strong> $${event.usd_value ? event.usd_value.toLocaleString() : '0'}</div>
             `;
 
             // Show distance from mid for market orders
             if (isMarketOrder && event.distance_from_mid_pct !== undefined) {
                 const distanceColor = event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444';
-                html += `<div style="margin: 2px 0;"><strong>Distance from Mid:</strong> <span style="color: ${distanceColor};">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</span></div>`;
+                html += `<div style="margin: 2px 0;"><strong>Distance from Mid:</strong> <span style="color: ${distanceColor};">${event.distance_from_mid_pct >= 0 ? '+' : ''}${safeFixed(event.distance_from_mid_pct, 3)}%</span></div>`;
             }
 
             html += `
@@ -537,7 +523,7 @@ function formatTooltip(params) {
             html += `
                 <div style="display: flex; align-items: center; margin: 4px 0;">
                     <span style="display: inline-block; width: 10px; height: 10px; background: ${color}; border-radius: 50%; margin-right: 8px;"></span>
-                    <span>${param.seriesName}: <strong>$${value.toFixed(6)}</strong></span>
+                    <span>${param.seriesName}: <strong>$${safeFixed(value, 6)}</strong></span>
                 </div>
             `;
         }
@@ -633,9 +619,9 @@ function prepareWhaleScatterData(events) {
         let label = '';
         const usdValue = event.usd_value;
         if (usdValue >= 1000000) {
-            label = `${(usdValue / 1000000).toFixed(1)}M`;
+            label = `${safeFixed(usdValue / 1000000, 1)}M`;
         } else if (usdValue >= 1000) {
-            label = `${(usdValue / 1000).toFixed(1)}K`;
+            label = `${safeFixed(usdValue / 1000, 1)}K`;
         }
 
         return {
@@ -686,7 +672,8 @@ function initializeChart() {
 // Load chart data
 async function loadChartData() {
     const timestampInput = document.getElementById('timestamp-input').value;
-    const minUsd = parseFloat(document.getElementById('min-usd-input').value) || 5000;
+    const interval = parseInt(document.getElementById('interval-select').value) || 5;
+    const minUsd = 5000; // Fixed min USD for backend queries
 
     if (!timestampInput) {
         showError('Please select a timestamp');
@@ -696,14 +683,16 @@ async function loadChartData() {
     // Convert to ISO format
     currentTimestamp = new Date(timestampInput).toISOString();
 
-    showLoading(true, `Loading ${currentSymbol} data for ${new Date(currentTimestamp).toLocaleString()}...`);
+    const totalMinutes = interval * 2;
+    const timeLabel = totalMinutes >= 60 ? `${totalMinutes / 60} hour${totalMinutes / 60 > 1 ? 's' : ''}` : `${totalMinutes} min`;
+    showLoading(true, `Loading ${currentSymbol} data for ${timeLabel} window...`);
 
     try {
         // Fetch price history and whale events in parallel
         const [priceResponse, eventsResponse, statsResponse] = await Promise.all([
-            fetch(`/api/historical/price-history?symbol=${currentSymbol}&timestamp=${currentTimestamp}`),
-            fetch(`/api/historical/whale-events?symbol=${currentSymbol}&timestamp=${currentTimestamp}&min_usd=${minUsd}`),
-            fetch(`/api/historical/stats?symbol=${currentSymbol}&timestamp=${currentTimestamp}&min_usd=${minUsd}`)
+            fetch(`/api/historical/price-history?symbol=${currentSymbol}&timestamp=${currentTimestamp}&interval=${interval}`),
+            fetch(`/api/historical/whale-events?symbol=${currentSymbol}&timestamp=${currentTimestamp}&interval=${interval}&min_usd=${minUsd}`),
+            fetch(`/api/historical/stats?symbol=${currentSymbol}&timestamp=${currentTimestamp}&interval=${interval}&min_usd=${minUsd}`)
         ]);
 
         const priceResult = await priceResponse.json();
@@ -738,6 +727,11 @@ function safeSetText(id, text) {
     if (el) el.textContent = text;
 }
 
+// Helper function to safely format numbers
+function safeFixed(value, decimals) {
+    return (value != null && !isNaN(value)) ? value.toFixed(decimals) : '0';
+}
+
 // Update info panel
 function updateInfo(priceResult, eventsResult) {
     safeSetText('info-symbol', currentSymbol);
@@ -751,13 +745,13 @@ function updateInfo(priceResult, eventsResult) {
 function updateStats(stats) {
     // Price stats
     if (stats.current_price) {
-        safeSetText('stat-current-price', `$${stats.current_price.toFixed(2)}`);
+        safeSetText('stat-current-price', `$${safeFixed(stats.current_price, 2)}`);
 
         const changeEl = document.getElementById('stat-price-change');
         if (changeEl) {
             const change = stats.price_change || 0;
             const changePct = stats.price_change_pct || 0;
-            changeEl.textContent = `${change >= 0 ? '+' : ''}$${change.toFixed(2)} (${changePct.toFixed(2)}%)`;
+            changeEl.textContent = `${change >= 0 ? '+' : ''}$${safeFixed(change, 2)} (${safeFixed(changePct, 2)}%)`;
             changeEl.className = 'stat-value ' + (change >= 0 ? 'stat-bullish' : 'stat-bearish');
         }
     }
@@ -785,7 +779,7 @@ function updateStats(stats) {
     const ratio = stats.buy_sell_ratio || 0;
     const ratioEl = document.getElementById('stat-buy-sell-ratio');
     if (ratioEl) {
-        ratioEl.textContent = ratio === Infinity ? '∞' : ratio.toFixed(2);
+        ratioEl.textContent = ratio === Infinity ? '∞' : safeFixed(ratio, 2);
         ratioEl.className = 'stat-value ' + (ratio > 1 ? 'stat-bullish' : ratio < 1 ? 'stat-bearish' : '');
     }
 
@@ -794,7 +788,12 @@ function updateStats(stats) {
     safeSetText('stat-new-bids', (counts.new_bid || 0) + (counts.bid_increase || 0));
     safeSetText('stat-new-asks', (counts.new_ask || 0) + (counts.ask_increase || 0));
     safeSetText('stat-total-events', stats.total_events || 0);
-    safeSetText('stat-time-range', '10 min');
+
+    // Dynamic time range based on interval
+    const interval = parseInt(document.getElementById('interval-select')?.value || 5);
+    const totalMinutes = interval * 2;
+    const timeLabel = totalMinutes >= 60 ? `${totalMinutes / 60}h` : `${totalMinutes}m`;
+    safeSetText('stat-time-range', timeLabel);
 
     // Event stats
     safeSetText('event-stat-buys', counts.market_buy || 0);
@@ -810,8 +809,9 @@ function updateChart() {
     // Prepare price data
     const chartData = priceData.map(p => [new Date(p.time), p.mid_price]);
 
-    // Get current Min USD filter value
-    const minUsd = parseFloat(document.getElementById('min-usd-input').value) || 0;
+    // Get current Min USD filter value from legend input
+    const chartMinUsdFilter = document.getElementById('chart-min-usd-filter');
+    const minUsd = chartMinUsdFilter ? (parseFloat(chartMinUsdFilter.value) || 0) : 0;
 
     // Filter events by Min USD value
     const filteredEvents = whaleEvents.filter(e => e.usd_value >= minUsd);
@@ -873,8 +873,13 @@ function updateChart() {
 // Update events list
 function updateEventsList(events) {
     const eventsList = document.getElementById('event-list');
-    const filter = document.getElementById('event-type-filter').value;
-    const minUsd = parseFloat(document.getElementById('min-usd-input').value) || 0;
+    if (!eventsList) return;
+
+    const filterEl = document.getElementById('event-type-filter');
+    const filter = filterEl ? filterEl.value : '';
+
+    const chartMinUsdFilter = document.getElementById('chart-min-usd-filter');
+    const minUsd = chartMinUsdFilter ? (parseFloat(chartMinUsdFilter.value) || 0) : 0;
 
     // First filter by Min USD
     let filteredEvents = events.filter(e => e.usd_value >= minUsd);
@@ -909,15 +914,15 @@ function updateEventsList(events) {
                     </div>
                     <div class="event-detail">
                         <span class="detail-label">Price:</span>
-                        <span class="detail-value">$${event.price.toFixed(2)}</span>
+                        <span class="detail-value">$${safeFixed(event.price, 2)}</span>
                     </div>
                     <div class="event-detail">
                         <span class="detail-label">Volume:</span>
-                        <span class="detail-value">${event.volume.toFixed(2)}</span>
+                        <span class="detail-value">${safeFixed(event.volume, 2)}</span>
                     </div>
                     <div class="event-detail">
                         <span class="detail-label">Distance:</span>
-                        <span class="detail-value">${event.distance_from_mid_pct.toFixed(2)}%</span>
+                        <span class="detail-value">${safeFixed(event.distance_from_mid_pct, 2)}%</span>
                     </div>
                 </div>
             </div>
@@ -993,9 +998,9 @@ function showEventModal(event, seriesName) {
     });
 
     function formatNumber(num) {
-        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-        if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-        return num.toFixed(2);
+        if (num >= 1000000) return safeFixed(num / 1000000, 2) + 'M';
+        if (num >= 1000) return safeFixed(num / 1000, 2) + 'K';
+        return safeFixed(num, 2);
     }
 
     // Format modal content (matching live_chart.js exactly)
@@ -1013,7 +1018,7 @@ function showEventModal(event, seriesName) {
                 </div>
                 <div>
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Price</div>
-                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">$${event.price.toFixed(6)}</div>
+                    <div style="color: #e0e0e0; font-size: 1.1rem; font-weight: 600;">$${safeFixed(event.price, 6)}</div>
                 </div>
                 <div>
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Volume</div>
@@ -1026,7 +1031,7 @@ function showEventModal(event, seriesName) {
                 ${isMarketOrder && event.distance_from_mid_pct !== undefined ? `
                 <div>
                     <div style="color: #808080; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">Distance from Mid</div>
-                    <div style="color: ${event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444'}; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct >= 0 ? '+' : ''}${event.distance_from_mid_pct.toFixed(3)}%</div>
+                    <div style="color: ${event.distance_from_mid_pct >= 0 ? '#00ff88' : '#ff4444'}; font-size: 1.1rem; font-weight: 600;">${event.distance_from_mid_pct >= 0 ? '+' : ''}${safeFixed(event.distance_from_mid_pct, 3)}%</div>
                 </div>
                 ` : ''}
             </div>
@@ -1035,6 +1040,142 @@ function showEventModal(event, seriesName) {
 
     // Show modal
     modal.style.display = 'flex';
+}
+
+// Export chart data as JSON
+function exportChartData() {
+    if (!priceData || priceData.length === 0 || !whaleEvents || whaleEvents.length === 0) {
+        alert('No data loaded to export');
+        return;
+    }
+
+    // Get current filter value
+    const chartMinUsdFilter = document.getElementById('chart-min-usd-filter');
+    const minUsd = chartMinUsdFilter ? (parseFloat(chartMinUsdFilter.value) || 0) : 0;
+
+    // Filter events by active filters
+    function filterEventsByActiveFilters(events) {
+        if (!events || events.length === 0) return [];
+
+        return events.filter(event => {
+            // Apply USD filter
+            if (event.usd_value < minUsd) return false;
+
+            // Apply event type filters (matching chart rendering logic)
+            const eventType = event.event_type || '';
+            const side = event.side || '';
+
+            const isMarketBuy = eventType === 'market_buy';
+            const isMarketSell = eventType === 'market_sell';
+            const isNewBid = eventType === 'new_bid';
+            const isNewAsk = eventType === 'new_ask';
+            const isIncrease = eventType === 'increase' || eventType.includes('increase');
+            const isDecrease = eventType === 'decrease' || eventType.includes('decrease');
+            const isBid = side === 'bid' || eventType.includes('bid');
+            const isAsk = side === 'ask' || eventType.includes('ask');
+
+            // Check filters
+            if (isMarketBuy && !filters.marketBuy) return false;
+            if (isMarketSell && !filters.marketSell) return false;
+            if (isNewBid && !filters.newBid) return false;
+            if (isNewAsk && !filters.newAsk) return false;
+
+            // Bid Increase filter includes: bid increases AND ask decreases (both muted green)
+            if ((isIncrease && isBid) && !filters.bidIncrease) return false;
+            if ((isDecrease && isAsk) && !filters.bidIncrease) return false;
+
+            // Ask Increase filter includes: ask increases AND bid decreases (both muted red)
+            if ((isIncrease && isAsk) && !filters.askIncrease) return false;
+            if ((isDecrease && isBid) && !filters.askIncrease) return false;
+
+            return true;
+        });
+    }
+
+    // Get start and end times from price data
+    const startTime = priceData.length > 0 ? priceData[0][0] : null;
+    const endTime = priceData.length > 0 ? priceData[priceData.length - 1][0] : null;
+
+    // Build export data
+    const exportData = {
+        _README: {
+            title: "Historical Whale Events - Filtered Chart Data Export",
+            description: "This file contains historical order book events and price data filtered according to your selected criteria.",
+            data_source: "InfluxDB - Historical MEXC Futures WebSocket Data",
+            important_notes: [
+                "L2 data is AGGREGATED by price level - individual orders not visible",
+                "Increase/Decrease events are AMBIGUOUS - cannot distinguish fills from cancellations",
+                "Market Buy/Sell events are DEFINITIVE - we see actual trade executions",
+                "USD values are NOTIONAL (futures contracts with leverage) - not actual capital spent",
+                "All timestamps are in ISO 8601 format (UTC)",
+                "Filters were active during export - this is NOT the complete dataset"
+            ]
+        },
+        metadata: {
+            symbol: currentSymbol,
+            timestamp: currentTimestamp,
+            interval_minutes: parseInt(document.getElementById('interval-select').value) || 5,
+            start_time: startTime,
+            end_time: endTime,
+            exported_at: new Date().toISOString(),
+            active_filters: {
+                market_buy: filters.marketBuy,
+                market_sell: filters.marketSell,
+                new_bid: filters.newBid,
+                new_ask: filters.newAsk,
+                bid_increase: filters.bidIncrease,
+                ask_increase: filters.askIncrease,
+                min_usd: minUsd
+            }
+        },
+        field_definitions: {
+            price: "Price level where event occurred",
+            volume: "Contracts quantity",
+            usd_value: "Notional value = price × volume",
+            distance_from_mid_pct: "Distance from mid-price as percentage",
+            level: "Position in order book depth",
+            side: "bid = buy orders, ask = sell orders",
+            event_type: "Type of whale event",
+            time: "Event timestamp in ISO 8601 format (UTC)"
+        },
+        price_data: priceData || [],
+        whale_events: filterEventsByActiveFilters(whaleEvents)
+    };
+
+    // Add statistics
+    exportData.statistics = {
+        total_events: exportData.whale_events.length,
+        total_volume_usd: exportData.whale_events.reduce((sum, e) => sum + (e.usd_value || 0), 0),
+        price_points: exportData.price_data.length
+    };
+
+    // Create filename
+    const timestamp = new Date(currentTimestamp);
+    const filterSuffix = minUsd > 0 ? `_min${minUsd}usd` : '';
+    const filename = `historical_${currentSymbol}_${timestamp.toISOString().replace(/[:.]/g, '-')}${filterSuffix}_filtered.json`;
+
+    // Create and download JSON blob
+    const jsonData = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    // Cleanup
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    console.log('Exported filtered chart data:', {
+        filename,
+        total_events: exportData.statistics.total_events,
+        price_points: exportData.statistics.price_points,
+        filters: exportData.metadata.active_filters
+    });
 }
 
 // Toggle fullscreen
