@@ -76,7 +76,12 @@ class MomentumReversalStrategy(BaseStrategy):
                  take_profit_pct: float = 0.030,
                  timeout_seconds: int = 180,
                  entry_delay_seconds: int = 2,
-                 cooldown_seconds: int = 300):
+                 cooldown_seconds: int = 300,
+                 use_limit_orders: bool = False,
+                 limit_order_levels: int = 3,
+                 limit_order_spacing_pct: float = 0.008,
+                 acceptable_entry_range_pct: float = 0.01,
+                 manual_slippage_pct: float = 0.003):
         """
         Initialize momentum reversal strategy
 
@@ -92,6 +97,11 @@ class MomentumReversalStrategy(BaseStrategy):
             timeout_seconds: Position timeout
             entry_delay_seconds: Entry delay (simulates manual reaction time)
             cooldown_seconds: Cooldown period after trade
+            use_limit_orders: Use limit order ladder (vs market orders)
+            limit_order_levels: Number of limit price levels (default: 3)
+            limit_order_spacing_pct: Spacing between limit levels (e.g., 0.008 = 0.8%)
+            acceptable_entry_range_pct: Max distance from ideal entry (e.g., 0.01 = 1%)
+            manual_slippage_pct: Additional slippage for manual trading (e.g., 0.003 = 0.3%)
         """
         super().__init__(name='MomentumReversalStrategy')
 
@@ -107,6 +117,13 @@ class MomentumReversalStrategy(BaseStrategy):
         self.entry_delay_seconds = entry_delay_seconds
         self.cooldown_seconds = cooldown_seconds
 
+        # Manual trading enhancements
+        self.use_limit_orders = use_limit_orders
+        self.limit_order_levels = limit_order_levels
+        self.limit_order_spacing_pct = limit_order_spacing_pct
+        self.acceptable_entry_range_pct = acceptable_entry_range_pct
+        self.manual_slippage_pct = manual_slippage_pct
+
         # State tracking
         self.market_events: deque = deque()  # (timestamp, event_type, usd_value)
         self.price_history: deque = deque()  # (timestamp, price)
@@ -118,6 +135,9 @@ class MomentumReversalStrategy(BaseStrategy):
         self.dumps_detected = 0
         self.signals_generated = 0
         self.signals_filtered = 0
+        self.limit_orders_placed = 0
+        self.limit_orders_filled = 0
+        self.entry_range_analysis = []  # Track entry quality vs ideal
 
         logger.info(f"Initialized {self.name} with parameters:")
         logger.info(f"  min_first_buy_usd: ${min_first_buy_usd:,.0f}")
@@ -307,9 +327,11 @@ class MomentumReversalStrategy(BaseStrategy):
         self.last_trade_time = timestamp
 
         # Reset dump state (we've taken action)
+        dump_low = self.dump_low_price  # Store before reset
         self.dump_detected_at = None
         self.dump_low_price = None
 
+        # Build base signal
         signal = {
             'action': 'OPEN_LONG',
             'stop_loss_pct': self.stop_loss_pct,
@@ -321,21 +343,97 @@ class MomentumReversalStrategy(BaseStrategy):
                 'first_buy_usd': usd_value,
                 'first_buy_price': price,
                 'sell_ratio': sell_ratio,
-                'dump_low_price': self.dump_low_price,
-                'signal_number': self.signals_generated
+                'dump_low_price': dump_low,
+                'signal_number': self.signals_generated,
+                'use_limit_orders': self.use_limit_orders
             }
         }
 
+        # Add limit order ladder if enabled
+        if self.use_limit_orders and dump_low:
+            signal['limit_order_ladder'] = self._create_limit_order_ladder(dump_low, price)
+            signal['metadata']['limit_orders'] = len(signal['limit_order_ladder'])
+            self.limit_orders_placed += len(signal['limit_order_ladder'])
+
+        # Add manual trading slippage
+        if self.manual_slippage_pct > 0:
+            signal['manual_slippage_pct'] = self.manual_slippage_pct
+            signal['metadata']['manual_slippage_pct'] = self.manual_slippage_pct
+
+        # Track entry quality (how far from dump low)
+        entry_distance_pct = ((price - dump_low) / dump_low) * 100 if dump_low else 0
+        self.entry_range_analysis.append({
+            'signal_number': self.signals_generated,
+            'dump_low': dump_low,
+            'signal_price': price,
+            'distance_from_low_pct': entry_distance_pct,
+            'within_acceptable_range': entry_distance_pct <= self.acceptable_entry_range_pct * 100
+        })
+
         return signal
+
+    def _create_limit_order_ladder(self, dump_low: float, current_price: float) -> List[Dict[str, Any]]:
+        """
+        Create limit order ladder for manual trading simulation
+
+        Places orders at multiple levels below current price, centered around dump low
+
+        Args:
+            dump_low: Lowest price during dump
+            current_price: Current market price
+
+        Returns:
+            List of limit order dicts with price and size allocation
+        """
+        ladder = []
+
+        # Calculate order levels around dump low
+        # Example: 3 levels with 0.8% spacing
+        # Level 1: dump_low * 1.008 (conservative)
+        # Level 2: dump_low * 1.000 (at bottom)
+        # Level 3: dump_low * 0.992 (aggressive, if dumps further)
+
+        total_size_pct = 1.0  # 100% of position
+        size_per_level = total_size_pct / self.limit_order_levels
+
+        for i in range(self.limit_order_levels):
+            # Spread levels around dump low
+            offset_pct = (i - (self.limit_order_levels - 1) / 2) * self.limit_order_spacing_pct
+            level_price = dump_low * (1 + offset_pct)
+
+            # Only place orders at/below current price (can't fill above market)
+            if level_price <= current_price * 1.001:  # Allow tiny buffer for rounding
+                ladder.append({
+                    'price': level_price,
+                    'size_pct': size_per_level,
+                    'level': i + 1
+                })
+
+                logger.debug(f"Limit order level {i+1}: "
+                           f"${level_price:.2f} ({size_per_level*100:.0f}% of position)")
+
+        if ladder:
+            logger.info(f"Created {len(ladder)} limit orders: "
+                       f"${ladder[-1]['price']:.2f} to ${ladder[0]['price']:.2f}")
+
+        return ladder
 
     def get_statistics(self) -> Dict[str, Any]:
         """
         Get strategy statistics
 
         Returns:
-            Dictionary with statistics
+            Dictionary with statistics including manual trading metrics
         """
-        return {
+        # Calculate entry quality metrics
+        avg_entry_distance = 0
+        within_range_count = 0
+
+        if self.entry_range_analysis:
+            avg_entry_distance = sum(e['distance_from_low_pct'] for e in self.entry_range_analysis) / len(self.entry_range_analysis)
+            within_range_count = sum(1 for e in self.entry_range_analysis if e['within_acceptable_range'])
+
+        stats = {
             'dumps_detected': self.dumps_detected,
             'signals_generated': self.signals_generated,
             'signals_filtered': self.signals_filtered,
@@ -345,3 +443,25 @@ class MomentumReversalStrategy(BaseStrategy):
                 else 0
             )
         }
+
+        # Add manual trading specific stats
+        if self.use_limit_orders:
+            stats['limit_orders_placed'] = self.limit_orders_placed
+            stats['limit_orders_filled'] = self.limit_orders_filled
+            stats['limit_fill_rate'] = (
+                self.limit_orders_filled / self.limit_orders_placed
+                if self.limit_orders_placed > 0
+                else 0
+            )
+
+        # Add entry quality analysis
+        if self.entry_range_analysis:
+            stats['avg_entry_distance_from_low_pct'] = avg_entry_distance
+            stats['entries_within_acceptable_range'] = within_range_count
+            stats['entry_quality_rate'] = (
+                within_range_count / len(self.entry_range_analysis)
+                if self.entry_range_analysis
+                else 0
+            )
+
+        return stats

@@ -8,6 +8,8 @@ MongoDB (for pre-computed analysis results).
 
 import os
 import pandas as pd
+import hashlib
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Tuple
 from influxdb_client import InfluxDBClient
@@ -51,7 +53,10 @@ class DataLoader:
                  influxdb_org: Optional[str] = None,
                  influxdb_bucket: Optional[str] = None,
                  mongodb_url: Optional[str] = None,
-                 mongodb_database: Optional[str] = None):
+                 mongodb_database: Optional[str] = None,
+                 cache_dir: Optional[str] = None,
+                 use_cache: bool = True,
+                 cache_max_age_days: int = 30):
         """
         Initialize DataLoader with database connections
 
@@ -62,6 +67,9 @@ class DataLoader:
             influxdb_bucket: InfluxDB bucket (default: from env)
             mongodb_url: MongoDB URL (default: from env)
             mongodb_database: MongoDB database name (default: from env)
+            cache_dir: Directory for cached data files (default: ./backtesting/cache/)
+            use_cache: Enable file-based caching (default: True)
+            cache_max_age_days: Max age of cache files in days (default: 30)
         """
         # InfluxDB connection
         self.influx_url = influxdb_url or os.getenv('INFLUXDB_URL', 'http://localhost:8086')
@@ -75,7 +83,8 @@ class DataLoader:
         self.influx_client = InfluxDBClient(
             url=self.influx_url,
             token=self.influx_token,
-            org=self.influx_org
+            org=self.influx_org,
+            timeout=600_000  # 600 second timeout (in milliseconds)
         )
         self.query_api = self.influx_client.query_api()
 
@@ -93,13 +102,90 @@ class DataLoader:
             self.mongo_client = None
             self.mongo_db = None
 
+        # File-based cache settings
+        self.use_cache = use_cache
+        self.cache_max_age_days = cache_max_age_days
+        if cache_dir:
+            self.cache_dir = Path(cache_dir)
+        else:
+            # Default to backtesting/cache/ relative to project root
+            self.cache_dir = Path(__file__).parent.parent / 'cache'
+
+        # Create cache directory if it doesn't exist
+        if self.use_cache:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Cache directory: {self.cache_dir}")
+
+    def _get_cache_filename(self, data_type: str, symbol: str, start: datetime, end: datetime) -> Path:
+        """
+        Generate cache filename based on query parameters
+
+        Args:
+            data_type: 'prices' or 'whales'
+            symbol: Trading symbol
+            start: Start datetime
+            end: End datetime
+
+        Returns:
+            Path to cache file
+        """
+        # Format timestamps as YYYY-MM-DD_HH-MM-SS
+        start_str = start.strftime('%Y-%m-%d_%H-%M-%S')
+        end_str = end.strftime('%Y-%m-%d_%H-%M-%S')
+
+        # Create filename: type_SYMBOL_START_END.parquet
+        filename = f"{data_type}_{symbol}_{start_str}_{end_str}.parquet"
+        return self.cache_dir / filename
+
+    def _load_from_cache(self, cache_file: Path) -> Optional[pd.DataFrame]:
+        """
+        Load data from cache file if it exists and is not too old
+
+        Args:
+            cache_file: Path to cache file
+
+        Returns:
+            DataFrame if cache is valid, None otherwise
+        """
+        if not cache_file.exists():
+            return None
+
+        # Check file age
+        file_age_days = (datetime.now() - datetime.fromtimestamp(cache_file.stat().st_mtime)).days
+        if file_age_days > self.cache_max_age_days:
+            logger.info(f"Cache file too old ({file_age_days} days), refreshing: {cache_file.name}")
+            cache_file.unlink()  # Delete old cache
+            return None
+
+        try:
+            df = pd.read_parquet(cache_file)
+            logger.info(f"Loaded {len(df):,} rows from cache: {cache_file.name}")
+            return df
+        except Exception as e:
+            logger.warning(f"Failed to load cache file {cache_file.name}: {e}")
+            return None
+
+    def _save_to_cache(self, df: pd.DataFrame, cache_file: Path):
+        """
+        Save DataFrame to cache file
+
+        Args:
+            df: DataFrame to cache
+            cache_file: Path to cache file
+        """
+        try:
+            df.to_parquet(cache_file, index=False)
+            logger.info(f"Saved {len(df):,} rows to cache: {cache_file.name}")
+        except Exception as e:
+            logger.warning(f"Failed to save cache file {cache_file.name}: {e}")
+
     def get_price_data(self,
                        symbol: str,
                        start: str,
                        end: str,
                        resolution: str = '1s') -> pd.DataFrame:
         """
-        Fetch price data from InfluxDB
+        Fetch price data from InfluxDB (with file-based caching)
 
         Args:
             symbol: Trading symbol (e.g., 'BTC_USDT')
@@ -115,6 +201,16 @@ class DataLoader:
             start = self._parse_time_string(start)
         if isinstance(end, str):
             end = self._parse_time_string(end)
+
+        # Try to load from cache first
+        if self.use_cache:
+            cache_file = self._get_cache_filename('prices', symbol, start, end)
+            cached_df = self._load_from_cache(cache_file)
+            if cached_df is not None:
+                # Convert timestamp column back to datetime if needed
+                if 'timestamp' in cached_df.columns and not pd.api.types.is_datetime64_any_dtype(cached_df['timestamp']):
+                    cached_df['timestamp'] = pd.to_datetime(cached_df['timestamp'])
+                return cached_df
 
         start_str = start.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         end_str = end.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
@@ -147,6 +243,10 @@ class DataLoader:
         if not df.empty:
             df = df.sort_values('timestamp').reset_index(drop=True)
             logger.info(f"Loaded {len(df):,} price points")
+
+            # Save to cache
+            if self.use_cache:
+                self._save_to_cache(df, cache_file)
         else:
             logger.warning(f"No price data found for {symbol}")
 
@@ -158,13 +258,13 @@ class DataLoader:
                          end: str,
                          min_usd: Optional[float] = None) -> pd.DataFrame:
         """
-        Fetch whale events from InfluxDB
+        Fetch whale events from InfluxDB (with file-based caching)
 
         Args:
             symbol: Trading symbol (e.g., 'BTC_USDT')
             start: Start time (ISO format or datetime)
             end: End time (ISO format or datetime)
-            min_usd: Minimum USD value filter (optional)
+            min_usd: Minimum USD value filter (optional, applied after loading from cache)
 
         Returns:
             DataFrame with columns: timestamp, event_type, side, price, volume,
@@ -175,6 +275,22 @@ class DataLoader:
             start = self._parse_time_string(start)
         if isinstance(end, str):
             end = self._parse_time_string(end)
+
+        # Try to load from cache first (cache contains ALL events, we filter by min_usd after)
+        if self.use_cache:
+            cache_file = self._get_cache_filename('whales', symbol, start, end)
+            cached_df = self._load_from_cache(cache_file)
+            if cached_df is not None:
+                # Convert timestamp column back to datetime if needed
+                if 'timestamp' in cached_df.columns and not pd.api.types.is_datetime64_any_dtype(cached_df['timestamp']):
+                    cached_df['timestamp'] = pd.to_datetime(cached_df['timestamp'])
+
+                # Apply minimum USD filter if specified
+                if min_usd is not None:
+                    filtered_df = cached_df[cached_df['usd_value'] >= min_usd].copy()
+                    logger.info(f"Filtered cached data: {len(filtered_df):,} whale events (min_usd=${min_usd:,})")
+                    return filtered_df
+                return cached_df
 
         start_str = start.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         end_str = end.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
@@ -215,13 +331,16 @@ class DataLoader:
 
         if not df.empty:
             df = df.sort_values('timestamp').reset_index(drop=True)
+            logger.info(f"Loaded {len(df):,} whale events from InfluxDB")
+
+            # Save to cache BEFORE filtering (so we cache all data)
+            if self.use_cache:
+                self._save_to_cache(df, cache_file)
 
             # Apply minimum USD filter if specified
             if min_usd is not None:
                 df = df[df['usd_value'] >= min_usd]
-                logger.info(f"Loaded {len(df):,} whale events (min_usd=${min_usd:,})")
-            else:
-                logger.info(f"Loaded {len(df):,} whale events")
+                logger.info(f"Filtered to {len(df):,} whale events (min_usd=${min_usd:,})")
         else:
             logger.warning(f"No whale events found for {symbol}")
 
