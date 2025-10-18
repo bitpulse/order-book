@@ -148,16 +148,21 @@ function setupEventListeners() {
             const value = parseInt(this.getAttribute('data-value'));
 
             // Update both input fields
-            document.getElementById('chart-min-usd-filter').value = value;
-            document.getElementById('min-usd-input').value = value;
+            const chartInput = document.getElementById('chart-min-usd-filter');
+            const headerInput = document.getElementById('min-usd-input');
+            if (chartInput) chartInput.value = value;
+            if (headerInput) headerInput.value = value;
 
             // Update active state
             document.querySelectorAll('.usd-preset-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
 
             // Update status text
-            const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
-            document.getElementById('usd-filter-status').textContent = statusText;
+            const statusEl = document.getElementById('usd-filter-status');
+            if (statusEl) {
+                const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+                statusEl.textContent = statusText;
+            }
 
             // Update chart IMMEDIATELY on button click
             if (whaleEvents.length > 0) {
@@ -168,31 +173,38 @@ function setupEventListeners() {
     });
 
     // Legend input - apply on Enter key
-    document.getElementById('chart-min-usd-filter').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            const value = parseInt(this.value) || 0;
-            document.getElementById('min-usd-input').value = value;
+    const chartMinUsdFilter = document.getElementById('chart-min-usd-filter');
+    if (chartMinUsdFilter) {
+        chartMinUsdFilter.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const value = parseInt(this.value) || 0;
+                const headerInput = document.getElementById('min-usd-input');
+                if (headerInput) headerInput.value = value;
 
-            // Update active state on preset buttons
-            document.querySelectorAll('.usd-preset-btn').forEach(btn => {
-                if (parseInt(btn.getAttribute('data-value')) === value) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
+                // Update active state on preset buttons
+                document.querySelectorAll('.usd-preset-btn').forEach(btn => {
+                    if (parseInt(btn.getAttribute('data-value')) === value) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+
+                // Update status text
+                const statusEl = document.getElementById('usd-filter-status');
+                if (statusEl) {
+                    const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
+                    statusEl.textContent = statusText;
                 }
-            });
 
-            // Update status text
-            const statusText = value === 0 ? 'Showing all events' : `Filtering: ≥ $${(value / 1000).toFixed(0)}K`;
-            document.getElementById('usd-filter-status').textContent = statusText;
-
-            // Update chart
-            if (whaleEvents.length > 0) {
-                updateChart();
-                updateEventsList(whaleEvents);
+                // Update chart
+                if (whaleEvents.length > 0) {
+                    updateChart();
+                    updateEventsList(whaleEvents);
+                }
             }
-        }
-    });
+        });
+    }
 }
 
 // Get ECharts configuration (matching live_chart.js)
