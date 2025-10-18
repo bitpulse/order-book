@@ -107,7 +107,8 @@ class MongoDBStorage:
                     limit: int = 50,
                     skip: int = 0,
                     sort_by: str = 'created_at',
-                    sort_order: int = DESCENDING) -> List[Dict[str, Any]]:
+                    sort_order: int = DESCENDING,
+                    projection: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Get analyses from MongoDB
 
@@ -118,6 +119,7 @@ class MongoDBStorage:
             skip: Number of results to skip (for pagination)
             sort_by: Field to sort by
             sort_order: Sort order (DESCENDING or ASCENDING)
+            projection: Optional field projection (e.g., {'data.intervals': 0} to exclude intervals)
 
         Returns:
             List of analysis documents
@@ -130,8 +132,8 @@ class MongoDBStorage:
             if symbol:
                 query['symbol'] = symbol
 
-            # Execute query
-            cursor = collection.find(query).sort(sort_by, sort_order).skip(skip).limit(limit)
+            # Execute query with optional projection
+            cursor = collection.find(query, projection).sort(sort_by, sort_order).skip(skip).limit(limit)
 
             results = []
             for doc in cursor:

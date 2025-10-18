@@ -536,12 +536,12 @@ async function runMonitor() {
 
 function formatEventType(type, side) {
     const map = {
-        'market_buy': '🟢 Market Buy',
-        'market_sell': '🔴 Market Sell',
-        'increase': side === 'bid' ? '📈 Bid Increase' : '📉 Ask Increase',
-        'decrease': side === 'bid' ? '📉 Bid Decrease' : '📈 Ask Decrease',
-        'new_bid': '🆕 New Bid',
-        'new_ask': '🆕 New Ask'
+        'market_buy': 'Market Buy',
+        'market_sell': 'Market Sell',
+        'increase': side === 'bid' ? 'Bid Increase' : 'Ask Increase',
+        'decrease': side === 'bid' ? 'Bid Decrease' : 'Ask Decrease',
+        'new_bid': 'New Bid',
+        'new_ask': 'New Ask'
     };
     return map[type] || type;
 }

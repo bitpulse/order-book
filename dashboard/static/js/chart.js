@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     setupFilterListeners();
 
+    // Disable download button until data is loaded
+    setDownloadButtonState(false);
+
     // Check if we have an analysis ID from the template (detail page)
     if (typeof analysisId !== 'undefined' && analysisId) {
         // We're on the detail page - load this specific analysis
@@ -93,6 +96,9 @@ async function loadDataFile(analysisId) {
         // Extract and display analysis metadata
         updateAnalysisInfo(analysisId, intervals, analysis);
 
+        // Sort intervals by absolute price change (largest first) for display
+        const sortedIntervals = [...intervals].sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+
         // If multiple intervals, show selector
         if (intervals.length > 1) {
             showIntervalSelector(intervals);
@@ -100,9 +106,9 @@ async function loadDataFile(analysisId) {
             document.getElementById('interval-selector-container').style.display = 'none';
         }
 
-        // Load first interval
-        if (intervals.length > 0) {
-            loadInterval(intervals[0]);
+        // Load first interval (largest price change)
+        if (sortedIntervals.length > 0) {
+            loadInterval(sortedIntervals[0]);
         }
 
         showLoading(false);
@@ -133,21 +139,46 @@ function showIntervalSelector(intervals) {
     const container = document.getElementById('interval-selector-container');
     const selector = document.getElementById('interval-selector');
 
+    // Create indexed array for reliable lookups
+    const indexedIntervals = intervals.map((interval, index) => ({ interval, originalIndex: index }));
+
+    // Sort by absolute price change (largest first)
+    const sortedIntervals = [...indexedIntervals].sort((a, b) =>
+        Math.abs(b.interval.change_pct) - Math.abs(a.interval.change_pct)
+    );
+
     selector.innerHTML = '';
-    intervals.forEach((interval, index) => {
+    sortedIntervals.forEach((item, sortedIndex) => {
+        const interval = item.interval;
         const option = document.createElement('option');
-        option.value = index;
+        // Store the original index for loading the correct data
+        option.value = item.originalIndex;
         const startTime = new Date(interval.start_time).toLocaleTimeString();
-        option.textContent = `#${interval.rank} - ${interval.change_pct.toFixed(3)}% @ ${startTime}`;
+        // Show the actual magnitude rank (1 = largest change)
+        option.textContent = `#${sortedIndex + 1} - ${interval.change_pct.toFixed(3)}% @ ${startTime}`;
         selector.appendChild(option);
     });
 
     container.style.display = 'block';
 }
 
+// Disable download button during loading
+function setDownloadButtonState(enabled) {
+    const downloadBtn = document.getElementById('download-chart-btn');
+    if (downloadBtn) {
+        downloadBtn.disabled = !enabled;
+        downloadBtn.style.opacity = enabled ? '0.6' : '0.3';
+        downloadBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        downloadBtn.title = enabled ? 'Download Filtered Chart Data' : 'Loading data...';
+    }
+}
+
 // Load specific interval data
 async function loadInterval(intervalData) {
     currentInterval = intervalData;
+
+    // Disable download button during loading
+    setDownloadButtonState(false);
 
     // Hide zero state and show chart
     showZeroState(false);
@@ -166,6 +197,9 @@ async function loadInterval(intervalData) {
         // Old format: Use embedded data
         loadIntervalWithEmbeddedData(intervalData);
     }
+
+    // Re-enable download button after loading
+    setDownloadButtonState(true);
 }
 
 // Load interval with embedded data (old format)
@@ -288,6 +322,8 @@ async function loadIntervalWithLazyLoading(intervalData) {
         console.error('Error loading interval details:', error);
         showError('Failed to load detailed data: ' + error.message);
         showDetailedDataLoading(false);
+        // Re-enable download button even on error (user might want to try export anyway)
+        setDownloadButtonState(true);
     }
 }
 
@@ -1043,7 +1079,7 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
         const verb = countChange > 0 ? 'increased' : 'decreased';
         insights.push({
             type: type,
-            icon: countChange > 0 ? '📈' : '📉',
+            icon: '',
             text: `Activity ${verb} by ${Math.abs(countChange).toFixed(0)}% during spike`
         });
     }
@@ -1062,7 +1098,7 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
             if (timeDiff < 10) {
                 insights.push({
                     type: 'warning',
-                    icon: '⏱️',
+                    icon: '',
                     text: `Large ${firstSignificantEvent.side} order ${timeDiff.toFixed(1)}s before spike`,
                     value: `$${formatNumber(firstSignificantEvent.usd_value)}`
                 });
@@ -1077,7 +1113,7 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
     if (duringPct > 40) {
         insights.push({
             type: 'positive',
-            icon: '💰',
+            icon: '',
             text: `${duringPct.toFixed(0)}% of total volume occurred during spike`
         });
     }
@@ -1093,26 +1129,26 @@ function generateInsights(data, beforeEvents, duringEvents, afterEvents, beforeV
         const ratio = (bidVolume / askVolume).toFixed(1);
         insights.push({
             type: 'positive',
-            icon: '🐂',
+            icon: '',
             text: `Strong buying pressure (${ratio}x more bids) aligned with price rise`
         });
     } else if (askVolume > bidVolume * 1.5 && priceChange < 0) {
         const ratio = (askVolume / bidVolume).toFixed(1);
         insights.push({
             type: 'negative',
-            icon: '🐻',
+            icon: '',
             text: `Strong selling pressure (${ratio}x more asks) aligned with price drop`
         });
     } else if (bidVolume > askVolume * 1.5 && priceChange < 0) {
         insights.push({
             type: 'warning',
-            icon: '⚠️',
+            icon: '',
             text: 'Buying pressure during price drop - possible support level'
         });
     } else if (askVolume > bidVolume * 1.5 && priceChange > 0) {
         insights.push({
             type: 'warning',
-            icon: '⚠️',
+            icon: '',
             text: 'Selling pressure during price rise - possible resistance level'
         });
     }
@@ -1517,6 +1553,293 @@ function exportCurrentInterval() {
     console.log('Exported interval:', filename);
 }
 
+// Export filtered chart data as JSON (respects active filters)
+function exportChartData() {
+    if (!currentInterval) {
+        alert('No interval data loaded');
+        return;
+    }
+
+    // Check if button is disabled (still loading)
+    const downloadBtn = document.getElementById('download-chart-btn');
+    if (downloadBtn && downloadBtn.disabled) {
+        console.log('Download blocked: data still loading');
+        return;
+    }
+
+    // Helper function to filter whale events by active filters
+    function filterEventsByActiveFilters(events) {
+        if (!events || events.length === 0) return [];
+
+        return events.filter(event => {
+            // Apply USD filter first
+            if (event.usd_value < minUsdFilter) return false;
+
+            // Apply event type filters
+            const isMarketBuy = event.event_type === 'market_buy';
+            const isMarketSell = event.event_type === 'market_sell';
+            const isIncrease = event.event_type === 'increase';
+            const isDecrease = event.event_type === 'decrease';
+            const isBid = event.side === 'bid' || event.event_type.includes('bid');
+            const isAsk = event.side === 'ask' || event.event_type.includes('ask');
+            const isNewBid = !isMarketBuy && !isMarketSell && !isIncrease && !isDecrease && isBid;
+            const isNewAsk = !isMarketBuy && !isMarketSell && !isIncrease && !isDecrease && isAsk;
+
+            // Check filters
+            if (isMarketBuy && !filters.marketBuy) return false;
+            if (isMarketSell && !filters.marketSell) return false;
+            if (isNewBid && !filters.newBid) return false;
+            if (isNewAsk && !filters.newAsk) return false;
+            if ((isIncrease && isBid) && !filters.bidIncrease) return false;
+            if ((isIncrease && isAsk) && !filters.askIncrease) return false;
+            if ((isDecrease && isBid) && !filters.askIncrease) return false; // bid decrease = resistance building
+            if ((isDecrease && isAsk) && !filters.bidIncrease) return false; // ask decrease = support building
+
+            return true;
+        });
+    }
+
+    // Build event type explanations based on active filters
+    const eventTypeExplanations = {};
+
+    if (filters.marketBuy) {
+        eventTypeExplanations.market_buy = {
+            name: "Market Buy",
+            category: "Definitive Event",
+            description: "Aggressive buyer executed at ask price immediately. Cannot be cancelled (already filled).",
+            market_impact: "Bullish - buyer willing to pay premium to execute NOW",
+            what_happened: "Someone bought contracts at the ask price, removing liquidity from sellers",
+            data_source: "Trade execution stream (sub.deal), Type=1"
+        };
+    }
+
+    if (filters.marketSell) {
+        eventTypeExplanations.market_sell = {
+            name: "Market Sell",
+            category: "Definitive Event",
+            description: "Aggressive seller executed at bid price immediately. Cannot be cancelled (already filled).",
+            market_impact: "Bearish - seller willing to take discount to execute NOW",
+            what_happened: "Someone sold contracts at the bid price, removing liquidity from buyers",
+            data_source: "Trade execution stream (sub.deal), Type=2"
+        };
+    }
+
+    if (filters.newBid) {
+        eventTypeExplanations.new_bid = {
+            name: "New Bid",
+            category: "Definitive Event",
+            description: "A completely new buy order at a price level we've never seen before in this session.",
+            market_impact: "Potential support - adds liquidity, creates buying interest",
+            what_happened: "Whale placed limit buy order(s) at this price",
+            data_source: "Order book depth (sub.depth.full) - price not in previous or historical snapshots",
+            can_be_cancelled: true,
+            note: "Could be spoofing - watch for quick cancellations"
+        };
+    }
+
+    if (filters.newAsk) {
+        eventTypeExplanations.new_ask = {
+            name: "New Ask",
+            category: "Definitive Event",
+            description: "A completely new sell order at a price level we've never seen before in this session.",
+            market_impact: "Potential resistance - adds liquidity, creates selling pressure",
+            what_happened: "Whale placed limit sell order(s) at this price",
+            data_source: "Order book depth (sub.depth.full) - price not in previous or historical snapshots",
+            can_be_cancelled: true,
+            note: "Could be spoofing - watch for quick cancellations"
+        };
+    }
+
+    if (filters.bidIncrease) {
+        eventTypeExplanations.bid_increase = {
+            name: "Bid Increase",
+            category: "Ambiguous Event",
+            description: "Volume increased at existing bid price level. CANNOT distinguish cause.",
+            possible_causes: [
+                "New orders added at same price",
+                "Existing order(s) modified to increase size",
+                "Multiple small orders placed",
+                "Bot replacing cancelled order"
+            ],
+            market_impact: "Support building (shown in muted green)",
+            what_happened: "More buy volume appeared at this price",
+            data_source: "Order book depth (sub.depth.full) - volume went UP",
+            limitation: "L2 data is aggregated - cannot see individual orders"
+        };
+
+        eventTypeExplanations.ask_decrease = {
+            name: "Ask Decrease",
+            category: "Ambiguous Event",
+            description: "Volume decreased at existing ask price level. CANNOT distinguish if filled or cancelled.",
+            possible_causes: [
+                "Orders partially filled (buyers ate into resistance)",
+                "Orders cancelled (whale pulled out)",
+                "Orders modified to smaller size",
+                "Mix of fills and cancels"
+            ],
+            market_impact: "Resistance weakening (shown in muted green - positive for price)",
+            what_happened: "Sell volume disappeared from this price",
+            data_source: "Order book depth (sub.depth.full) - volume went DOWN",
+            limitation: "Cannot prove if orders were filled or cancelled"
+        };
+    }
+
+    if (filters.askIncrease) {
+        eventTypeExplanations.ask_increase = {
+            name: "Ask Increase",
+            category: "Ambiguous Event",
+            description: "Volume increased at existing ask price level. CANNOT distinguish cause.",
+            possible_causes: [
+                "New orders added at same price",
+                "Existing order(s) modified to increase size",
+                "Multiple small orders placed",
+                "Bot replacing cancelled order"
+            ],
+            market_impact: "Resistance building (shown in muted red)",
+            what_happened: "More sell volume appeared at this price",
+            data_source: "Order book depth (sub.depth.full) - volume went UP",
+            limitation: "L2 data is aggregated - cannot see individual orders"
+        };
+
+        eventTypeExplanations.bid_decrease = {
+            name: "Bid Decrease",
+            category: "Ambiguous Event",
+            description: "Volume decreased at existing bid price level. CANNOT distinguish if filled or cancelled.",
+            possible_causes: [
+                "Orders partially filled (sellers ate into support)",
+                "Orders cancelled (whale pulled out)",
+                "Orders modified to smaller size",
+                "Mix of fills and cancels"
+            ],
+            market_impact: "Support weakening (shown in muted red - negative for price)",
+            what_happened: "Buy volume disappeared from this price",
+            data_source: "Order book depth (sub.depth.full) - volume went DOWN",
+            limitation: "Cannot prove if orders were filled or cancelled"
+        };
+    }
+
+    // Build filtered dataset
+    const exportData = {
+        _README: {
+            title: "Whale Events - Filtered Chart Data Export",
+            description: "This file contains order book events and price data filtered according to your selected criteria.",
+            data_source: "MEXC Futures WebSocket API - Level 2 (L2) Order Book Data",
+            important_notes: [
+                "L2 data is AGGREGATED by price level - individual orders not visible",
+                "Increase/Decrease events are AMBIGUOUS - cannot distinguish fills from cancellations",
+                "Market Buy/Sell events are DEFINITIVE - we see actual trade executions",
+                "USD values are NOTIONAL (futures contracts with leverage) - not actual capital spent",
+                "All timestamps are in ISO 8601 format (UTC)",
+                "Filters were active during export - this is NOT the complete dataset"
+            ],
+            full_documentation: "See WHALE_EVENTS_EXPLAINED.md for complete technical explanation"
+        },
+        metadata: {
+            symbol: currentInterval.symbol || 'UNKNOWN',
+            interval_rank: currentInterval.rank,
+            start_time: currentInterval.start_time,
+            end_time: currentInterval.end_time,
+            start_price: currentInterval.start_price,
+            end_price: currentInterval.end_price,
+            change_pct: currentInterval.change_pct,
+            exported_at: new Date().toISOString(),
+            active_filters: {
+                price_line: filters.price,
+                market_buy: filters.marketBuy,
+                market_sell: filters.marketSell,
+                new_bid: filters.newBid,
+                new_ask: filters.newAsk,
+                bid_increase: filters.bidIncrease,
+                ask_increase: filters.askIncrease,
+                min_usd: minUsdFilter
+            },
+            filter_summary: {
+                enabled_event_types: Object.entries(filters).filter(([k, v]) => v && k !== 'price').map(([k]) => k),
+                min_usd_threshold: minUsdFilter,
+                price_data_included: filters.price,
+                note: "Only events matching ALL active filters are included in this export"
+            }
+        },
+        event_type_explanations: eventTypeExplanations,
+        field_definitions: {
+            price: "Price level where event occurred (execution price for market orders, resting price for limit orders)",
+            volume: "Contracts quantity. For increase/decrease: this is the CHANGE amount, not total. See 'info' field for new total.",
+            usd_value: "Notional value = price × volume. For futures: represents total exposure, not actual margin required.",
+            distance_from_mid_pct: "Distance from mid-price as percentage. Negative = below mid (bid side), Positive = above mid (ask side)",
+            level: "Position in order book depth. 1 = best bid/ask (closest to market), higher = further from market",
+            order_count: "Number of separate orders at this price level (L2 limitation: cannot see individual order sizes)",
+            side: "bid = buy orders, ask = sell orders, buy/sell = market order direction",
+            event_type: "See event_type_explanations section for detailed description of each type",
+            time: "Event timestamp in ISO 8601 format (UTC)",
+            info: "Additional context (e.g., 'total:75000' shows new total volume after increase/decrease)"
+        },
+        price_data: filters.price ? (currentInterval.price_data || []) : [],
+        whale_events_before: filterEventsByActiveFilters(currentInterval.whale_events_before || []),
+        whale_events_during: filterEventsByActiveFilters(currentInterval.whale_events || []),
+        whale_events_after: filterEventsByActiveFilters(currentInterval.whale_events_after || [])
+    };
+
+    // Add statistics
+    const allFilteredEvents = [
+        ...exportData.whale_events_before,
+        ...exportData.whale_events_during,
+        ...exportData.whale_events_after
+    ];
+
+    exportData.statistics = {
+        total_events: allFilteredEvents.length,
+        events_before: exportData.whale_events_before.length,
+        events_during: exportData.whale_events_during.length,
+        events_after: exportData.whale_events_after.length,
+        total_volume_usd: allFilteredEvents.reduce((sum, e) => sum + (e.usd_value || 0), 0),
+        price_points: exportData.price_data.length
+    };
+
+    // Create filename
+    const symbol = currentInterval.symbol || 'UNKNOWN';
+    const startTime = new Date(currentInterval.start_time);
+    const filterSuffix = minUsdFilter > 0 ? `_min${minUsdFilter}usd` : '';
+    const filename = `chart_${symbol}_rank${currentInterval.rank}_${startTime.toISOString().replace(/[:.]/g, '-')}${filterSuffix}_filtered.json`;
+
+    // Create and download JSON blob
+    const jsonData = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    // Cleanup
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    console.log('Exported filtered chart data:', {
+        filename,
+        total_events: exportData.statistics.total_events,
+        price_points: exportData.statistics.price_points,
+        filters: exportData.metadata.active_filters,
+        event_types_explained: Object.keys(exportData.event_type_explanations).length
+    });
+
+    // Show brief notification
+    const notification = document.createElement('div');
+    notification.style.cssText = 'position: fixed; top: 80px; right: 20px; background: rgba(0, 255, 163, 0.15); ' +
+        'border: 1px solid var(--green); color: var(--green); padding: 12px 20px; border-radius: 8px; ' +
+        'z-index: 10001; font-size: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);';
+    notification.innerHTML = `Exported successfully: ${Object.keys(exportData.event_type_explanations).length} event types`;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.transition = 'opacity 0.3s';
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
 // Setup event listeners
 function setupEventListeners() {
     // New Analysis button (only on card grid page)
@@ -1606,6 +1929,14 @@ function setupEventListeners() {
     if (exportBtn) {
         exportBtn.addEventListener('click', () => {
             exportCurrentInterval();
+        });
+    }
+
+    // Download chart data button
+    const downloadChartBtn = document.getElementById('download-chart-btn');
+    if (downloadChartBtn) {
+        downloadChartBtn.addEventListener('click', () => {
+            exportChartData();
         });
     }
 
@@ -1734,6 +2065,14 @@ function setupEventListeners() {
         updateUsdFilterStatus(minUsdFilter);
     }
 
+    // Data explanation button
+    const showDataExplanationBtn = document.getElementById('show-data-explanation');
+    if (showDataExplanationBtn) {
+        showDataExplanationBtn.addEventListener('click', () => {
+            document.getElementById('data-explanation-modal').style.display = 'flex';
+        });
+    }
+
     // Modal close button
     const closeBtn = document.querySelector('.modal-close');
     if (closeBtn) {
@@ -1748,12 +2087,20 @@ function setupEventListeners() {
         // ESC key: close modal first, then exit fullscreen
         if (e.key === 'Escape') {
             // First check if any modal is open
-            const modal = document.getElementById('event-details-modal');
-            const isModalOpen = modal && modal.style.display === 'flex';
+            const eventModal = document.getElementById('event-details-modal');
+            const dataModal = document.getElementById('data-explanation-modal');
+            const deleteModal = document.getElementById('delete-modal');
 
-            if (isModalOpen) {
-                // Close the modal
-                modal.style.display = 'none';
+            const isEventModalOpen = eventModal && eventModal.style.display === 'flex';
+            const isDataModalOpen = dataModal && dataModal.style.display === 'flex';
+            const isDeleteModalOpen = deleteModal && deleteModal.style.display === 'flex';
+
+            if (isEventModalOpen) {
+                eventModal.style.display = 'none';
+            } else if (isDataModalOpen) {
+                dataModal.style.display = 'none';
+            } else if (isDeleteModalOpen) {
+                deleteModal.style.display = 'none';
             } else {
                 // If no modal, exit fullscreen if active
                 const wrapper = document.querySelector('.chart-wrapper');

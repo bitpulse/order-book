@@ -10,6 +10,7 @@ import json
 import csv
 import argparse
 import time
+import bisect
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Tuple
 from collections import defaultdict
@@ -90,7 +91,8 @@ class PriceChangeAnalyzer:
         self.client = InfluxDBClient(
             url=self.influx_url,
             token=self.influx_token,
-            org=self.influx_org
+            org=self.influx_org,
+            timeout=600_000  # 10 minute timeout for large queries
         )
         self.query_api = self.client.query_api()
 
@@ -257,6 +259,9 @@ class PriceChangeAnalyzer:
         """
         Remove overlapping intervals to show unique price spikes.
 
+        OPTIMIZED: Uses sorted interval list with early termination for O(n log n) performance
+        instead of O(n²) brute force approach.
+
         For each interval, check if it overlaps with any already-selected interval.
         If it overlaps, skip it (it's capturing the same spike).
         If it doesn't overlap, it's a unique spike - keep it.
@@ -273,20 +278,38 @@ class PriceChangeAnalyzer:
         unique_intervals = []
 
         for interval in intervals:
-            # Check if this interval overlaps with any already-selected interval
+            # OPTIMIZATION: Keep unique_intervals sorted by start_time for early termination
+            # Binary search for potential overlaps
             is_duplicate = False
 
-            for existing in unique_intervals:
-                # Two intervals overlap if:
-                # interval.end >= existing.start AND interval.start <= existing.end
-                if (interval['end_time'] >= existing['start_time'] and
-                    interval['start_time'] <= existing['end_time']):
-                    is_duplicate = True
-                    break
+            # Since we're processing largest changes first, we only need to check
+            # intervals that could possibly overlap (those with nearby start/end times)
+            # Use binary search to find the insertion point
+            start_time = interval['start_time']
+            end_time = interval['end_time']
+
+            # Find where this interval would be inserted (by start_time)
+            insert_idx = bisect.bisect_left([u['start_time'] for u in unique_intervals], start_time)
+
+            # Check intervals that could overlap (around the insertion point)
+            # Only need to check a few neighbors since intervals are sorted
+            check_range_start = max(0, insert_idx - 1)
+            check_range_end = min(len(unique_intervals), insert_idx + 2)
+
+            for i in range(check_range_start, check_range_end):
+                if i < len(unique_intervals):
+                    existing = unique_intervals[i]
+                    # Two intervals overlap if:
+                    # interval.end >= existing.start AND interval.start <= existing.end
+                    if (end_time >= existing['start_time'] and
+                        start_time <= existing['end_time']):
+                        is_duplicate = True
+                        break
 
             # Only keep non-overlapping (unique) intervals
             if not is_duplicate:
-                unique_intervals.append(interval)
+                # Insert in sorted order by start_time for efficient future lookups
+                unique_intervals.insert(insert_idx, interval)
 
         return unique_intervals
 
@@ -458,8 +481,10 @@ class PriceChangeAnalyzer:
         # Use 1-second sliding window for high resolution
         slide_seconds = 1
 
+        # Extract timestamps for binary search (OPTIMIZATION: O(log n) lookups)
+        timestamps = [p['time'] for p in all_price_data]
+
         i = 0
-        end_point_idx = 1  # Track end point position for O(n) performance
         total_points = len(all_price_data)
         last_progress_pct = 0
 
@@ -473,23 +498,17 @@ class PriceChangeAnalyzer:
             start_time = start_point['time']
             target_end_time = start_time + interval_delta
 
-            # Find the closest price point to the end time (resume from last position)
+            # OPTIMIZATION: Binary search to find end point (O(log n) instead of O(n))
+            end_point_idx = bisect.bisect_left(timestamps, target_end_time, i + 1)
+
             end_point = None
-            end_point_idx = max(end_point_idx, i + 1)  # Ensure we don't go backwards
-
-            for j in range(end_point_idx, len(all_price_data)):
-                if all_price_data[j]['time'] >= target_end_time:
-                    end_point = all_price_data[j]
-                    end_point_idx = j
-                    break
-
-            if not end_point:
-                # No more valid end points, check if we can use the last point
-                if len(all_price_data) > i + 1:
-                    end_point = all_price_data[-1]
-                    end_point_idx = len(all_price_data) - 1
-                else:
-                    break
+            if end_point_idx < len(all_price_data):
+                end_point = all_price_data[end_point_idx]
+            elif len(all_price_data) > i + 1:
+                # No exact match, use last point
+                end_point = all_price_data[-1]
+            else:
+                break
 
             start_price = start_point['mid_price'] or 0
             end_price = end_point['mid_price'] or 0
@@ -508,15 +527,15 @@ class PriceChangeAnalyzer:
                         'change_abs': abs(change_pct)
                     })
 
-            # Slide window forward by slide_seconds (actually advance the index now)
+            # OPTIMIZATION: Binary search for next slide position (O(log n) instead of O(n))
             next_start_time = start_time + timedelta(seconds=slide_seconds)
-            next_i = i + 1
+            next_i = bisect.bisect_left(timestamps, next_start_time, i + 1)
 
-            # Find the first data point at or after next_start_time
-            for k in range(i + 1, len(all_price_data)):
-                if all_price_data[k]['time'] >= next_start_time:
-                    next_i = k
-                    break
+            # If binary search didn't find exact match, use next available point
+            if next_i >= len(all_price_data):
+                break
+            if next_i == i:  # Ensure we move forward
+                next_i = i + 1
 
             i = next_i
 
@@ -651,6 +670,41 @@ class PriceChangeAnalyzer:
 
         print(f"{DIM}[3/3] Analyzing intervals & fetching whale data...{RESET}")
         analysis_timer = ProgressTimer()
+
+        # OPTIMIZATION: Batch fetch all whale events in a single query (with fallback)
+        # Calculate global time range covering all intervals
+        context_multiplier = 10
+        global_start = min(change['start_time'] for change in price_changes)
+        global_end = max(change['end_time'] for change in price_changes)
+
+        # Extend by context multiplier
+        if price_changes:
+            max_interval_duration = max(
+                change['end_time'] - change['start_time']
+                for change in price_changes
+            )
+            global_start -= max_interval_duration * context_multiplier
+            global_end += max_interval_duration * context_multiplier
+
+        # Try batched query if time range is reasonable (< 7 days)
+        time_range_hours = (global_end - global_start).total_seconds() / 3600
+        use_batch_mode = time_range_hours < 168  # 7 days
+
+        all_whale_events = None
+        if use_batch_mode:
+            try:
+                # Single batched query for all whale events
+                print(f"{DIM}  → Fetching all whale events in single query (range: {time_range_hours:.1f}h)...{RESET}")
+                batch_timer = ProgressTimer()
+                all_whale_events = self.get_whale_events(global_start, global_end)
+                print(f"{GREEN}  ✓ Fetched {len(all_whale_events):,} whale events in {batch_timer.elapsed_str()}{RESET}")
+            except Exception as e:
+                # Fallback to individual queries if batch fails
+                print(f"{YELLOW}  ⚠ Batch query failed ({str(e)[:60]}...), using individual queries{RESET}")
+                all_whale_events = None
+        else:
+            print(f"{YELLOW}  ⚠ Time range too large ({time_range_hours:.1f}h), using individual queries{RESET}")
+
         results = []
 
         for i, change in enumerate(price_changes, 1):
@@ -667,16 +721,33 @@ class PriceChangeAnalyzer:
 
             # Get price data: before, during, and after the interval
             # Show 10x interval time before and after for better context analysis
-            context_multiplier = 10
             extended_start = change['start_time'] - interval_duration * context_multiplier
             extended_end = change['end_time'] + interval_duration * context_multiplier
 
-            # Fetch raw data (for statistics computation only, not for storage)
+            # Fetch price data (still per-interval, but whale events may be batched)
             fetch_timer = ProgressTimer()
             price_data = self.get_price_data(extended_start, extended_end)
-            whale_events = self.get_whale_events(change['start_time'], change['end_time'])
-            whale_events_before = self.get_whale_events(extended_start, change['start_time'])
-            whale_events_after = self.get_whale_events(change['end_time'], extended_end)
+
+            # OPTIMIZATION: Filter batched whale events OR fetch individually
+            if all_whale_events is not None:
+                # Fast path: Filter from pre-fetched batch
+                whale_events = [
+                    e for e in all_whale_events
+                    if change['start_time'] <= e['time'] <= change['end_time']
+                ]
+                whale_events_before = [
+                    e for e in all_whale_events
+                    if extended_start <= e['time'] < change['start_time']
+                ]
+                whale_events_after = [
+                    e for e in all_whale_events
+                    if change['end_time'] < e['time'] <= extended_end
+                ]
+            else:
+                # Fallback: Individual queries (original behavior)
+                whale_events = self.get_whale_events(change['start_time'], change['end_time'])
+                whale_events_before = self.get_whale_events(extended_start, change['start_time'])
+                whale_events_after = self.get_whale_events(change['end_time'], extended_end)
 
             if show_progress:
                 total_events = len(whale_events) + len(whale_events_before) + len(whale_events_after)

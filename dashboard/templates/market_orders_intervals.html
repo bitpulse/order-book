@@ -216,19 +216,19 @@
           <!-- Analysis Info -->
           <div id="analysis-info" class="analysis-info" style="display: none">
             <div class="info-item">
-              <span class="info-icon">📊</span>
+              <span class="info-icon"></span>
               <span id="info-symbol" class="info-text">-</span>
             </div>
             <div class="info-item">
-              <span class="info-icon">⏱️</span>
+              <span class="info-icon"></span>
               <span id="info-interval" class="info-text">-</span>
             </div>
             <div class="info-item">
-              <span class="info-icon">🔍</span>
+              <span class="info-icon"></span>
               <span id="info-lookback" class="info-text">-</span>
             </div>
             <div class="info-item">
-              <span class="info-icon">💰</span>
+              <span class="info-icon"></span>
               <span id="info-threshold" class="info-text">-</span>
             </div>
           </div>
@@ -261,7 +261,7 @@
                 class="btn btn-export"
                 title="Export current interval data as JSON"
               >
-                <span class="export-icon">📥</span>
+                <span class="export-icon"></span>
                 Export JSON
               </button>
             </div>
@@ -330,7 +330,7 @@
                 <p>Loading chart data...</p>
               </div>
               <div id="zero-state" class="zero-state">
-                <div class="zero-state-icon">⏱️</div>
+                <div class="zero-state-icon"></div>
                 <h3>No Data Selected</h3>
                 <p>
                   Select a file from the dropdown above to view market orders
@@ -420,13 +420,13 @@
           <!-- Analysis Documentation -->
           <details class="data-flow-info">
             <summary class="data-flow-summary">
-              <span class="data-flow-icon">⏱️</span>
+              <span class="data-flow-icon"></span>
               Market Orders Intervals Analysis Methodology
               <span class="data-flow-toggle">▼</span>
             </summary>
             <div class="data-flow-content">
               <div class="data-flow-section">
-                <div class="data-flow-title">🔍 Detection Algorithm</div>
+                <div class="data-flow-title"> Detection Algorithm</div>
                 <div class="data-flow-detail">
                   <strong>Time Windows:</strong> Fixed interval duration (e.g.,
                   60s) to group market orders
@@ -450,7 +450,7 @@
               </div>
 
               <div class="data-flow-section">
-                <div class="data-flow-title">📊 Key Metrics</div>
+                <div class="data-flow-title"> Key Metrics</div>
                 <div class="metric-item">
                   <span class="metric-name">Total USD Volume:</span>
                   <span class="metric-source"
@@ -477,7 +477,7 @@
               </div>
 
               <div class="data-flow-section">
-                <div class="data-flow-title">🎯 Context Windows</div>
+                <div class="data-flow-title"> Context Windows</div>
                 <div class="data-flow-detail">
                   <strong>BEFORE:</strong> 3× interval duration before the spike
                   (blue, 30% opacity)
@@ -551,7 +551,7 @@
 
           <!-- Analytical Insights -->
           <div id="insights-panel" class="insights-panel" style="display: none">
-            <div class="insights-header">📊 Analysis</div>
+            <div class="insights-header"> Analysis</div>
             <div id="insights-content" class="insights-content"></div>
           </div>
         </div>

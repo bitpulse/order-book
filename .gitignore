@@ -206,5 +206,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Backtesting cache
+backtesting/cache/
 
 /docs

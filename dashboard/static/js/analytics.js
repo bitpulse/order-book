@@ -801,7 +801,7 @@ function showCalculationModal(metricName, calculation) {
 
     let html = `
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-            <h3 style="margin: 0; color: #00d9ff; font-size: 1.1rem;">📊 How is this calculated?</h3>
+            <h3 style="margin: 0; color: #00d9ff; font-size: 1.1rem;">How is this calculated?</h3>
             <button id="close-calc-modal" style="background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
         </div>
         <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
@@ -811,14 +811,14 @@ function showCalculationModal(metricName, calculation) {
 
     if (calculation.formula) {
         html += `<div style="margin-bottom: 1rem;">
-            <strong style="color: #00d9ff;">📐 Formula:</strong><br/>
+            <strong style="color: #00d9ff;">Formula:</strong><br/>
             <code style="background: rgba(0,194,255,0.1); padding: 0.5rem; border-radius: 4px; display: inline-block; margin-top: 0.5rem; color: #00d9ff;">${calculation.formula}</code>
         </div>`;
     }
 
     if (calculation.inputs) {
         html += `<div style="margin-bottom: 1rem;">
-            <strong style="color: #00d9ff;">📊 Inputs:</strong>
+            <strong style="color: #00d9ff;">Inputs:</strong>
             <ul style="margin: 0.5rem 0; padding-left: 1.5rem; color: #ccc;">`;
         for (const [key, value] of Object.entries(calculation.inputs)) {
             html += `<li><span style="color: #aaa;">${key}:</span> <strong style="color: #fff;">${value}</strong></li>`;
@@ -828,7 +828,7 @@ function showCalculationModal(metricName, calculation) {
 
     if (calculation.steps && calculation.steps.length > 0) {
         html += `<div style="margin-bottom: 1rem;">
-            <strong style="color: #00d9ff;">🔢 Calculation Steps:</strong>
+            <strong style="color: #00d9ff;">Calculation Steps:</strong>
             <ol style="margin: 0.5rem 0; padding-left: 1.5rem; color: #ccc;">`;
         calculation.steps.forEach(step => {
             html += `<li style="margin: 0.3rem 0;">${step}</li>`;
@@ -838,20 +838,20 @@ function showCalculationModal(metricName, calculation) {
 
     if (calculation.result) {
         html += `<div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(0,255,163,0.1); border-left: 3px solid #00ffa3; border-radius: 4px;">
-            <strong style="color: #00ffa3;">✅ Result:</strong> <span style="color: #fff;">${calculation.result}</span>
+            <strong style="color: #00ffa3;">Result:</strong> <span style="color: #fff;">${calculation.result}</span>
         </div>`;
     }
 
     if (calculation.interpretation) {
         html += `<div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 4px;">
-            <strong style="color: #ffaa00;">💡 What this means:</strong><br/>
+            <strong style="color: #ffaa00;">What this means:</strong><br/>
             <span style="color: #ddd; line-height: 1.6;">${calculation.interpretation}</span>
         </div>`;
     }
 
     if (calculation.baseline) {
         html += `<div style="padding: 0.75rem; background: rgba(0,194,255,0.05); border-radius: 4px;">
-            <strong style="color: #00c2ff;">📈 Context / Baseline:</strong><br/>
+            <strong style="color: #00c2ff;">Context / Baseline:</strong><br/>
             <span style="color: #ddd; line-height: 1.6;">${calculation.baseline}</span>
         </div>`;
     }
