@@ -732,77 +732,75 @@ async function loadChartData() {
     }
 }
 
+// Helper function to safely set text content
+function safeSetText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
 // Update info panel
 function updateInfo(priceResult, eventsResult) {
-    document.getElementById('info-symbol').textContent = currentSymbol;
-    document.getElementById('info-window').textContent =
-        `${new Date(priceResult.start_time).toLocaleTimeString()} - ${new Date(priceResult.end_time).toLocaleTimeString()}`;
-    document.getElementById('info-min-usd').textContent =
-        `Min: $${eventsResult.min_usd.toLocaleString()}`;
-    document.getElementById('info-status').textContent =
-        `${priceResult.count} price points, ${eventsResult.count} events`;
+    safeSetText('info-symbol', currentSymbol);
+    safeSetText('info-window',
+        `${new Date(priceResult.start_time).toLocaleTimeString()} - ${new Date(priceResult.end_time).toLocaleTimeString()}`);
+    safeSetText('info-min-usd', `Min: $${eventsResult.min_usd.toLocaleString()}`);
+    safeSetText('info-status', `${priceResult.count} price points, ${eventsResult.count} events`);
 }
 
 // Update stats panel
 function updateStats(stats) {
     // Price stats
     if (stats.current_price) {
-        document.getElementById('stat-current-price').textContent =
-            `$${stats.current_price.toFixed(2)}`;
+        safeSetText('stat-current-price', `$${stats.current_price.toFixed(2)}`);
 
         const changeEl = document.getElementById('stat-price-change');
-        const change = stats.price_change || 0;
-        const changePct = stats.price_change_pct || 0;
-        changeEl.textContent = `${change >= 0 ? '+' : ''}$${change.toFixed(2)} (${changePct.toFixed(2)}%)`;
-        changeEl.className = 'stat-value ' + (change >= 0 ? 'stat-bullish' : 'stat-bearish');
+        if (changeEl) {
+            const change = stats.price_change || 0;
+            const changePct = stats.price_change_pct || 0;
+            changeEl.textContent = `${change >= 0 ? '+' : ''}$${change.toFixed(2)} (${changePct.toFixed(2)}%)`;
+            changeEl.className = 'stat-value ' + (change >= 0 ? 'stat-bullish' : 'stat-bearish');
+        }
     }
 
     // Average sizes
-    document.getElementById('stat-avg-buy').textContent =
-        stats.avg_buy_size ? `$${stats.avg_buy_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-';
-    document.getElementById('stat-avg-sell').textContent =
-        stats.avg_sell_size ? `$${stats.avg_sell_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-';
+    safeSetText('stat-avg-buy', stats.avg_buy_size ? `$${stats.avg_buy_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-');
+    safeSetText('stat-avg-sell', stats.avg_sell_size ? `$${stats.avg_sell_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-');
 
     // Largest orders
-    document.getElementById('stat-largest-buy').textContent =
-        stats.max_buy_size ? `$${stats.max_buy_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-';
-    document.getElementById('stat-largest-sell').textContent =
-        stats.max_sell_size ? `$${stats.max_sell_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-';
+    safeSetText('stat-largest-buy', stats.max_buy_size ? `$${stats.max_buy_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-');
+    safeSetText('stat-largest-sell', stats.max_sell_size ? `$${stats.max_sell_size.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-');
 
     // Volumes
-    document.getElementById('stat-buy-volume').textContent =
-        stats.total_buy_volume ? `$${stats.total_buy_volume.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-';
-    document.getElementById('stat-sell-volume').textContent =
-        stats.total_sell_volume ? `$${stats.total_sell_volume.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-';
+    safeSetText('stat-buy-volume', stats.total_buy_volume ? `$${stats.total_buy_volume.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-');
+    safeSetText('stat-sell-volume', stats.total_sell_volume ? `$${stats.total_sell_volume.toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-');
 
     // Flow and ratio
     const netFlow = stats.net_flow || 0;
     const netFlowEl = document.getElementById('stat-net-flow');
-    netFlowEl.textContent = `${netFlow >= 0 ? '+' : ''}$${netFlow.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-    netFlowEl.className = 'stat-value ' + (netFlow >= 0 ? 'stat-bullish' : 'stat-bearish');
+    if (netFlowEl) {
+        netFlowEl.textContent = `${netFlow >= 0 ? '+' : ''}$${netFlow.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+        netFlowEl.className = 'stat-value ' + (netFlow >= 0 ? 'stat-bullish' : 'stat-bearish');
+    }
 
     const ratio = stats.buy_sell_ratio || 0;
     const ratioEl = document.getElementById('stat-buy-sell-ratio');
-    ratioEl.textContent = ratio === Infinity ? '∞' : ratio.toFixed(2);
-    ratioEl.className = 'stat-value ' + (ratio > 1 ? 'stat-bullish' : ratio < 1 ? 'stat-bearish' : '');
+    if (ratioEl) {
+        ratioEl.textContent = ratio === Infinity ? '∞' : ratio.toFixed(2);
+        ratioEl.className = 'stat-value ' + (ratio > 1 ? 'stat-bullish' : ratio < 1 ? 'stat-bearish' : '');
+    }
 
     // Event counts
     const counts = stats.event_counts || {};
-    document.getElementById('stat-new-bids').textContent =
-        (counts.new_bid || 0) + (counts.bid_increase || 0);
-    document.getElementById('stat-new-asks').textContent =
-        (counts.new_ask || 0) + (counts.ask_increase || 0);
-
-    document.getElementById('stat-total-events').textContent = stats.total_events || 0;
-    document.getElementById('stat-time-range').textContent = '10 min';
+    safeSetText('stat-new-bids', (counts.new_bid || 0) + (counts.bid_increase || 0));
+    safeSetText('stat-new-asks', (counts.new_ask || 0) + (counts.ask_increase || 0));
+    safeSetText('stat-total-events', stats.total_events || 0);
+    safeSetText('stat-time-range', '10 min');
 
     // Event stats
-    document.getElementById('event-stat-buys').textContent = counts.market_buy || 0;
-    document.getElementById('event-stat-sells').textContent = counts.market_sell || 0;
-    document.getElementById('event-stat-bids').textContent =
-        (counts.new_bid || 0) + (counts.bid_increase || 0) + (counts.bid_decrease || 0);
-    document.getElementById('event-stat-asks').textContent =
-        (counts.new_ask || 0) + (counts.ask_increase || 0) + (counts.ask_decrease || 0);
+    safeSetText('event-stat-buys', counts.market_buy || 0);
+    safeSetText('event-stat-sells', counts.market_sell || 0);
+    safeSetText('event-stat-bids', (counts.new_bid || 0) + (counts.bid_increase || 0) + (counts.bid_decrease || 0));
+    safeSetText('event-stat-asks', (counts.new_ask || 0) + (counts.ask_increase || 0) + (counts.ask_decrease || 0));
 }
 
 // Update chart visualization
