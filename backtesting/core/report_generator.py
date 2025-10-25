@@ -337,6 +337,9 @@ class ReportGenerator:
         for r in results:
             result = r['result']
             stats = r['stats']
+            signals_generated = stats.get('signals_generated', 0)
+            signal_acceptance_rate = stats.get('signal_acceptance_rate', 0) * 100
+
             comparison_rows += f"""
             <tr>
                 <td><strong>{r['name']}</strong></td>
@@ -348,8 +351,8 @@ class ReportGenerator:
                 <td class="negative">{result.max_drawdown:.2f}%</td>
                 <td>${result.avg_win:.2f}</td>
                 <td>${result.avg_loss:.2f}</td>
-                <td>{stats['signals_generated']}</td>
-                <td>{stats['signal_acceptance_rate']*100:.1f}%</td>
+                <td>{signals_generated}</td>
+                <td>{signal_acceptance_rate:.1f}%</td>
             </tr>
             """
 

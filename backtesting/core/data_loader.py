@@ -84,7 +84,8 @@ class DataLoader:
             url=self.influx_url,
             token=self.influx_token,
             org=self.influx_org,
-            timeout=600_000  # 600 second timeout (in milliseconds)
+            timeout=3_600_000,  # 60 minute timeout (in milliseconds)
+            enable_gzip=True    # Enable compression for large queries
         )
         self.query_api = self.influx_client.query_api()
 

@@ -10,9 +10,10 @@ This is the core engine that orchestrates the entire backtesting process:
 - Calculates performance metrics
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 import pandas as pd
+import numpy as np
 from loguru import logger
 
 from backtesting.core.models import (
@@ -181,6 +182,8 @@ class BacktestEngine:
         """
         Main event loop - iterate through time chronologically
 
+        OPTIMIZED VERSION: Uses vectorized operations instead of .iterrows()
+
         Args:
             symbol: Trading symbol
             whale_events: DataFrame of whale events with timestamps
@@ -193,43 +196,72 @@ class BacktestEngine:
         whale_idx = 0
         whale_len = len(whale_events)
 
-        for idx, row in self.data.iterrows():
-            self.current_time = idx  # DataFrame index is timestamp
-            self.current_price = row['mid_price']
+        # OPTIMIZATION 1: Convert to numpy arrays for faster access
+        timestamps = self.data.index.values
+        mid_prices = self.data['mid_price'].values
+        data_len = len(timestamps)
+
+        # OPTIMIZATION 2: Pre-convert whale event timestamps to comparable format
+        whale_timestamps = whale_events['timestamp'].values if whale_len > 0 else []
+
+        # OPTIMIZATION 3: Cache strategy methods (avoid hasattr checks in loop)
+        has_on_tick = hasattr(self.strategy, 'on_tick')
+        has_on_whale = hasattr(self.strategy, 'on_whale_event')
+
+        # Time window for whale event matching
+        time_window_ns = pd.Timedelta(milliseconds=100).value  # Convert to nanoseconds
+
+        # OPTIMIZATION 4: Process in batches to reduce overhead
+        for i in range(data_len):
+            self.current_time = pd.Timestamp(timestamps[i])  # Convert to Timestamp for datetime operations
+            self.current_price = float(mid_prices[i])
 
             # Update portfolio with current price
             self.portfolio.update(self.current_price, self.current_time)
 
+            # OPTIMIZATION 5: Lazy row fetching - only fetch when actually needed
+            row = None
+            need_row = self.pending_orders or has_on_tick
+
             # Process pending orders (delayed execution for manual trading)
-            self._process_pending_orders(symbol, row)
+            if self.pending_orders:  # Only call if there are pending orders
+                if row is None:
+                    row = self.data.iloc[i]
+                self._process_pending_orders(symbol, row)
 
             # Process whale events that occurred at this timestamp (within 100ms window)
-            time_window = timedelta(milliseconds=100)
+            if has_on_whale and whale_idx < whale_len:
+                current_time_ns = pd.Timestamp(self.current_time).value
 
-            while whale_idx < whale_len:
-                whale_ts = whale_events.iloc[whale_idx]['timestamp']
+                while whale_idx < whale_len:
+                    whale_ts_ns = pd.Timestamp(whale_timestamps[whale_idx]).value
 
-                # If whale event is too far in past, skip it
-                if whale_ts < self.current_time - time_window:
-                    whale_idx += 1
-                    continue
+                    # If whale event is too far in past, skip it
+                    if whale_ts_ns < current_time_ns - time_window_ns:
+                        whale_idx += 1
+                        continue
 
-                # If whale event is in current window, process it
-                if whale_ts <= self.current_time + time_window:
-                    whale_event = whale_events.iloc[whale_idx]
-                    whale_event_count += 1
-                    self._process_whale_event(symbol, whale_event, row)
-                    whale_idx += 1
-                else:
-                    # Whale event is in future, break and wait for next tick
-                    break
+                    # If whale event is in current window, process it
+                    if whale_ts_ns <= current_time_ns + time_window_ns:
+                        whale_event = whale_events.iloc[whale_idx]
+                        whale_event_count += 1
+                        if row is None:
+                            row = self.data.iloc[i]
+                        self._process_whale_event(symbol, whale_event, row)
+                        whale_idx += 1
+                    else:
+                        # Whale event is in future, break and wait for next tick
+                        break
 
-            # Call strategy's on_tick method
-            if hasattr(self.strategy, 'on_tick'):
+            # Call strategy's on_tick method (only if strategy has it)
+            if has_on_tick:
+                if row is None:
+                    row = self.data.iloc[i]
                 self.strategy.on_tick(self.current_time, row, self.portfolio)
 
             # Check exit conditions for all open positions
-            self._check_exits()
+            if self.portfolio.positions:  # Only check if there are positions
+                self._check_exits()
 
             tick_count += 1
 
@@ -240,7 +272,8 @@ class BacktestEngine:
                            f"{len(self.portfolio.trades)} completed trades")
 
         # Close any remaining positions at final price
-        self._close_all_positions("backtest_end")
+        if self.portfolio.positions:
+            self._close_all_positions("backtest_end")
 
         logger.info(f"Event loop complete: {tick_count:,} ticks, {whale_event_count} whale events processed")
 
